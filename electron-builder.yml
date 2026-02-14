@@ -1,0 +1,16 @@
+appId: com.ollamaflow.app
+productName: OllamaFlow
+directories:
+  buildResources: build
+files:
+  - dist/**/*
+  - dist-electron/**/*
+extraMetadata:
+  main: dist-electron/main.js
+mac:
+  category: public.app-category.developer-tools
+  target: dmg
+win:
+  target: nsis
+linux:
+  target: AppImage

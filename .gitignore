@@ -1,0 +1,128 @@
+# Dependencies
+node_modules/
+jspm_packages/
+
+# Builds
+/dist
+/out
+/build
+/public/dist
+/.next
+/nuxt
+/.nuxt
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Debug
+debug/
+.vscode-test/
+
+# Coverage directory used by tools like istanbul
+coverage/
+.nyc_output/
+
+# Logs
+logs/
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary folders
+tmp/
+temp/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDEs
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+.idea/
+
+# Output of tsc build
+*.js
+*.mjs
+*.cjs
+*.d.ts
+
+# Ignore built TypeScript files except in dist directories
+!dist/
+!out/
+
+# Ignore native modules
+**/node-addon-api
+**/node-gyp-build
+
+# Ignore installer files
+*.msi
+*.deb
+*.rpm
+*.pkg.tar.xz
+
+# Electron specific
+release/
+*.app
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.zip
+
+# Local files
+local/
+*.local
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Cache directories
+.cache/
+.npm/
+.yarn/
+.pnpm-store/
+.node-gyp/
+.nuxt/cache/
+
+# Testing
+coverage/
+.nyc_output/
+.jest/
+
+# Editor specific
+*.swp
+*.swo
+*~
+
+# Build outputs
+*.asar
+*.appx
+*.msix
+*.msixbundle
+*.appxbundle
+*.pkg
+
+# Electron forge
+.fo-cache/
+out/
