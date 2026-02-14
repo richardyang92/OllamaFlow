@@ -106,14 +106,20 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
 
   updateNodeData: (nodeId, data) => {
-    set({
-      nodes: get().nodes.map((node) =>
-        node.id === nodeId
-          ? { ...node, data: { ...node.data, ...data } }
-          : node
-      ) as Node<WorkflowNodeData>[],
-      isDirty: true,
-    })
+    const currentState = get();
+    // Only update if the node still exists
+    const nodeExists = currentState.nodes.some(node => node.id === nodeId);
+    
+    if (nodeExists) {
+      set({
+        nodes: currentState.nodes.map((node) =>
+          node.id === nodeId
+            ? { ...node, data: { ...node.data, ...data } }
+            : node
+        ) as Node<WorkflowNodeData>[],
+        isDirty: true,
+      });
+    }
   },
 
   deleteNode: (nodeId) => {
