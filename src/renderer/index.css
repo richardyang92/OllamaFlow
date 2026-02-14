@@ -44,6 +44,8 @@ body {
 .react-flow__node-group {
   padding: 0;
   width: auto;
+  border: none;
+  background-color: transparent;
 }
 
 .react-flow__node.selectable {

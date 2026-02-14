@@ -49,17 +49,23 @@ function buildInputContext(
     const sourceResult = nodeResults.get(edge.source)
     if (sourceResult?.output) {
       // Map the output to the input port
-      const sourceHandle = edge.sourceHandle || 'output'
+      const sourceHandle = edge.sourceHandle
       const targetHandle = edge.targetHandle || 'input'
 
       if (typeof sourceResult.output === 'object' && sourceResult.output !== null) {
         const outputObj = sourceResult.output as Record<string, unknown>
-        if (sourceHandle in outputObj) {
+        // If there's a specific source handle, try to get that field
+        if (sourceHandle && sourceHandle in outputObj) {
           context[targetHandle] = outputObj[sourceHandle]
+        } else if (sourceHandle) {
+          // Handle exists but field doesn't - use the whole output as fallback
+          context[targetHandle] = sourceResult.output
         } else {
+          // No specific handle - use the whole output
           context[targetHandle] = sourceResult.output
         }
       } else {
+        // Primitive output type
         context[targetHandle] = sourceResult.output
       }
     }
@@ -264,6 +270,14 @@ export class WorkflowExecutor {
       try {
         // Build input from connected nodes
         const input = buildInputContext(nodeId, this.edges, executionStore.context?.nodeResults || new Map())
+
+        // Debug: Log input context
+        context.onLog?.({
+          nodeId,
+          nodeName: node.data.label,
+          level: 'debug',
+          message: `Input context: ${JSON.stringify(input)}`,
+        })
 
         // Get executor for this node type
         const executor = nodeExecutors[node.data.nodeType]
