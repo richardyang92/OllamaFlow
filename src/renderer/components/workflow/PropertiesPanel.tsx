@@ -27,24 +27,34 @@ export default function PropertiesPanel({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // Create a safe version of updateNodeData
+  const safeUpdateNodeData = (nodeId: string, data: Partial<any>) => {
+    // Check if node still exists before updating
+    const currentWorkflowStore = useWorkflowStore.getState();
+    const workflowNodes = currentWorkflowStore.nodes;
+    if (workflowNodes.some(n => n.id === nodeId)) {
+      updateNodeData(nodeId, data);
+    }
+  };
+
   const renderProperties = () => {
     switch (selectedNode.data.nodeType) {
       case 'input':
-        return <InputProperties node={selectedNode} updateNodeData={updateNodeData} />
+        return <InputProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'ollamaChat':
-        return <OllamaChatProperties node={selectedNode} updateNodeData={updateNodeData} />
+        return <OllamaChatProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'set':
-        return <SetProperties node={selectedNode} updateNodeData={updateNodeData} />
+        return <SetProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'if':
-        return <IfProperties node={selectedNode} updateNodeData={updateNodeData} />
+        return <IfProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'output':
-        return <OutputProperties node={selectedNode} updateNodeData={updateNodeData} />
+        return <OutputProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'readFile':
-        return <ReadFileProperties node={selectedNode} updateNodeData={updateNodeData} />
+        return <ReadFileProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'writeFile':
-        return <WriteFileProperties node={selectedNode} updateNodeData={updateNodeData} />
+        return <WriteFileProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'executeCommand':
-        return <ExecuteCommandProperties node={selectedNode} updateNodeData={updateNodeData} />
+        return <ExecuteCommandProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'manualTrigger':
         return (
           <div className="text-gray-400 text-sm">
