@@ -117,12 +117,13 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
 
   deleteNode: (nodeId) => {
+    const currentState = get();
     set({
-      nodes: get().nodes.filter((node) => node.id !== nodeId),
-      edges: get().edges.filter(
+      nodes: currentState.nodes.filter((node) => node.id !== nodeId),
+      edges: currentState.edges.filter(
         (edge) => edge.source !== nodeId && edge.target !== nodeId
       ),
-      selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
+      selectedNodeId: currentState.selectedNodeId === nodeId ? null : currentState.selectedNodeId,
       isDirty: true,
     })
   },
