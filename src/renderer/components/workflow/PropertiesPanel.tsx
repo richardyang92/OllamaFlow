@@ -59,7 +59,7 @@ export default function PropertiesPanel({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="w-72 bg-gray-800 border-l border-gray-700 flex flex-col">
+    <div key={selectedNodeId} className="w-72 bg-gray-800 border-l border-gray-700 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-gray-700">
         <h2 className="text-sm font-semibold">Properties</h2>
@@ -76,7 +76,14 @@ export default function PropertiesPanel({ onClose }: { onClose: () => void }) {
           <input
             type="text"
             value={selectedNode.data.label}
-            onChange={(e) => updateNodeData(selectedNodeId!, { label: e.target.value })}
+            onChange={(e) => {
+              // Check if node still exists before updating
+              const currentWorkflowStore = useWorkflowStore.getState();
+              const workflowNodes = currentWorkflowStore.nodes;
+              if (workflowNodes.some(n => n.id === selectedNodeId)) {
+                updateNodeData(selectedNodeId!, { label: e.target.value });
+              }
+            }}
             className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
           />
         </div>
