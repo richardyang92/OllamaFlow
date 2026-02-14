@@ -221,7 +221,12 @@ export class WorkflowExecutor {
       ollamaHost: this.ollamaHost,
       variables,
       onStream: (nodeId, chunk) => {
-        executionStore.appendStreamOutput(nodeId, chunk)
+        // Check if node still exists before appending stream output
+        const currentWorkflowStore = useWorkflowStore.getState();
+        const workflowNodes = currentWorkflowStore.nodes;
+        if (workflowNodes.some(n => n.id === nodeId)) {
+          executionStore.appendStreamOutput(nodeId, chunk)
+        }
       },
       onLog: (log) => {
         executionStore.addLog(log)
@@ -252,6 +257,14 @@ export class WorkflowExecutor {
 
       const startTime = Date.now()
 
+      // Check if node still exists before updating status
+      const currentWorkflowStore = useWorkflowStore.getState();
+      const workflowNodes = currentWorkflowStore.nodes;
+      if (!workflowNodes.some(n => n.id === nodeId)) {
+        // Node has been deleted, skip execution
+        continue;
+      }
+      
       // Update node status to running
       executionStore.updateNodeStatus(nodeId, {
         nodeId,
@@ -293,6 +306,14 @@ export class WorkflowExecutor {
           Object.assign(variables, output)
         }
 
+        // Check if node still exists before recording result
+        const currentWorkflowStore = useWorkflowStore.getState();
+        const workflowNodes = currentWorkflowStore.nodes;
+        if (!workflowNodes.some(n => n.id === nodeId)) {
+          // Node has been deleted, skip result recording
+          continue;
+        }
+
         // Record successful result
         const result: NodeExecutionResult = {
           nodeId,
@@ -314,6 +335,14 @@ export class WorkflowExecutor {
         })
       } catch (error) {
         success = false
+
+        // Check if node still exists before recording error
+        const currentWorkflowStore = useWorkflowStore.getState();
+        const workflowNodes = currentWorkflowStore.nodes;
+        if (!workflowNodes.some(n => n.id === nodeId)) {
+          // Node has been deleted, skip error recording
+          continue;
+        }
 
         const errorMessage = error instanceof Error ? error.message : String(error)
 
