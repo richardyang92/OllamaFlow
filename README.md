@@ -147,7 +147,7 @@ OllamaFlow/
 
 ## 许可证
 
-MIT License - 详见 LICENSE 文件
+Apache 2.0 License - 详见 LICENSE 文件
 
 ## 贡献
 
