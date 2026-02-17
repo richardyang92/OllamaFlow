@@ -1,4 +1,5 @@
 import type { ExecutionStatus } from '@/types/execution'
+import { motion } from 'framer-motion'
 
 interface ToolbarProps {
   workspaceName: string
@@ -7,6 +8,7 @@ interface ToolbarProps {
   onSave: () => void
   onClose: () => void
   onExecute: () => void
+  onToggleLogs: () => void
 }
 
 export default function Toolbar({
@@ -16,48 +18,64 @@ export default function Toolbar({
   onSave,
   onClose,
   onExecute,
+  onToggleLogs,
 }: ToolbarProps) {
   return (
-    <div className="h-12 flex items-center justify-between px-4 bg-gray-800 border-b border-gray-700">
-      {/* Left side */}
+    <div className="h-14 flex items-center justify-between px-5 bg-panel-bg backdrop-blur-md">
+      {/* Left side - Workspace info */}
       <div className="flex items-center gap-4">
-        <button
+        <motion.button
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
           onClick={onClose}
-          className="text-gray-400 hover:text-white transition-colors"
-          title="Close Workspace"
+          className="btn-sci-fi btn-ghost btn-sm px-3"
+          title="关闭工作区"
         >
-          ← Back
-        </button>
+          ← 返回
+        </motion.button>
+        <div className="h-6 w-px bg-white/10" />
         <div className="flex items-center gap-2">
-          <span className="text-xl">📁</span>
-          <span className="font-medium">{workspaceName}</span>
-          {isDirty && <span className="text-yellow-500">●</span>}
+          <span className="text-lg">📁</span>
+          <span className="font-medium text-zinc-100 text-sm">{workspaceName}</span>
+          {isDirty && (
+            <motion.span
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="text-yellow-400 text-sm"
+            >
+              ●
+            </motion.span>
+          )}
         </div>
       </div>
 
-      {/* Center */}
+      {/* Right side - Logs, Save and Execute buttons */}
       <div className="flex items-center gap-2">
-        <button
+        <motion.button
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={onToggleLogs}
+          className="btn-sci-fi btn-ghost btn-sm px-3"
+        >
+          📋 日志
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
           onClick={onSave}
           disabled={!isDirty}
-          className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm transition-colors"
+          className="btn-sci-fi btn-ghost btn-sm px-3"
         >
-          💾 Save
-        </button>
-      </div>
-
-      {/* Right side */}
-      <div className="flex items-center gap-2">
-        <button
+          💾 保存
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
           onClick={onExecute}
-          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
-            executionStatus === 'running'
-              ? 'bg-red-600 hover:bg-red-700'
-              : 'bg-green-600 hover:bg-green-700'
-          }`}
+          className="btn-sci-fi btn-ghost btn-sm px-3"
         >
-          {executionStatus === 'running' ? '⏹ Stop' : '▶ Execute'}
-        </button>
+          {executionStatus === 'running' ? '⏹ 停止' : '▶ 执行'}
+        </motion.button>
       </div>
     </div>
   )

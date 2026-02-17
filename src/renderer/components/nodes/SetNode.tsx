@@ -10,7 +10,7 @@ function SetNode(props: NodeProps<SetNodeData>) {
     <BaseNode {...props} icon="✏️">
       <div className="space-y-1 text-xs">
         <div className="flex justify-between">
-          <span className="text-gray-400">Variable:</span>
+          <span className="text-gray-400">变量:</span>
           <span className="text-white">{data.variableName}</span>
         </div>
         {data.variableValue && (

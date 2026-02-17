@@ -10,43 +10,56 @@ export default function SetProperties({ node, updateNodeData }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Variable Name */}
+      {/* 变量名 */}
       <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1">Variable Name</label>
+        <label className="block text-xs font-medium text-zinc-400 mb-1">变量名</label>
         <input
           type="text"
           value={data.variableName}
           onChange={(e) => updateNodeData(node.id, { variableName: e.target.value })}
-          className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+          placeholder="myVariable"
+          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-white/20 focus:bg-white/8 transition-all font-mono"
         />
+        <p className="text-xs text-zinc-500 mt-1">用于存储值的变量名称</p>
       </div>
 
-      {/* Variable Value */}
+      {/* 变量值 */}
       <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1">
-          Value
-          <span className="text-gray-500 ml-1">(supports {`{{variables}}`})</span>
+        <label className="block text-xs font-medium text-zinc-400 mb-1">
+          变量值
+          <span className="text-zinc-500 ml-1">(支持 {`{{变量}}`})</span>
         </label>
         <textarea
           value={data.variableValue}
           onChange={(e) => updateNodeData(node.id, { variableValue: e.target.value })}
           rows={4}
-          className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500 resize-none"
+          placeholder="输入变量的值..."
+          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-white/20 focus:bg-white/8 transition-all resize-none"
         />
       </div>
 
-      {/* Use Expression */}
+      {/* 使用表达式 */}
       <div className="flex items-center gap-2">
         <input
           type="checkbox"
           id="useExpression"
           checked={data.useExpression}
           onChange={(e) => updateNodeData(node.id, { useExpression: e.target.checked })}
-          className="rounded border-gray-600"
+          className="rounded border-white/20 bg-white/5"
         />
-        <label htmlFor="useExpression" className="text-sm">
-          Evaluate as JavaScript expression
+        <label htmlFor="useExpression" className="text-sm text-zinc-300">
+          作为 JavaScript 表达式求值
         </label>
+      </div>
+      <p className="text-xs text-zinc-500 ml-6">启用后将使用 eval() 计算表达式的值</p>
+
+      <div className="bg-white/5 rounded-lg p-3 text-xs text-zinc-400 border border-white/5">
+        <div className="font-medium text-zinc-300 mb-1">示例：</div>
+        <div className="space-y-0.5">
+          <div>• 变量名: <code className="text-zinc-300">userName</code></div>
+          <div>• 变量值: <code className="text-zinc-300">{`{{input}}`}</code></div>
+          <div>• 表达式: <code className="text-zinc-300">{`{{count}} + 1`}</code></div>
+        </div>
       </div>
     </div>
   )

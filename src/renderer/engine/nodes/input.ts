@@ -16,29 +16,34 @@ export function createInputExecutor(): NodeExecutor {
       const resolvedPrompt = interpolateVariables(data.prompt, { ...context.variables, ...input })
       const resolvedDefault = interpolateVariables(data.defaultValue, { ...context.variables, ...input })
 
-      // For now, use the default value since Electron doesn't have a native prompt dialog
-      // In a full implementation, this would open a modal dialog to get user input
-      let value: string | number | boolean = resolvedDefault
+      // Check if user provided a value for this input node
+      const userValue = context.userInputValues.get(node.id)
+
+      // Use user-provided value, or fall back to default value
+      let value: string | number | boolean = userValue || resolvedDefault
 
       // Convert value based on inputType
       switch (data.inputType) {
         case 'number':
-          value = Number(resolvedDefault) || 0
+          value = Number(value) || 0
           break
         case 'boolean':
-          value = resolvedDefault.toLowerCase() === 'true' || resolvedDefault === '1'
+          value = String(value).toLowerCase() === 'true' || value === '1'
           break
         default:
           // Keep as string
+          value = String(value)
           break
       }
+
+      const source = userValue ? 'user input' : 'default value'
 
       context.onLog?.({
         nodeId: node.id,
         nodeName: data.label,
         level: 'info',
-        message: `Input requested: ${resolvedPrompt}`,
-        data: { prompt: resolvedPrompt, defaultValue: resolvedDefault, value },
+        message: `Input: ${resolvedPrompt} = ${value} (${source})`,
+        data: { prompt: resolvedPrompt, defaultValue: resolvedDefault, value, source },
       })
 
       return {

@@ -34,7 +34,7 @@ export interface Workflow {
 export function createEmptyWorkflow(name: string): Workflow {
   return {
     metadata: {
-      id: crypto.randomUUID(),
+      id: window.crypto.randomUUID(),
       name,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

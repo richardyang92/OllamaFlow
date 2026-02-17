@@ -1,4 +1,5 @@
 import type { WorkflowNode, OutputNodeData } from '@/types/node'
+import { cn } from '@/lib/utils'
 
 interface Props {
   node: WorkflowNode
@@ -11,28 +12,36 @@ export default function OutputProperties({ node, updateNodeData }: Props) {
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1">Output Type</label>
+        <label className="block text-xs font-medium text-zinc-400 mb-1">输出方式</label>
         <select
           value={data.outputType}
           onChange={(e) => updateNodeData(node.id, { outputType: e.target.value as OutputNodeData['outputType'] })}
-          className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+          className={cn(
+            'w-full px-3 py-2 rounded-lg',
+            'bg-white/5',
+            'border border-white/10',
+            'text-white text-sm',
+            'focus:outline-none focus:border-white/20 focus:bg-white/8',
+            'transition-all duration-200',
+            'select-sci-fi'
+          )}
         >
-          <option value="display">Display in panel</option>
-          <option value="copy">Copy to clipboard</option>
-          <option value="download">Download as file</option>
+          <option value="display">在执行面板中显示</option>
+          <option value="copy">复制到剪贴板</option>
+          <option value="download">下载为文件</option>
         </select>
       </div>
 
-      <div className="bg-gray-700 rounded p-2 text-xs text-gray-400">
-        <div className="font-medium text-gray-300 mb-1">Description:</div>
+      <div className="bg-white/5 rounded-lg p-3 text-xs text-zinc-400 border border-white/5">
+        <div className="font-medium text-zinc-300 mb-1">说明：</div>
         {data.outputType === 'display' && (
-          <div>Show the output in the execution panel</div>
+          <div>在执行面板中显示输出内容，适合查看中间结果</div>
         )}
         {data.outputType === 'copy' && (
-          <div>Copy the output to system clipboard</div>
+          <div>将输出内容复制到系统剪贴板，方便粘贴使用</div>
         )}
         {data.outputType === 'download' && (
-          <div>Download the output as a text file</div>
+          <div>将输出内容下载为文本文件，默认文件名为 output.txt</div>
         )}
       </div>
     </div>

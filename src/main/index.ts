@@ -137,10 +137,15 @@ ipcMain.handle('workspace:readWorkflow', async (_, workspacePath: string) => {
 
 // Workspace: Save workflow
 ipcMain.handle('workspace:saveWorkflow', async (_, workspacePath: string, workflow: unknown) => {
-  const workflowPath = path.join(workspacePath, '.ollamaflow', 'workflow.json')
-  await fs.mkdir(path.dirname(workflowPath), { recursive: true })
-  await fs.writeFile(workflowPath, JSON.stringify(workflow, null, 2))
-  return true
+  try {
+    const workflowPath = path.join(workspacePath, '.ollamaflow', 'workflow.json')
+    await fs.mkdir(path.dirname(workflowPath), { recursive: true })
+    await fs.writeFile(workflowPath, JSON.stringify(workflow, null, 2))
+    return true
+  } catch (error) {
+    console.error('保存工作流失败:', error)
+    return false
+  }
 })
 
 // File: Read file
@@ -193,6 +198,41 @@ ipcMain.handle('file:exists', async (_, workspacePath: string, relativePath: str
   }
 })
 
+// File: Read image file as Data URL
+ipcMain.handle('file:readImage', async (_, workspacePath: string, relativePath: string) => {
+  const fullPath = path.join(workspacePath, relativePath)
+  try {
+    const buffer = await fs.readFile(fullPath)
+    const base64 = buffer.toString('base64')
+    
+    // Determine MIME type based on file extension
+    const ext = path.extname(fullPath).toLowerCase()
+    let mimeType = 'application/octet-stream'
+    
+    if (ext === '.jpg' || ext === '.jpeg') {
+      mimeType = 'image/jpeg'
+    } else if (ext === '.png') {
+      mimeType = 'image/png'
+    } else if (ext === '.gif') {
+      mimeType = 'image/gif'
+    } else if (ext === '.webp') {
+      mimeType = 'image/webp'
+    } else if (ext === '.bmp') {
+      mimeType = 'image/bmp'
+    }
+    
+    return {
+      success: true,
+      dataUrl: `data:${mimeType};base64,${base64}`
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: (error as Error).message
+    }
+  }
+})
+
 // Command: Execute shell command
 interface CommandOptions {
   command: string
@@ -209,7 +249,12 @@ ipcMain.handle('command:execute', async (_, workspacePath: string, options: Comm
     const proc = spawn(command, [], {
       cwd: workingDir,
       shell: true,
-      env: { ...process.env, ...env },
+      env: {
+        ...process.env,
+        ...env,
+        PYTHONIOENCODING: 'utf-8', // Ensure Python uses UTF-8 for stdout/stderr
+        PYTHONUTF8: '1', // Force UTF-8 mode (Python 3.7+)
+      },
       windowsHide: true,
     })
 
@@ -217,11 +262,11 @@ ipcMain.handle('command:execute', async (_, workspacePath: string, options: Comm
     let stderr = ''
 
     proc.stdout.on('data', (data) => {
-      stdout += data.toString()
+      stdout += data.toString('utf-8')
     })
 
     proc.stderr.on('data', (data) => {
-      stderr += data.toString()
+      stderr += data.toString('utf-8')
     })
 
     const timer = setTimeout(() => {
@@ -292,6 +337,17 @@ ipcMain.handle('recent:add', async (_, workspacePath: string, name: string) => {
 
   // Keep only last 10
   recent = recent.slice(0, 10)
+
+  s.set('recent-workspaces', recent)
+  return recent
+})
+
+ipcMain.handle('recent:remove', async (_, workspacePath: string) => {
+  const s = await getStore()
+  let recent = s.get('recent-workspaces', []) as Array<{ path: string; name: string; lastOpened: string }>
+
+  // Remove entry for this path
+  recent = recent.filter((item) => item.path !== workspacePath)
 
   s.set('recent-workspaces', recent)
   return recent

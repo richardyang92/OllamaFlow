@@ -1,6 +1,7 @@
 import type { Node } from '@xyflow/react'
 import type { WorkflowNodeData, OutputNodeData } from '@/types/node'
 import type { NodeExecutor, ExecutionContext } from '../executor'
+import { useWorkflowStore } from '@/store/workflow-store'
 
 export function createOutputExecutor(): NodeExecutor {
   return {
@@ -11,14 +12,21 @@ export function createOutputExecutor(): NodeExecutor {
     ): Promise<unknown> {
       const data = node.data as OutputNodeData
       const outputData = input.data ?? input
+      
+      // Convert outputData to string for display
+      const outputString = typeof outputData === 'object' ? JSON.stringify(outputData) : String(outputData)
 
       context.onLog?.({
         nodeId: node.id,
         nodeName: data.label,
         level: 'info',
-        message: `Output (${data.outputType}): ${JSON.stringify(outputData)}`,
+        message: `Output (${data.outputType}): ${outputString}`,
         data: outputData,
       })
+
+      // Update node data to display output in the UI
+      const workflowStore = useWorkflowStore.getState()
+      workflowStore.updateNodeData(node.id, { output: outputString })
 
       switch (data.outputType) {
         case 'display':
@@ -27,19 +35,19 @@ export function createOutputExecutor(): NodeExecutor {
         case 'copy':
           // Copy to clipboard (in renderer process)
           try {
-            await navigator.clipboard.writeText(String(outputData))
+            await navigator.clipboard.writeText(outputString)
             context.onLog?.({
               nodeId: node.id,
               nodeName: data.label,
               level: 'info',
-              message: 'Copied to clipboard',
+              message: '已复制到剪贴板',
             })
           } catch {
             context.onLog?.({
               nodeId: node.id,
               nodeName: data.label,
               level: 'warn',
-              message: 'Failed to copy to clipboard',
+              message: '复制到剪贴板失败',
             })
           }
           break

@@ -15,8 +15,15 @@ export function createSetExecutor(): NodeExecutor {
       let value: unknown
 
       if (data.useExpression) {
-        // Evaluate as expression (interpolate variables)
-        value = interpolateVariables(data.variableValue, { ...context.variables, ...input })
+        // First interpolate variables, then evaluate as expression
+        const interpolated = interpolateVariables(data.variableValue, { ...context.variables, ...input })
+        try {
+          // Use Function constructor for safer evaluation than eval()
+          value = new Function('return ' + interpolated)()
+        } catch (error) {
+          // If evaluation fails, use the literal value
+          value = interpolated
+        }
       } else {
         // Use literal value
         value = data.variableValue

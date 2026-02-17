@@ -35,7 +35,7 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
 }
 
 // Build execution context from previous node results
-function buildInputContext(
+export function buildInputContext(
   nodeId: string,
   edges: Edge[],
   nodeResults: Map<string, NodeExecutionResult>
@@ -45,32 +45,51 @@ function buildInputContext(
   // Find all incoming edges
   const incomingEdges = edges.filter((edge) => edge.target === nodeId)
 
+  console.log('[buildInputContext] Building context for node:', nodeId, 'incoming edges:', incomingEdges.length)
+  console.log('[buildInputContext] Available node results:', Array.from(nodeResults.keys()))
+
   for (const edge of incomingEdges) {
     const sourceResult = nodeResults.get(edge.source)
+    console.log('[buildInputContext] Processing edge from', edge.source, 'result found:', !!sourceResult)
+
     if (sourceResult?.output) {
       // Map the output to the input port
       const sourceHandle = edge.sourceHandle
       const targetHandle = edge.targetHandle || 'input'
+
+      // Debug: log the edge and source result
+      console.log('[buildInputContext] Edge:', {
+        source: edge.source,
+        target: edge.target,
+        sourceHandle,
+        targetHandle,
+        sourceOutput: sourceResult.output,
+      })
 
       if (typeof sourceResult.output === 'object' && sourceResult.output !== null) {
         const outputObj = sourceResult.output as Record<string, unknown>
         // If there's a specific source handle, try to get that field
         if (sourceHandle && sourceHandle in outputObj) {
           context[targetHandle] = outputObj[sourceHandle]
+          console.log('[buildInputContext] Mapped field:', sourceHandle, 'to', targetHandle)
         } else if (sourceHandle) {
           // Handle exists but field doesn't - use the whole output as fallback
           context[targetHandle] = sourceResult.output
+          console.log('[buildInputContext] Handle not found in output, using whole output')
         } else {
           // No specific handle - use the whole output
           context[targetHandle] = sourceResult.output
+          console.log('[buildInputContext] No source handle, using whole output')
         }
       } else {
         // Primitive output type
         context[targetHandle] = sourceResult.output
+        console.log('[buildInputContext] Primitive output type')
       }
     }
   }
 
+  console.log('[buildInputContext] Final context:', context)
   return context
 }
 
@@ -98,12 +117,12 @@ export function getExecutionOrder(
     inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1)
   }
 
-  // Find start nodes (nodes with no incoming edges, or trigger nodes)
+  // Find start nodes (nodes with no incoming edges)
   const queue: string[] = []
 
   for (const node of nodes) {
     const degree = inDegree.get(node.id) || 0
-    if (degree === 0 || node.data.nodeType === 'manualTrigger') {
+    if (degree === 0) {
       queue.push(node.id)
     }
   }
@@ -143,20 +162,25 @@ export interface ExecutionContext {
   workspacePath: string
   ollamaHost: string
   variables: Record<string, unknown>
+  userInputValues: Map<string, string>
+  nodes?: Node<WorkflowNodeData>[]
+  edges?: Edge[]
+  signal?: AbortSignal
   onStream?: (nodeId: string, chunk: string) => void
   onLog?: (log: Omit<ExecutionLog, 'id' | 'timestamp' | 'executionId'>) => void
 }
 
 // Import node executors
-import { createManualTriggerExecutor } from './nodes/manual-trigger'
 import { createInputExecutor } from './nodes/input'
 import { createOllamaChatExecutor } from './nodes/ollama-chat'
 import { createSetExecutor } from './nodes/set'
 import { createIfExecutor } from './nodes/if'
+import { createLoopExecutor } from './nodes/loop'
 import { createOutputExecutor } from './nodes/output'
 import { createReadFileExecutor } from './nodes/read-file'
 import { createWriteFileExecutor } from './nodes/write-file'
 import { createExecuteCommandExecutor } from './nodes/execute-command'
+import { createImageExecutor } from './nodes/image'
 
 // Node executor registry
 const nodeExecutors: Partial<Record<NodeType, NodeExecutor>> = {}
@@ -166,14 +190,20 @@ export function registerNodeExecutor(type: NodeType, executor: NodeExecutor) {
   nodeExecutors[type] = executor
 }
 
+// Get a node executor by type
+export function getNodeExecutor(type: NodeType): NodeExecutor | undefined {
+  return nodeExecutors[type]
+}
+
 // Initialize executors
 export function initializeExecutors() {
-  registerNodeExecutor('manualTrigger', createManualTriggerExecutor())
   registerNodeExecutor('input', createInputExecutor())
   registerNodeExecutor('ollamaChat', createOllamaChatExecutor())
   registerNodeExecutor('set', createSetExecutor())
   registerNodeExecutor('if', createIfExecutor())
+  registerNodeExecutor('loop', createLoopExecutor())
   registerNodeExecutor('output', createOutputExecutor())
+  registerNodeExecutor('image', createImageExecutor())
   registerNodeExecutor('readFile', createReadFileExecutor())
   registerNodeExecutor('writeFile', createWriteFileExecutor())
   registerNodeExecutor('executeCommand', createExecuteCommandExecutor())
@@ -186,29 +216,32 @@ export class WorkflowExecutor {
   private workspacePath: string
   private ollamaHost: string
   private abortController: AbortController | null = null
+  private userInputValues: Map<string, string> = new Map()
 
   constructor(
     nodes: Node<WorkflowNodeData>[],
     edges: Edge[],
     workspacePath: string,
-    ollamaHost: string = 'http://127.0.0.1:11434'
+    ollamaHost: string = 'http://127.0.0.1:11434',
+    userInputValues?: Record<string, string>
   ) {
     this.nodes = nodes
     this.edges = edges
     this.workspacePath = workspacePath
     this.ollamaHost = ollamaHost
+    if (userInputValues) {
+      this.userInputValues = new Map(Object.entries(userInputValues))
+    }
   }
 
   async execute(): Promise<boolean> {
-    const executionStore = useExecutionStore.getState()
-
     // Initialize executors if not done
     if (Object.keys(nodeExecutors).length === 0) {
       initializeExecutors()
     }
 
     // Start execution
-    executionStore.startExecution('workflow')
+    useExecutionStore.getState().startExecution('workflow')
 
     // Get execution order
     const executionOrder = getExecutionOrder(this.nodes, this.edges)
@@ -220,22 +253,28 @@ export class WorkflowExecutor {
       workspacePath: this.workspacePath,
       ollamaHost: this.ollamaHost,
       variables,
+      userInputValues: this.userInputValues,
+      nodes: this.nodes,
+      edges: this.edges,
+      signal: this.abortController.signal,
       onStream: (nodeId, chunk) => {
         // Check if node still exists before appending stream output
         const currentWorkflowStore = useWorkflowStore.getState();
         const workflowNodes = currentWorkflowStore.nodes;
         if (workflowNodes.some(n => n.id === nodeId)) {
-          executionStore.appendStreamOutput(nodeId, chunk)
+          useExecutionStore.getState().appendStreamOutput(nodeId, chunk)
         }
       },
       onLog: (log) => {
-        executionStore.addLog(log)
+        useExecutionStore.getState().addLog(log)
       },
     }
 
     let success = true
 
     for (const nodeId of executionOrder) {
+      const executionStore = useExecutionStore.getState()
+      
       // Check for abort
       if (this.abortController.signal.aborted) {
         executionStore.cancelExecution()
@@ -265,6 +304,22 @@ export class WorkflowExecutor {
         continue;
       }
       
+      // Find incoming edges to this node
+      const incomingEdges = this.edges.filter((edge) => edge.target === nodeId)
+      
+      // Update incoming edges to be animated
+      const workflowStore = useWorkflowStore.getState()
+      const originalEdgeTypes = new Map<string, string>()
+      
+      incomingEdges.forEach(edge => {
+        originalEdgeTypes.set(edge.id, edge.type || 'smoothstep')
+        // Update edge type to animated
+        const updatedEdges = workflowStore.edges.map(e => 
+          e.id === edge.id ? { ...e, type: 'animated' } : e
+        )
+        workflowStore.setWorkflow({ ...workflowStore.workflow!, edges: updatedEdges })
+      })
+
       // Update node status to running
       executionStore.updateNodeStatus(nodeId, {
         nodeId,
@@ -277,7 +332,7 @@ export class WorkflowExecutor {
         nodeId,
         nodeName: node.data.label,
         level: 'info',
-        message: `Starting node: ${node.data.label}`,
+        message: `开始执行节点: ${node.data.label}`,
       })
 
       try {
@@ -295,7 +350,7 @@ export class WorkflowExecutor {
         // Get executor for this node type
         const executor = nodeExecutors[node.data.nodeType]
         if (!executor) {
-          throw new Error(`No executor registered for node type: ${node.data.nodeType}`)
+          throw new Error(`未注册节点类型的执行器: ${node.data.nodeType}`)
         }
 
         // Execute the node
@@ -326,11 +381,19 @@ export class WorkflowExecutor {
 
         executionStore.updateNodeStatus(nodeId, result)
 
+        // Restore original edge types
+        const workflowStore = useWorkflowStore.getState()
+        const updatedEdges = workflowStore.edges.map(e => {
+          const originalType = originalEdgeTypes.get(e.id)
+          return originalType ? { ...e, type: originalType } : e
+        })
+        workflowStore.setWorkflow({ ...workflowStore.workflow!, edges: updatedEdges })
+
         executionStore.addLog({
           nodeId,
           nodeName: node.data.label,
           level: 'info',
-          message: `Completed node: ${node.data.label}`,
+          message: `完成节点: ${node.data.label}`,
           data: output,
         })
       } catch (error) {
@@ -357,11 +420,19 @@ export class WorkflowExecutor {
 
         executionStore.updateNodeStatus(nodeId, result)
 
+        // Restore original edge types
+        const workflowStore = useWorkflowStore.getState()
+        const updatedEdges = workflowStore.edges.map(e => {
+          const originalType = originalEdgeTypes.get(e.id)
+          return originalType ? { ...e, type: originalType } : e
+        })
+        workflowStore.setWorkflow({ ...workflowStore.workflow!, edges: updatedEdges })
+
         executionStore.addLog({
           nodeId,
           nodeName: node.data.label,
           level: 'error',
-          message: `Error in node ${node.data.label}: ${errorMessage}`,
+          message: `节点 ${node.data.label} 出错: ${errorMessage}`,
         })
 
         // Stop execution on error
@@ -369,7 +440,7 @@ export class WorkflowExecutor {
       }
     }
 
-    executionStore.completeExecution(success)
+    useExecutionStore.getState().completeExecution(success)
     return success
   }
 

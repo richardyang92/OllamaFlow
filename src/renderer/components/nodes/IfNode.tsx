@@ -8,12 +8,25 @@ function IfNode(props: NodeProps<IfNodeData>) {
 
   return (
     <BaseNode {...props} icon="🔀">
-      <div className="text-xs">
-        <div className="text-gray-400 mb-1">Condition:</div>
-        <div className="text-white font-mono text-[10px] bg-gray-700 px-2 py-1 rounded truncate">
-          {data.expression.substring(0, 25)}
-          {data.expression.length > 25 && '...'}
+      <div className="space-y-3 w-full">
+        {/* Primary Badge - Expression Preview */}
+        <div className="node-primary-badge logic">
+          <span className="text-lg">🔀</span>
+          <span className="font-mono font-semibold text-sm truncate">
+            {data.expression.length > 20
+              ? `${data.expression.substring(0, 20)}...`
+              : data.expression || '(condition)'}
+          </span>
         </div>
+
+        {/* Secondary Info - Full expression */}
+        {data.expression && data.expression.length > 20 && (
+          <div className="node-secondary-info">
+            <div className="font-mono text-[10px] text-gray-400 truncate">
+              {data.expression}
+            </div>
+          </div>
+        )}
       </div>
     </BaseNode>
   )

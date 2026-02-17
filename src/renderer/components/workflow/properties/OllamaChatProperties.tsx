@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { WorkflowNode, OllamaChatNodeData } from '@/types/node'
+import { cn } from '@/lib/utils'
 
 interface Props {
   node: WorkflowNode
@@ -28,7 +29,7 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
         setModels(json.models || [])
       }
     } catch (error) {
-      console.error('Failed to load models:', error)
+      console.error('加载模型失败:', error)
     } finally {
       setIsLoading(false)
     }
@@ -36,18 +37,26 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Model Selection */}
+      {/* 模型选择 */}
       <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1">Model</label>
+        <label className="block text-xs font-medium text-zinc-400 mb-1">模型</label>
         <select
           value={data.model}
           onChange={(e) => updateNodeData(node.id, { model: e.target.value })}
-          className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+          className={cn(
+            'w-full px-3 py-2 rounded-lg',
+            'bg-white/5',
+            'border border-white/10',
+            'text-white text-sm',
+            'focus:outline-none focus:border-white/20 focus:bg-white/8',
+            'transition-all duration-200',
+            'select-sci-fi'
+          )}
         >
           {isLoading ? (
-            <option>Loading...</option>
+            <option>加载中...</option>
           ) : models.length === 0 ? (
-            <option>No models found</option>
+            <option>未找到模型</option>
           ) : (
             models.map((model) => (
               <option key={model.name} value={model.name}>
@@ -58,41 +67,43 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
         </select>
         <button
           onClick={loadModels}
-          className="mt-1 text-xs text-blue-400 hover:text-blue-300"
+          className="btn-sci-fi btn-ghost btn-sm mt-2 w-full"
         >
-          Refresh models
+          🔄 刷新模型列表
         </button>
       </div>
 
-      {/* System Prompt */}
+      {/* 系统提示词 */}
       <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1">System Prompt</label>
+        <label className="block text-xs font-medium text-zinc-400 mb-1">系统提示词</label>
         <textarea
           value={data.systemPrompt}
           onChange={(e) => updateNodeData(node.id, { systemPrompt: e.target.value })}
           rows={3}
-          className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500 resize-none"
+          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-white/20 focus:bg-white/8 transition-all resize-none"
+          placeholder="设置 AI 的角色和行为..."
         />
       </div>
 
-      {/* User Message */}
+      {/* 用户消息 */}
       <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1">
-          User Message
-          <span className="text-gray-500 ml-1">(supports {`{{variables}}`})</span>
+        <label className="block text-xs font-medium text-zinc-400 mb-1">
+          用户消息
+          <span className="text-zinc-500 ml-1">(支持 {`{{变量}}`})</span>
         </label>
         <textarea
           value={data.userMessage}
           onChange={(e) => updateNodeData(node.id, { userMessage: e.target.value })}
           rows={3}
-          className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500 resize-none"
+          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-white/20 focus:bg-white/8 transition-all resize-none"
+          placeholder="输入要发送给 AI 的消息..."
         />
       </div>
 
-      {/* Temperature */}
+      {/* 温度 */}
       <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1">
-          Temperature: {data.temperature}
+        <label className="block text-xs font-medium text-zinc-400 mb-1">
+          温度: {data.temperature}
         </label>
         <input
           type="range"
@@ -103,11 +114,12 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
           onChange={(e) => updateNodeData(node.id, { temperature: parseFloat(e.target.value) })}
           className="w-full"
         />
+        <p className="text-xs text-zinc-500 mt-1">控制输出的随机性，值越高越随机</p>
       </div>
 
       {/* Top P */}
       <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1">Top P: {data.topP}</label>
+        <label className="block text-xs font-medium text-zinc-400 mb-1">Top P: {data.topP}</label>
         <input
           type="range"
           min="0"
@@ -117,32 +129,34 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
           onChange={(e) => updateNodeData(node.id, { topP: parseFloat(e.target.value) })}
           className="w-full"
         />
+        <p className="text-xs text-zinc-500 mt-1">控制词汇的多样性</p>
       </div>
 
-      {/* Max Tokens */}
+      {/* 最大 Token 数 */}
       <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1">Max Tokens</label>
+        <label className="block text-xs font-medium text-zinc-400 mb-1">最大 Token 数</label>
         <input
           type="number"
           min="1"
           max="32768"
           value={data.maxTokens}
           onChange={(e) => updateNodeData(node.id, { maxTokens: parseInt(e.target.value) })}
-          className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-white/20 focus:bg-white/8 transition-all"
         />
+        <p className="text-xs text-zinc-500 mt-1">限制生成的最大长度</p>
       </div>
 
-      {/* Stream */}
+      {/* 流式输出 */}
       <div className="flex items-center gap-2">
         <input
           type="checkbox"
           id="stream"
           checked={data.stream}
           onChange={(e) => updateNodeData(node.id, { stream: e.target.checked })}
-          className="rounded border-gray-600"
+          className="rounded border-white/20 bg-white/5"
         />
-        <label htmlFor="stream" className="text-sm">
-          Stream output
+        <label htmlFor="stream" className="text-sm text-zinc-300">
+          启用流式输出
         </label>
       </div>
     </div>

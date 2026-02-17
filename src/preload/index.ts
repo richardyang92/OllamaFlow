@@ -85,6 +85,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     exists: (workspacePath: string, relativePath: string): Promise<boolean> =>
       ipcRenderer.invoke('file:exists', workspacePath, relativePath),
+
+    readImage: (workspacePath: string, relativePath: string): Promise<{ success: boolean; dataUrl?: string; error?: string }> =>
+      ipcRenderer.invoke('file:readImage', workspacePath, relativePath),
   },
 
   // Command execution
@@ -99,6 +102,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     add: (path: string, name: string): Promise<RecentWorkspace[]> =>
       ipcRenderer.invoke('recent:add', path, name),
+
+    remove: (path: string): Promise<RecentWorkspace[]> =>
+      ipcRenderer.invoke('recent:remove', path),
   },
 })
 
@@ -119,6 +125,7 @@ declare global {
         write: (workspacePath: string, relativePath: string, content: string) => Promise<{ success: boolean; error?: string }>
         list: (workspacePath: string, relativePath?: string) => Promise<{ success: boolean; files?: FileInfo[]; error?: string }>
         exists: (workspacePath: string, relativePath: string) => Promise<boolean>
+        readImage: (workspacePath: string, relativePath: string) => Promise<{ success: boolean; dataUrl?: string; error?: string }>
       }
       command: {
         execute: (workspacePath: string, options: CommandOptions) => Promise<CommandResult>
@@ -126,6 +133,7 @@ declare global {
       recent: {
         get: () => Promise<RecentWorkspace[]>
         add: (path: string, name: string) => Promise<RecentWorkspace[]>
+        remove: (path: string) => Promise<RecentWorkspace[]>
       }
     }
   }

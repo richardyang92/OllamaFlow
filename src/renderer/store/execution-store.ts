@@ -46,7 +46,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
   startExecution: (workflowId) => {
     const context: ExecutionContext = {
       workflowId,
-      executionId: crypto.randomUUID(),
+      executionId: window.crypto.randomUUID(),
       startTime: new Date().toISOString(),
       nodeResults: new Map(),
       variables: {},
@@ -129,7 +129,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     const { context } = get()
     const newLog: ExecutionLog = {
       ...log,
-      id: crypto.randomUUID(),
+      id: window.crypto.randomUUID(),
       timestamp: new Date().toISOString(),
       executionId: context?.executionId ?? '',
     }

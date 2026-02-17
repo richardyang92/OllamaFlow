@@ -7,7 +7,7 @@ interface FileItem {
   path: string
 }
 
-export default function WorkspaceFiles({ onToggle }: { onToggle: () => void }) {
+export default function WorkspaceFiles({ onClose }: { onClose: () => void }) {
   const { currentWorkspace } = useWorkspaceStore()
   const [files, setFiles] = useState<FileItem[]>([])
   const [currentPath, setCurrentPath] = useState('')
@@ -40,41 +40,41 @@ export default function WorkspaceFiles({ onToggle }: { onToggle: () => void }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-800">
-      {/* Header */}
-      <div className="flex items-center justify-between p-2 border-b border-gray-700">
-        <span className="text-xs font-medium text-gray-400">📁 Files</span>
-        <button onClick={onToggle} className="text-gray-400 hover:text-white text-xs">
+    <div className="h-full flex flex-col bg-panel-bg backdrop-blur-md rounded-lg border border-white/5 overflow-hidden">
+      {/* Header with unified styling */}
+      <div className="flex items-center justify-between p-3 border-b border-white/10">
+        <span className="text-xs font-medium text-zinc-400">📁 文件</span>
+        <button onClick={onClose} className="text-zinc-400 hover:text-white text-xs transition-colors">
           ▼
         </button>
       </div>
 
-      {/* Breadcrumb */}
+      {/* Breadcrumb with consistent padding */}
       {currentPath && (
-        <div className="p-2 border-b border-gray-700">
+        <div className="p-3 border-b border-white/10">
           <button
             onClick={handleBack}
-            className="text-xs text-blue-400 hover:text-blue-300"
+            className="text-xs text-zinc-400 hover:text-white transition-colors"
           >
-            ← ..
+            ← 返回上级
           </button>
-          <span className="text-xs text-gray-400 ml-2">/{currentPath}</span>
+          <span className="text-xs text-zinc-500 ml-2">/{currentPath}</span>
         </div>
       )}
 
       {/* File list */}
-      <div className="flex-1 overflow-y-auto p-1">
+      <div className="flex-1 overflow-y-auto p-2">
         {files.length === 0 ? (
-          <div className="text-gray-500 text-xs text-center py-4">No files</div>
+          <div className="text-zinc-500 text-xs text-center py-4">暂无文件</div>
         ) : (
           files.map((file) => (
             <div
               key={file.path}
               onClick={() => handleFileClick(file)}
-              className="flex items-center gap-2 px-2 py-1 hover:bg-gray-700 rounded cursor-pointer"
+              className="flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded cursor-pointer transition-colors"
             >
               <span>{file.isDirectory ? '📁' : '📄'}</span>
-              <span className="text-xs truncate">{file.name}</span>
+              <span className="text-xs truncate text-zinc-300">{file.name}</span>
             </div>
           ))
         )}

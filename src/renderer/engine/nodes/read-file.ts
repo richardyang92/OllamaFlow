@@ -28,13 +28,13 @@ export function createReadFileExecutor(): NodeExecutor {
 
       if (!result.success) {
         if (data.errorIfNotFound) {
-          throw new Error(`Failed to read file: ${result.error}`)
+          throw new Error(`读取文件失败: ${result.error}`)
         } else {
           context.onLog?.({
             nodeId: node.id,
             nodeName: data.label,
             level: 'warn',
-            message: `File not found: ${filePath}`,
+            message: `文件未找到: ${filePath}`,
           })
           return {
             content: '',

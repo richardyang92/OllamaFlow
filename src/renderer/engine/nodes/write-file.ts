@@ -19,8 +19,43 @@ export function createWriteFileExecutor(): NodeExecutor {
       let content: string
       if (data.contentSource === 'direct') {
         content = interpolateVariables(data.directContent, { ...context.variables, ...input })
+        if (!content) {
+          context.onLog?.({
+            nodeId: node.id,
+            nodeName: data.label,
+            level: 'warn',
+            message: `内容来源设置为"直接输入内容"，但内容为空。请在属性面板中输入内容，或切换到"来自上游节点"模式`,
+          })
+        }
+        context.onLog?.({
+          nodeId: node.id,
+          nodeName: data.label,
+          level: 'debug',
+          message: `使用直接输入内容，长度: ${content.length}`,
+        })
       } else {
+        if (input.content === undefined) {
+          context.onLog?.({
+            nodeId: node.id,
+            nodeName: data.label,
+            level: 'warn',
+            message: `内容来源设置为"来自上游节点"，但没有收到输入内容。请检查：1. 是否有节点连接到输入端口 2. 上游节点是否正确输出内容`,
+          })
+        } else if (input.content === '') {
+          context.onLog?.({
+            nodeId: node.id,
+            nodeName: data.label,
+            level: 'warn',
+            message: `收到输入内容为空字符串。请检查上游节点是否正确输出内容`,
+          })
+        }
         content = input.content !== undefined ? String(input.content) : ''
+        context.onLog?.({
+          nodeId: node.id,
+          nodeName: data.label,
+          level: 'debug',
+          message: `使用上游节点输入内容，input.content类型: ${typeof input.content}, 值: ${JSON.stringify(input.content)?.slice(0, 100)}..., 长度: ${content.length}`,
+        })
       }
 
       // Handle append mode
@@ -35,20 +70,20 @@ export function createWriteFileExecutor(): NodeExecutor {
         nodeId: node.id,
         nodeName: data.label,
         level: 'debug',
-        message: `Writing to file: ${filePath}`,
+        message: `正在写入文件: ${filePath}`,
       })
 
       const result = await window.electronAPI.file.write(context.workspacePath, filePath, content)
 
       if (!result.success) {
-        throw new Error(`Failed to write file: ${result.error}`)
+        throw new Error(`写入文件失败: ${result.error}`)
       }
 
       context.onLog?.({
         nodeId: node.id,
         nodeName: data.label,
         level: 'info',
-        message: `Wrote ${content.length} bytes to ${filePath}`,
+        message: `已写入 ${content.length} 字节到 ${filePath}`,
       })
 
       return {
