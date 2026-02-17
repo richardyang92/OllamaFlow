@@ -2,11 +2,12 @@ appId: com.ollamaflow.app
 productName: OllamaFlow
 directories:
   buildResources: build
+  output: dist
 files:
-  - dist/**/*
-  - dist-electron/**/*
+  - out/**/*
+  - package.json
 extraMetadata:
-  main: dist-electron/main.js
+  main: out/main/index.js
 mac:
   category: public.app-category.developer-tools
   target: dmg

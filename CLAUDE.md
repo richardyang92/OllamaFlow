@@ -11,6 +11,7 @@ OllamaFlow is a visual workflow builder for Ollama AI models, built as an Electr
 ```bash
 # Development
 npm run dev          # Start development server with hot-reload (uses custom scripts/dev.js)
+                      # Note: The dev script unsets ELECTRON_RUN_AS_NODE for environments like VSCode
 
 # Building
 npm run build        # Build for production (electron-vite)
@@ -99,11 +100,21 @@ Edges are colored by source node type (see `getEdgeColorByNodeType()` in workflo
 ### Conditional Execution (If Nodes)
 The `if` node type evaluates expressions and routes execution through its `true` or `false` output handles. The executor uses JavaScript's `Function` constructor to safely evaluate the conditional expression against the input context.
 
+### Loop Node Implementation
+Loop nodes support three modes: `count` (fixed iterations), `array` (iterate over array items), and `condition` (while-style with expression). Body nodes (nodes inside the loop) are identified via:
+1. React Flow's `parentId` property (child nodes have `parentId` set to the loop node's id), or
+2. Fallback to `data.bodyNodeIds` array stored in the loop node's data
+
+Loop variables available to body nodes include: `{{loopVariable}}` (current item), `{{indexVariable}}` (index), `isFirst`, `isLast`, and `count`.
+
 ### Workspace Storage
 Workspaces are folders containing `.ollamaflow/` directory:
 - `config.json` - Workspace configuration (Ollama host, default model)
 - `workflow.json` - Node/edge data and viewport state
 - `cache/` - Runtime cache directory
+
+### Ollama Configuration
+The application connects to a local Ollama instance (default: `http://localhost:11434`). The Ollama host is configured per-workspace in `config.json`. Each `ollamaChat` node can specify its own model, or use the workspace default. The Ollama chat executor supports streaming responses via the `onStream()` callback in `ExecutionContext`.
 
 ## Type System
 - Path alias: `@/*` maps to `src/renderer/*`
@@ -116,6 +127,11 @@ Each node defines `PortDefinition` objects for inputs/outputs with:
 - `required` / `multiple` - Port constraints
 - Handles map outputs from source nodes to inputs on target nodes via `buildInputContext()`
 
+**Handle Naming Convention**: Edges use `sourceHandle` and `targetHandle` to map specific output ports to input ports. When connecting nodes:
+- `sourceHandle` should match a port ID in the source node's `outputs` array
+- `targetHandle` defaults to `'input'` but can match any port ID in the target's `inputs` array
+- The executor retrieves the field matching `sourceHandle` from the source node's output object
+
 ## UI Localization
 The application UI uses Chinese localization throughout:
 - Node labels, descriptions, and log messages are in Chinese
@@ -123,3 +139,6 @@ The application UI uses Chinese localization throughout:
 
 ## Testing
 No test framework is currently configured. When adding tests, you'll need to set up a test runner (e.g., Vitest for the renderer process).
+
+# currentDate
+Today's date is 2026-02-17.
