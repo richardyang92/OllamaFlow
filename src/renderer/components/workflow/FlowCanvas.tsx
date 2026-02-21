@@ -28,6 +28,7 @@ import ReadFileNode from '@/components/nodes/ReadFileNode'
 import WriteFileNode from '@/components/nodes/WriteFileNode'
 import ExecuteCommandNode from '@/components/nodes/ExecuteCommandNode'
 import ImageNode from '@/components/nodes/ImageNode'
+import ReactAgentNode from '@/components/nodes/ReactAgentNode'
 
 // Import edge components
 import AnimatedEdge from '@/components/workflow/edges/AnimatedEdge'
@@ -44,6 +45,7 @@ const nodeTypes: Record<string, any> = {
   readFile: ReadFileNode,
   writeFile: WriteFileNode,
   executeCommand: ExecuteCommandNode,
+  reactAgent: ReactAgentNode,
 }
 
 // Edge types

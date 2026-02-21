@@ -24,9 +24,106 @@ export type NodeType =
   | 'readFile'
   | 'writeFile'
   | 'executeCommand'
+  | 'reactAgent'
+
+// ReAct Agent Tool Definition
+export interface ToolDefinition {
+  id: string
+  name: string
+  description: string
+  type: 'readFile' | 'writeFile' | 'executeCommand' | 'httpRequest' | 'todos'
+  config: Record<string, unknown>
+}
+
+// Todos 工具的任务项
+export interface TodoItem {
+  id: string
+  content: string
+  completed: boolean
+  createdAt: number
+}
+
+// Todos 工具的操作类型
+export type TodosAction = 'add' | 'complete' | 'list' | 'remove' | 'clear'
+
+// 预定义的可用工具
+export const AVAILABLE_TOOLS = [
+  {
+    id: 'todos',
+    name: 'todos',
+    label: '待办事项',
+    description: '管理待办事项列表。输入JSON格式: {"action": "add|complete|list|remove|clear", "content": "任务内容"}',
+    type: 'todos' as const,
+    builtIn: true,
+  },
+  {
+    id: 'executeCommand',
+    name: 'executeCommand',
+    label: '执行命令',
+    description: '执行 Shell 命令。输入: 命令字符串（如 "python script.py"）。注意：不能直接执行多行代码，需先写入文件再执行',
+    type: 'executeCommand' as const,
+    builtIn: false,
+  },
+  {
+    id: 'readFile',
+    name: 'readFile',
+    label: '读取文件',
+    description: '从工作区读取文件内容。输入: 文件路径（如 "data/input.txt"）',
+    type: 'readFile' as const,
+    builtIn: false,
+  },
+  {
+    id: 'writeFile',
+    name: 'writeFile',
+    label: '写入文件',
+    description: '将内容写入工作区文件。输入JSON格式: {"filename": "文件路径", "content": "文件内容"}。用于保存代码、数据等',
+    type: 'writeFile' as const,
+    builtIn: false,
+  },
+  {
+    id: 'httpRequest',
+    name: 'httpRequest',
+    label: 'HTTP 请求',
+    description: '发送 HTTP 请求。输入: URL字符串',
+    type: 'httpRequest' as const,
+    builtIn: false,
+  },
+] as const
+
+export type AvailableToolId = (typeof AVAILABLE_TOOLS)[number]['id']
 
 // Node status
 export type NodeStatus = 'idle' | 'running' | 'success' | 'error'
+
+// ReAct Agent Step Status
+export type ReActStepStatus = 'thinking' | 'acting' | 'observing' | 'completed' | 'error'
+
+// Single ReAct reasoning step
+export interface ReActStep {
+  id: string
+  iteration: number
+  status: ReActStepStatus
+  thought: string
+  thoughtStreaming: boolean
+  action: string | null
+  actionInput: string | null
+  observation: string | null
+  observationStreaming: boolean
+  observationError: boolean
+  startedAt: number
+  completedAt?: number
+}
+
+// ReAct Agent execution state (for streaming display)
+export interface ReActExecutionState {
+  nodeId: string
+  isRunning: boolean
+  currentIteration: number
+  maxIterations: number
+  steps: ReActStep[]
+  finalAnswer: string | null
+  error: string | null
+}
 
 // Base node data
 export interface BaseNodeData extends Record<string, unknown> {
@@ -127,6 +224,19 @@ export interface ExecuteCommandNodeData extends BaseNodeData {
   continueOnError: boolean
 }
 
+// ReAct Agent Node
+export interface ReactAgentNodeData extends BaseNodeData {
+  nodeType: 'reactAgent'
+  model: string
+  systemPrompt: string
+  userMessage: string
+  temperature: number
+  maxTokens: number
+  maxIterations: number
+  enabledTools: AvailableToolId[]
+  stream: boolean
+}
+
 
 // Union type for all node data
 export type WorkflowNodeData =
@@ -140,6 +250,7 @@ export type WorkflowNodeData =
   | ReadFileNodeData
   | WriteFileNodeData
   | ExecuteCommandNodeData
+  | ReactAgentNodeData
 
 // Workflow node type
 export type WorkflowNode = Node<WorkflowNodeData>
@@ -360,6 +471,29 @@ export const nodeTemplates: NodeTemplate[] = [
         { id: 'stderr', name: 'stderr', label: '标准错误', dataType: 'string' },
         { id: 'exitCode', name: 'exitCode', label: '退出码', dataType: 'number' },
       ],
+    },
+  },
+  {
+    type: 'reactAgent',
+    label: 'ReAct 智能体',
+    icon: '🧠',
+    category: 'AI',
+    colorScheme: 'purple',
+    description: '推理与行动的 AI 智能体，支持多工具协作',
+    defaultData: {
+      nodeType: 'reactAgent',
+      label: 'ReAct 智能体',
+      category: 'AI',
+      model: 'glm-4.7-flash:latest',
+      systemPrompt: '你是一个智能助手，可以使用工具来解决问题。',
+      userMessage: '{{input}}',
+      temperature: 0.7,
+      maxTokens: 4096,
+      maxIterations: 10,
+      enabledTools: ['executeCommand', 'readFile'],
+      stream: true,
+      inputs: [{ id: 'input', name: 'input', label: '输入', dataType: 'string' }],
+      outputs: [{ id: 'response', name: 'response', label: '最终回答', dataType: 'string' }],
     },
   },
 ]

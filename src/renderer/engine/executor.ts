@@ -181,6 +181,7 @@ import { createReadFileExecutor } from './nodes/read-file'
 import { createWriteFileExecutor } from './nodes/write-file'
 import { createExecuteCommandExecutor } from './nodes/execute-command'
 import { createImageExecutor } from './nodes/image'
+import { createReactAgentExecutor } from './nodes/react-agent'
 
 // Node executor registry
 const nodeExecutors: Partial<Record<NodeType, NodeExecutor>> = {}
@@ -207,6 +208,7 @@ export function initializeExecutors() {
   registerNodeExecutor('readFile', createReadFileExecutor())
   registerNodeExecutor('writeFile', createWriteFileExecutor())
   registerNodeExecutor('executeCommand', createExecuteCommandExecutor())
+  registerNodeExecutor('reactAgent', createReactAgentExecutor())
 }
 
 // Main workflow executor

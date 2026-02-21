@@ -5,12 +5,14 @@ import type {
   NodeExecutionResult,
   ExecutionLog,
 } from '@/types/execution'
+import type { ReActExecutionState, ReActStep } from '@/types/node'
 
 interface ExecutionState {
   status: ExecutionStatus
   context: ExecutionContext | null
   logs: ExecutionLog[]
   streamingOutput: Map<string, string>
+  reactAgentStates: Map<string, ReActExecutionState>
 
   // Actions
   startExecution: (workflowId: string) => void
@@ -35,6 +37,16 @@ interface ExecutionState {
   // Variables
   setVariable: (key: string, value: unknown) => void
   getVariable: (key: string) => unknown
+
+  // ReAct Agent state management
+  initReActState: (nodeId: string, maxIterations: number) => void
+  updateReActStep: (nodeId: string, step: Partial<ReActStep> & { id: string }) => void
+  appendReActThought: (nodeId: string, chunk: string) => void
+  appendReActObservation: (nodeId: string, chunk: string, isError?: boolean) => void
+  setReActFinalAnswer: (nodeId: string, answer: string) => void
+  completeReActStep: (nodeId: string, stepId: string) => void
+  getReActState: (nodeId: string) => ReActExecutionState | undefined
+  clearReActState: (nodeId: string) => void
 }
 
 export const useExecutionStore = create<ExecutionState>((set, get) => ({
@@ -42,6 +54,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
   context: null,
   logs: [],
   streamingOutput: new Map(),
+  reactAgentStates: new Map(),
 
   startExecution: (workflowId) => {
     const context: ExecutionContext = {
@@ -151,5 +164,124 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
 
   getVariable: (key) => {
     return get().context?.variables[key]
+  },
+
+  // ReAct Agent state management
+  initReActState: (nodeId, maxIterations) => {
+    const { reactAgentStates } = get()
+    const newMap = new Map(reactAgentStates)
+    newMap.set(nodeId, {
+      nodeId,
+      isRunning: true,
+      currentIteration: 0,
+      maxIterations,
+      steps: [],
+      finalAnswer: null,
+      error: null,
+    })
+    set({ reactAgentStates: newMap })
+  },
+
+  updateReActStep: (nodeId, stepUpdate) => {
+    const { reactAgentStates } = get()
+    const state = reactAgentStates.get(nodeId)
+    if (!state) return
+
+    const newMap = new Map(reactAgentStates)
+    const stepIndex = state.steps.findIndex((s) => s.id === stepUpdate.id)
+
+    if (stepIndex >= 0) {
+      // Update existing step
+      const newSteps = [...state.steps]
+      newSteps[stepIndex] = { ...newSteps[stepIndex], ...stepUpdate }
+      newMap.set(nodeId, { ...state, steps: newSteps })
+    } else {
+      // Add new step (need full step data)
+      const newStep = stepUpdate as ReActStep
+      const newSteps = [...state.steps, newStep]
+      newMap.set(nodeId, {
+        ...state,
+        steps: newSteps,
+        currentIteration: newStep.iteration || state.currentIteration,
+      })
+    }
+    set({ reactAgentStates: newMap })
+  },
+
+  appendReActThought: (nodeId, chunk) => {
+    const { reactAgentStates } = get()
+    const state = reactAgentStates.get(nodeId)
+    if (!state || state.steps.length === 0) return
+
+    const newMap = new Map(reactAgentStates)
+    const lastStep = state.steps[state.steps.length - 1]
+    const newSteps = [...state.steps]
+    newSteps[newSteps.length - 1] = {
+      ...lastStep,
+      thought: lastStep.thought + chunk,
+      thoughtStreaming: true,
+    }
+    newMap.set(nodeId, { ...state, steps: newSteps })
+    set({ reactAgentStates: newMap })
+  },
+
+  appendReActObservation: (nodeId, chunk, isError = false) => {
+    const { reactAgentStates } = get()
+    const state = reactAgentStates.get(nodeId)
+    if (!state || state.steps.length === 0) return
+
+    const newMap = new Map(reactAgentStates)
+    const lastStep = state.steps[state.steps.length - 1]
+    const newSteps = [...state.steps]
+    newSteps[newSteps.length - 1] = {
+      ...lastStep,
+      observation: (lastStep.observation || '') + chunk,
+      observationStreaming: true,
+      observationError: isError,
+    }
+    newMap.set(nodeId, { ...state, steps: newSteps })
+    set({ reactAgentStates: newMap })
+  },
+
+  setReActFinalAnswer: (nodeId, answer) => {
+    const { reactAgentStates } = get()
+    const state = reactAgentStates.get(nodeId)
+    if (!state) return
+
+    const newMap = new Map(reactAgentStates)
+    newMap.set(nodeId, { ...state, finalAnswer: answer })
+    set({ reactAgentStates: newMap })
+  },
+
+  completeReActStep: (nodeId, stepId) => {
+    const { reactAgentStates } = get()
+    const state = reactAgentStates.get(nodeId)
+    if (!state) return
+
+    const newMap = new Map(reactAgentStates)
+    const newSteps = state.steps.map((s) =>
+      s.id === stepId
+        ? {
+            ...s,
+            status: 'completed' as const,
+            thoughtStreaming: false,
+            observationStreaming: false,
+            completedAt: Date.now(),
+          }
+        : s
+    )
+    newMap.set(nodeId, { ...state, steps: newSteps })
+    set({ reactAgentStates: newMap })
+  },
+
+  getReActState: (nodeId) => {
+    return get().reactAgentStates.get(nodeId)
+  },
+
+  clearReActState: (nodeId) => {
+    const { reactAgentStates } = get()
+    const newMap = new Map(reactAgentStates)
+    newMap.delete(nodeId)
+    set({ reactAgentStates: newMap })
   },
 }))

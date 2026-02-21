@@ -10,6 +10,7 @@ import OutputProperties from './properties/OutputProperties'
 import ReadFileProperties from './properties/ReadFileProperties'
 import WriteFileProperties from './properties/WriteFileProperties'
 import ExecuteCommandProperties from './properties/ExecuteCommandProperties'
+import ReactAgentProperties from './properties/ReactAgentProperties'
 import { cn } from '@/lib/utils'
 
 // Toast notification component
@@ -81,6 +82,8 @@ function PropertiesPanelContent({ selectedNode, selectedNodeId, updateNodeData, 
         return <WriteFileProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'executeCommand':
         return <ExecuteCommandProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
+      case 'reactAgent':
+        return <ReactAgentProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       default:
         return (
           <div className="text-zinc-400 text-sm">此节点类型没有可配置的属性.</div>

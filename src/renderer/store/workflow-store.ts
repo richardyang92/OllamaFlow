@@ -26,6 +26,7 @@ export function getEdgeColorByNodeType(nodeType: NodeType): string {
     readFile: 'rgba(251, 146, 60, 0.6)', // orange
     writeFile: 'rgba(251, 146, 60, 0.6)', // orange
     executeCommand: 'rgba(248, 113, 113, 0.6)', // red
+    reactAgent: 'rgba(167, 139, 250, 0.6)', // purple - same as ollamaChat
   }
   return colorMap[nodeType] || 'rgba(255, 255, 255, 0.15)'
 }
@@ -42,6 +43,7 @@ export function getEdgeHoverColorByNodeType(nodeType: NodeType): string {
     readFile: 'rgba(251, 146, 60, 0.9)', // orange
     writeFile: 'rgba(251, 146, 60, 0.9)', // orange
     executeCommand: 'rgba(248, 113, 113, 0.9)', // red
+    reactAgent: 'rgba(167, 139, 250, 0.9)', // purple - same as ollamaChat
   }
   return colorMap[nodeType] || 'rgba(255, 255, 255, 0.4)'
 }

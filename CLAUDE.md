@@ -132,6 +132,20 @@ Each node defines `PortDefinition` objects for inputs/outputs with:
 - `targetHandle` defaults to `'input'` but can match any port ID in the target's `inputs` array
 - The executor retrieves the field matching `sourceHandle` from the source node's output object
 
+### ReAct Agent Node
+The `reactAgent` node type implements a Reasoning + Acting pattern using Ollama's Function Calling API:
+- **Executor**: [react-agent.ts](src/renderer/engine/nodes/react-agent.ts) - Implements the think-act-observe loop
+- **Tools**: [engine/tools/index.ts](src/renderer/engine/tools/index.ts) - Built-in tools (todos, readFile, writeFile, executeCommand, httpRequest)
+
+The agent maintains state via `ReActExecutionState` in the execution store, tracking:
+- Current iteration and max iterations
+- Steps with thought/action/observation for each iteration
+- Final answer when task completes
+
+**Loop Detection**: The executor includes `detectLoop()` to prevent infinite loops by monitoring repeated actions and blocking problematic patterns (e.g., excessive writeFile calls, over-planning with todos).
+
+**Tool Schema**: Tools are converted to Ollama's function format via `convertToOllamaTools()`. Each tool defines parameters with JSON schema for type validation.
+
 ## UI Localization
 The application UI uses Chinese localization throughout:
 - Node labels, descriptions, and log messages are in Chinese
@@ -139,6 +153,3 @@ The application UI uses Chinese localization throughout:
 
 ## Testing
 No test framework is currently configured. When adding tests, you'll need to set up a test runner (e.g., Vitest for the renderer process).
-
-# currentDate
-Today's date is 2026-02-17.
