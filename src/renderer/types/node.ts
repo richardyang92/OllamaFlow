@@ -44,7 +44,7 @@ export interface TodoItem {
 }
 
 // Todos 工具的操作类型
-export type TodosAction = 'add' | 'complete' | 'list' | 'remove' | 'clear'
+export type TodosAction = 'add' | 'complete' | 'list' | 'remove' | 'clear' | 'init'
 
 // 预定义的可用工具
 export const AVAILABLE_TOOLS = [
@@ -52,7 +52,7 @@ export const AVAILABLE_TOOLS = [
     id: 'todos',
     name: 'todos',
     label: '待办事项',
-    description: '管理待办事项列表。输入JSON格式: {"action": "add|complete|list|remove|clear", "content": "任务内容"}',
+    description: '管理待办事项列表。一次性创建任务列表: {"action": "init", "tasks": ["任务1", "任务2", ...]}。单个操作: {"action": "add|complete|list|remove|clear", "content": "..."}',
     type: 'todos' as const,
     builtIn: true,
   },
@@ -123,6 +123,7 @@ export interface ReActExecutionState {
   steps: ReActStep[]
   finalAnswer: string | null
   error: string | null
+  todos: TodoItem[]  // 待办事项列表
 }
 
 // Base node data
@@ -189,6 +190,8 @@ export interface LoopNodeData extends BaseNodeData {
 export interface OutputNodeData extends BaseNodeData {
   nodeType: 'output'
   outputType: 'display' | 'copy' | 'download'
+  sourceType: 'input' | 'variable'  // 输入值或变量
+  variableName?: string  // 当 sourceType 为 'variable' 时的变量名
   output?: string
 }
 
@@ -388,6 +391,7 @@ export const nodeTemplates: NodeTemplate[] = [
       label: '输出',
       category: 'Output',
       outputType: 'display',
+      sourceType: 'input',
       inputs: [{ id: 'data', name: 'data', label: '数据', dataType: 'any' }],
       outputs: [{ id: 'data', name: 'data', label: '数据', dataType: 'any' }],
     },
@@ -485,7 +489,7 @@ export const nodeTemplates: NodeTemplate[] = [
       label: 'ReAct 智能体',
       category: 'AI',
       model: 'glm-4.7-flash:latest',
-      systemPrompt: '你是一个智能助手，可以使用工具来解决问题。',
+      systemPrompt: '你是一个善于分析和执行任务的智能助手。',
       userMessage: '{{input}}',
       temperature: 0.7,
       maxTokens: 4096,

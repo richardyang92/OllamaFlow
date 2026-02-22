@@ -352,3 +352,47 @@ ipcMain.handle('recent:remove', async (_, workspacePath: string) => {
   s.set('recent-workspaces', recent)
   return recent
 })
+
+// HTTP: Fetch URL
+interface HttpFetchOptions {
+  url: string
+  method?: string
+  headers?: Record<string, string>
+  body?: string
+  timeout?: number
+}
+
+ipcMain.handle('http:fetch', async (_, options: HttpFetchOptions) => {
+  const { url, method = 'GET', headers = {}, body, timeout = 30000 } = options
+
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+    const response = await fetch(url, {
+      method,
+      headers,
+      body: body || undefined,
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+
+    const text = await response.text()
+
+    return {
+      success: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      body: text,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      status: 0,
+      statusText: '',
+      body: '',
+      error: (error as Error).message,
+    }
+  }
+})

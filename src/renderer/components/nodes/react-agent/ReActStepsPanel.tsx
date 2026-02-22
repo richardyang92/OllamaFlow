@@ -21,7 +21,7 @@ function ReActStepsPanel({ state }: ReActStepsPanelProps) {
         }
       }, 0)
     }
-  }, [state.steps, state.isRunning])
+  }, [state.steps, state.isRunning, state.todos])
 
   // Auto-expand the latest step during execution, collapse completed steps
   useEffect(() => {
@@ -47,6 +47,11 @@ function ReActStepsPanel({ state }: ReActStepsPanelProps) {
     setExpandedStepId(expandedStepId === stepId ? null : stepId)
   }
 
+  // Calculate todo stats
+  const todos = state.todos || []
+  const completedCount = todos.filter(t => t.completed).length
+  const totalCount = todos.length
+
   return (
     <div className="space-y-2">
       {/* Progress indicator */}
@@ -56,6 +61,51 @@ function ReActStepsPanel({ state }: ReActStepsPanelProps) {
           {state.currentIteration} / {state.maxIterations}
         </span>
       </div>
+
+      {/* Todo List Display */}
+      {todos.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-2 mb-2"
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs">📋</span>
+              <span className="text-[10px] text-blue-400 font-medium">任务列表</span>
+            </div>
+            <span className="text-[10px] text-gray-400">
+              {completedCount}/{totalCount} 完成
+            </span>
+          </div>
+          <div className="space-y-1">
+            {todos.map((todo) => (
+              <motion.div
+                key={todo.id}
+                initial={{ opacity: 0, x: -5 }}
+                animate={{ opacity: 1, x: 0 }}
+                className={`flex items-center gap-1.5 text-[10px] ${
+                  todo.completed ? 'text-green-400' : 'text-gray-300'
+                }`}
+              >
+                <span>{todo.completed ? '✅' : '⬜'}</span>
+                <span className={todo.completed ? 'line-through opacity-70' : ''}>
+                  {todo.content}
+                </span>
+              </motion.div>
+            ))}
+          </div>
+          {/* Progress bar */}
+          <div className="mt-2 h-1 bg-gray-700 rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-blue-500"
+              initial={{ width: 0 }}
+              animate={{ width: `${totalCount > 0 ? (completedCount / totalCount) * 100 : 0}%` }}
+              transition={{ duration: 0.3 }}
+            />
+          </div>
+        </motion.div>
+      )}
 
       {/* Steps container */}
       <div ref={containerRef} className="space-y-2 max-h-64 overflow-y-auto pr-1">

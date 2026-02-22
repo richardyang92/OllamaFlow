@@ -28,10 +28,15 @@ function getToolParameters(toolType: string): {
         properties: {
           action: {
             type: 'string',
-            enum: ['add', 'complete', 'list', 'remove', 'clear'],
-            description: '操作类型'
+            enum: ['init', 'add', 'complete', 'list', 'remove', 'clear'],
+            description: '操作类型。推荐使用init一次性创建多个任务'
           },
-          content: { type: 'string', description: '任务内容' },
+          tasks: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '任务列表数组（用于init操作，一次性创建多个任务）'
+          },
+          content: { type: 'string', description: '任务内容（用于add/complete/remove操作）' },
           taskId: { type: 'string', description: '任务ID' }
         },
         required: ['action']
@@ -120,10 +125,25 @@ function detectLoop(
     return { isLoop: false, loopType: null, suggestion: null, blockedActions: [] }
   }
 
-  // Count how many times todos was used to add tasks
+  // Count how many times todos was used to add tasks (only 'add', not 'init')
   const todosAddCount = toolCallsHistory.filter(
     (h) => h.name === 'todos' && h.result.includes('已添加任务')
   ).length
+
+  // Check if init was already called
+  const hasInitCall = toolCallsHistory.some(
+    (h) => h.name === 'todos' && h.result.includes('已创建')
+  )
+
+  // Block todos 'add' if init was already called and user tries to add more
+  if (hasInitCall && todosAddCount > 0) {
+    return {
+      isLoop: true,
+      loopType: 'postInitAdding',
+      suggestion: '任务列表已创建，请开始执行任务而不是继续添加！',
+      blockedActions: ['todos']
+    }
+  }
 
   if (todosAddCount > 2) {
     return {
@@ -233,17 +253,108 @@ export function createReactAgentExecutor(): NodeExecutor {
       // Build system prompt with rules
       const fullSystemPrompt = `${systemPrompt}
 
-你拥有调用工具的能力来解决问题。当需要执行操作时，调用相应的工具函数。
+## 你的能力
+你是一个 ReAct 智能体，遵循"思考-行动-观察"循环来解决问题。
+你可以调用工具来执行实际操作，不要只靠想象给出答案。
 
-重要规则：
-1. 简单任务直接执行，复杂任务最多规划2-3步
-2. 写入脚本后必须立即执行
-3. 任务完成后直接给出最终答案，不要再调用工具
+## 可用工具
 
-工具调用JSON格式要求：
-- 工具参数必须是有效的JSON格式
-- 如果参数包含代码字符串，代码中的反斜杠必须双写转义（例如 \\cos 变成 \\\\cos，\\n 变成 \\\\n）
-- 确保所有字符串值中的特殊字符都正确转义`
+### todos - 任务规划工具
+用于规划和追踪复杂任务的执行步骤。
+- **推荐**: 一次性创建任务列表: {"action": "init", "tasks": ["任务1", "任务2", "任务3"]}
+- 添加单个任务: {"action": "add", "content": "任务描述"}
+- 完成任务: {"action": "complete", "content": "任务关键词"}
+- 查看列表: {"action": "list"}
+- 清空列表: {"action": "clear"}
+
+### executeCommand - 执行命令
+执行 Shell 命令（如 python、node、curl 等）。
+输入: {"command": "python script.py"}
+
+### readFile - 读取文件
+读取工作区中的文件内容。
+输入: {"filePath": "data/input.txt"}
+
+### writeFile - 写入文件
+将内容写入工作区文件（代码、数据、结果等）。
+输入: {"filename": "output.py", "content": "print('hello')"}
+
+### httpRequest - HTTP请求
+发送 HTTP 请求获取网页或 API 数据。
+输入: {"url": "https://api.example.com"}
+
+## 工作流程（ReAct循环）
+
+1. **思考** (Think): 分析任务，决定下一步行动
+2. **行动** (Act): 调用合适的工具执行操作
+3. **观察** (Observe): 查看工具返回的结果
+4. **重复**: 直到任务完成
+
+## 任务执行指南
+
+### 何时使用 todos 规划？
+- 任务需要3个以上步骤
+- 任务包含多个子任务
+- 需要按顺序完成多个操作
+- 示例：搜索新闻 → 阅读内容 → 提取要点 → 写总结
+
+### 如何使用 todos.init 一次性规划？
+**推荐做法**: 使用 init 一次性创建所有任务
+行动: {"action": "init", "tasks": ["步骤1描述", "步骤2描述", "步骤3描述", ...]}
+
+**不推荐**: 多次调用 add 添加任务（浪费迭代次数）
+行动: {"action": "add", "content": "步骤1"}  ← 不要这样做
+
+### 如何正确执行任务？
+
+**错误示范**: 直接给出答案，不调用任何工具
+你: 我无法完成这个任务...（错误！应该先尝试使用可用工具）
+
+**正确做法**: 使用工具逐步执行
+思考: 这是一个需要实际操作的任务，我应该先规划步骤，然后调用工具执行
+行动: 先用 todos.init 创建任务列表，再逐步调用合适的工具完成每一步
+
+## 🚨 核心执行流程（必须严格遵守）
+
+### 标准执行流程
+1. **规划阶段**: 用 todos.init 一次性创建所有任务
+2. **执行阶段**: 按顺序执行每个任务
+   - 调用工具完成当前任务（如 httpRequest、executeCommand、writeFile 等）
+   - **立即调用 todos.complete 标记任务完成**
+   - 再执行下一个任务
+3. **完成阶段**: 所有任务完成后给出最终答案
+
+### ⚠️ 必须遵守的规则
+1. **每完成一个任务，必须立即调用 todos.complete**
+   - 执行完工具后，观察结果如果成功，立即: {"action": "complete", "content": "任务关键词"}
+   - 然后再继续下一个任务
+2. **按顺序执行任务**，不要跳过或乱序
+3. **每个任务只能标记完成一次**
+
+### 示例执行流程
+---示例开始---
+任务列表: ["获取热搜数据", "解析内容", "生成文章"]
+
+迭代1: todos.init → 创建3个任务
+迭代2: httpRequest 获取数据 → 观察成功 → todos.complete "获取热搜数据"
+迭代3: 解析内容（或调用工具）→ 观察成功 → todos.complete "解析内容"
+迭代4: writeFile 生成文章 → 观察成功 → todos.complete "生成文章"
+迭代5: 所有任务完成 → 给出最终答案（不再调用工具）
+---示例结束---
+
+## 重要规则
+
+1. **多步任务先用 todos 规划** - 添加任务列表后再逐步执行
+2. **必须调用工具执行实际操作** - 不要空想，要行动
+3. **完成一步立即标记** - 每完成一个任务必须调用 todos.complete
+4. **按顺序执行** - 按任务列表顺序逐个完成
+5. **写入脚本后立即执行** - 用 writeFile 写代码后，用 executeCommand 运行
+6. **每次只调用一个工具** - 等待观察结果后再决定下一步
+7. **所有任务完成后给出最终答案** - 不再调用工具，直接回答
+
+## JSON格式提醒
+- 代码中的反斜杠必须双写转义（\\\\cos -> \\\\\\\\cos，\\\\n -> \\\\\\\\n）
+- 确保所有字符串正确转义`
 
       // Initialize messages using Ollama's Message type
       const messages: Message[] = [
@@ -488,6 +599,10 @@ export function createReactAgentExecutor(): NodeExecutor {
               todosManager
             )
 
+            // Sync todos state to store after each tool execution
+            const todosStatus = todosManager.getStatus()
+            executionStore.updateReActTodos(node.id, todosStatus.items)
+
             let observation = result.success ? result.output : `错误: ${result.error}`
 
             // Add hints based on tool type
@@ -512,6 +627,45 @@ export function createReactAgentExecutor(): NodeExecutor {
               const hasSuccessKeyword = successKeywords.some(kw => observation.toLowerCase().includes(kw))
               if (hasSuccessKeyword) {
                 observation += `\n✅ 任务完成！可以给出最终答案了。`
+              }
+            }
+
+            // Add task status hint after tool execution (except for todos tool itself)
+            if (result.success && tool.name.toLowerCase() !== 'todos') {
+              const currentTodos = todosManager.getStatus()
+              if (currentTodos.total > 0 && currentTodos.pending > 0) {
+                const pendingTasks = currentTodos.items.filter(t => !t.completed)
+                const completedCount = currentTodos.completed
+
+                // Find the first pending task as the current task
+                const currentTask = pendingTasks[0]
+
+                observation += `\n\n📋 当前进度: ${completedCount}/${currentTodos.total} 任务完成`
+                observation += `\n📌 下一步操作: 请用 {"action": "complete", "content": "${currentTask?.content.slice(0, 30)}"} 标记任务完成，然后继续执行下一个任务`
+              }
+            }
+
+            // After todos.complete, show next task hint
+            if (tool.name.toLowerCase() === 'todos' && result.success && observation.includes('已完成任务')) {
+              const currentTodos = todosManager.getStatus()
+              if (currentTodos.pending > 0) {
+                const pendingTasks = currentTodos.items.filter(t => !t.completed)
+                const nextTask = pendingTasks[0]
+                observation += `\n\n🎯 下一个任务: ${nextTask?.content}`
+                observation += `\n💡 请立即执行此任务，完成后标记为完成`
+              } else if (currentTodos.total > 0 && currentTodos.pending === 0) {
+                observation += `\n\n✅ 所有任务已完成！现在可以给出最终答案了。`
+              }
+            }
+
+            // After todos.init, show first task hint
+            if (tool.name.toLowerCase() === 'todos' && result.success && observation.includes('已创建')) {
+              const currentTodos = todosManager.getStatus()
+              if (currentTodos.pending > 0) {
+                const pendingTasks = currentTodos.items.filter(t => !t.completed)
+                const firstTask = pendingTasks[0]
+                observation += `\n\n🎯 现在开始执行第一个任务: ${firstTask?.content}`
+                observation += `\n💡 请立即调用工具执行此任务，完成后用 todos.complete 标记`
               }
             }
 

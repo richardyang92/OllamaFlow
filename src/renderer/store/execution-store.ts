@@ -5,7 +5,7 @@ import type {
   NodeExecutionResult,
   ExecutionLog,
 } from '@/types/execution'
-import type { ReActExecutionState, ReActStep } from '@/types/node'
+import type { ReActExecutionState, ReActStep, TodoItem } from '@/types/node'
 
 interface ExecutionState {
   status: ExecutionStatus
@@ -47,6 +47,7 @@ interface ExecutionState {
   completeReActStep: (nodeId: string, stepId: string) => void
   getReActState: (nodeId: string) => ReActExecutionState | undefined
   clearReActState: (nodeId: string) => void
+  updateReActTodos: (nodeId: string, todos: TodoItem[]) => void
 }
 
 export const useExecutionStore = create<ExecutionState>((set, get) => ({
@@ -178,6 +179,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       steps: [],
       finalAnswer: null,
       error: null,
+      todos: [],
     })
     set({ reactAgentStates: newMap })
   },
@@ -282,6 +284,16 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     const { reactAgentStates } = get()
     const newMap = new Map(reactAgentStates)
     newMap.delete(nodeId)
+    set({ reactAgentStates: newMap })
+  },
+
+  updateReActTodos: (nodeId, todos) => {
+    const { reactAgentStates } = get()
+    const state = reactAgentStates.get(nodeId)
+    if (!state) return
+
+    const newMap = new Map(reactAgentStates)
+    newMap.set(nodeId, { ...state, todos })
     set({ reactAgentStates: newMap })
   },
 }))

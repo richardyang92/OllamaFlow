@@ -50,6 +50,22 @@ export interface RecentWorkspace {
   lastOpened: string
 }
 
+export interface HttpFetchOptions {
+  url: string
+  method?: string
+  headers?: Record<string, string>
+  body?: string
+  timeout?: number
+}
+
+export interface HttpFetchResult {
+  success: boolean
+  status: number
+  statusText: string
+  body: string
+  error?: string
+}
+
 // Expose to renderer
 contextBridge.exposeInMainWorld('electronAPI', {
   // Workspace operations
@@ -106,6 +122,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     remove: (path: string): Promise<RecentWorkspace[]> =>
       ipcRenderer.invoke('recent:remove', path),
   },
+
+  // HTTP fetch
+  http: {
+    fetch: (options: HttpFetchOptions): Promise<HttpFetchResult> =>
+      ipcRenderer.invoke('http:fetch', options),
+  },
 })
 
 // Type declaration for window.electronAPI
@@ -134,6 +156,9 @@ declare global {
         get: () => Promise<RecentWorkspace[]>
         add: (path: string, name: string) => Promise<RecentWorkspace[]>
         remove: (path: string) => Promise<RecentWorkspace[]>
+      }
+      http: {
+        fetch: (options: HttpFetchOptions) => Promise<HttpFetchResult>
       }
     }
   }

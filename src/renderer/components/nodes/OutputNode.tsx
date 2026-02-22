@@ -17,10 +17,22 @@ function OutputNode(props: NodeProps<OutputNodeData>) {
     download: '下载',
   }
 
+  const sourceTypeLabels = {
+    input: '输入值',
+    variable: '变量',
+  }
+
   return (
     <BaseNode {...props} icon="📤">
       <div className="text-xs space-y-2">
-        <div className="text-gray-400">类型: {outputTypeLabels[data.outputType]}</div>
+        <div className="flex flex-col gap-1">
+          <div className="text-gray-400">来源: {sourceTypeLabels[data.sourceType || 'input']}
+            {data.sourceType === 'variable' && data.variableName && (
+              <span className="text-cyan-400 ml-1">({data.variableName})</span>
+            )}
+          </div>
+          <div className="text-gray-400">类型: {outputTypeLabels[data.outputType]}</div>
+        </div>
         {displayOutput && (
           <div className={cn(
             'bg-white/5 rounded-md p-2',

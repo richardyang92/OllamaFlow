@@ -41,8 +41,50 @@ export function getEnabledTools(enabledToolIds: AvailableToolId[]): ToolDefiniti
 export class TodosManager {
   private todos: TodoItem[] = []
 
-  execute(action: TodosAction, content?: string, taskId?: string): ToolResult {
+  execute(action: TodosAction, content?: string, taskId?: string, tasks?: string[]): ToolResult {
     switch (action) {
+      case 'init': {
+        // Initialize task list with multiple tasks at once
+        let taskList: string[] = []
+        if (tasks && Array.isArray(tasks)) {
+          taskList = tasks.filter(t => typeof t === 'string' && t.trim())
+        } else if (content) {
+          // Fallback: try to parse content as JSON array
+          try {
+            const parsed = JSON.parse(content)
+            if (Array.isArray(parsed)) {
+              taskList = parsed.filter((t: unknown) => typeof t === 'string' && String(t).trim())
+            } else {
+              taskList = [content]
+            }
+          } catch {
+            taskList = [content]
+          }
+        }
+
+        // Clear existing and add all tasks
+        this.todos = []
+        const now = Date.now()
+        for (let i = 0; i < taskList.length; i++) {
+          this.todos.push({
+            id: `todo-${now + i}`,
+            content: taskList[i].trim(),
+            completed: false,
+            createdAt: now + i,
+          })
+        }
+
+        if (this.todos.length === 0) {
+          return { success: false, output: '', error: '未提供有效的任务列表' }
+        }
+
+        const listOutput = this.todos.map((t, i) => `${i + 1}. ${t.content}`).join('\n')
+        return {
+          success: true,
+          output: `已创建 ${this.todos.length} 个任务:\n${listOutput}`,
+        }
+      }
+
       case 'add': {
         // Add new task
         const newTodo: TodoItem = {
@@ -128,13 +170,14 @@ export class TodosManager {
 // Parse todos action input
 function parseTodosInput(
   actionInput: string
-): { action: TodosAction; content?: string; taskId?: string } | null {
+): { action: TodosAction; content?: string; taskId?: string; tasks?: string[] } | null {
   try {
     const parsed = JSON.parse(actionInput)
     return {
       action: parsed.action as TodosAction,
       content: parsed.content,
       taskId: parsed.taskId,
+      tasks: parsed.tasks,
     }
   } catch {
     // Try to parse simple format
@@ -319,26 +362,29 @@ async function executeHttpRequest(
 
     const timeout = (config.timeout as number) || 30000
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), timeout)
-
-    const response = await fetch(url, {
+    // Use IPC to make HTTP request from main process
+    const result = await window.electronAPI.http.fetch({
+      url,
       method,
       headers,
-      body: body || undefined,
-      signal: controller.signal,
+      body,
+      timeout,
     })
 
-    clearTimeout(timeoutId)
-
-    const text = await response.text()
+    if (result.error) {
+      return {
+        success: false,
+        output: '',
+        error: `HTTP 请求错误: ${result.error}`,
+      }
+    }
 
     return {
-      success: response.ok,
-      output: text,
-      error: response.ok
+      success: result.success,
+      output: result.body,
+      error: result.success
         ? undefined
-        : `HTTP ${response.status}: ${response.statusText}`,
+        : `HTTP ${result.status}: ${result.statusText}`,
     }
   } catch (error) {
     return {
@@ -385,10 +431,10 @@ export async function executeTool(
         return {
           success: false,
           output: '',
-          error: '无法解析 todos 操作输入，请使用 JSON 格式: {"action": "操作", "content": "内容"}',
+          error: '无法解析 todos 操作输入，请使用 JSON 格式: {"action": "操作", "content": "内容"} 或 {"action": "init", "tasks": ["任务1", "任务2"]}',
         }
       }
-      return todosManager.execute(parsed.action, parsed.content, parsed.taskId)
+      return todosManager.execute(parsed.action, parsed.content, parsed.taskId, parsed.tasks)
     }
 
     default:

@@ -113,6 +113,8 @@ Workspaces are folders containing `.ollamaflow/` directory:
 - `workflow.json` - Node/edge data and viewport state
 - `cache/` - Runtime cache directory
 
+Application-level settings (e.g., recent workspaces) are persisted via **electron-store** in the main process.
+
 ### Ollama Configuration
 The application connects to a local Ollama instance (default: `http://localhost:11434`). The Ollama host is configured per-workspace in `config.json`. Each `ollamaChat` node can specify its own model, or use the workspace default. The Ollama chat executor supports streaming responses via the `onStream()` callback in `ExecutionContext`.
 
@@ -120,6 +122,11 @@ The application connects to a local Ollama instance (default: `http://localhost:
 - Path alias: `@/*` maps to `src/renderer/*`
 - Strict TypeScript enabled with strict null checks
 - All electronAPI types are duplicated in preload script for type safety in renderer
+
+## Styling
+- **Tailwind CSS** for utility-first styling
+- **tailwind-merge** + **clsx** pattern via `cn()` utility for conditional class merging
+- **Framer Motion** for animations (used in nodes and UI transitions)
 
 ## Data Flow Through Ports
 Each node defines `PortDefinition` objects for inputs/outputs with:

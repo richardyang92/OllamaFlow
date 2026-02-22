@@ -11,8 +11,25 @@ export function createOutputExecutor(): NodeExecutor {
       context: ExecutionContext
     ): Promise<unknown> {
       const data = node.data as OutputNodeData
-      const outputData = input.data ?? input
-      
+
+      // 根据数据来源获取输出数据
+      let outputData: unknown
+      if (data.sourceType === 'variable' && data.variableName) {
+        // 从上下文变量中获取值
+        outputData = context.variables[data.variableName]
+        if (outputData === undefined) {
+          context.onLog?.({
+            nodeId: node.id,
+            nodeName: data.label,
+            level: 'warn',
+            message: `变量 "${data.variableName}" 未定义`,
+          })
+        }
+      } else {
+        // 使用输入值（默认行为）
+        outputData = input.data ?? input
+      }
+
       // Convert outputData to string for display
       const outputString = typeof outputData === 'object' ? JSON.stringify(outputData) : String(outputData)
 
