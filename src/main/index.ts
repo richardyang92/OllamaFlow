@@ -2,6 +2,22 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs/promises'
 import { spawn } from 'child_process'
+import { getBrowserManager, closeBrowserManager } from './browser'
+import type {
+  BrowserInitOptions,
+  NavigateResult,
+  ClickOptions,
+  TypeOptions,
+  ActionResult,
+  ScreenshotOptions,
+  ScreenshotResult,
+  GetContentOptions,
+  ContentResult,
+  EvaluateResult,
+  WaitOptions,
+  TabInfo,
+  ScrollOptions,
+} from './browser/types'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -395,4 +411,114 @@ ipcMain.handle('http:fetch', async (_, options: HttpFetchOptions) => {
       error: (error as Error).message,
     }
   }
+})
+
+// ==================== Browser IPC Handlers ====================
+
+// Browser: Initialize browser
+ipcMain.handle('browser:init', async (_, workspacePath: string, options?: BrowserInitOptions) => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.init(options)
+})
+
+// Browser: Close browser
+ipcMain.handle('browser:close', async (_, workspacePath: string) => {
+  await closeBrowserManager(workspacePath)
+  return { success: true }
+})
+
+// Browser: Get status
+ipcMain.handle('browser:getStatus', async (_, workspacePath: string) => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.getStatus()
+})
+
+// Browser: Navigate
+ipcMain.handle('browser:navigate', async (_, workspacePath: string, url: string): Promise<NavigateResult> => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.navigate(url)
+})
+
+// Browser: Click
+ipcMain.handle('browser:click', async (_, workspacePath: string, selector: string, options?: ClickOptions): Promise<ActionResult> => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.click(selector, options)
+})
+
+// Browser: Type
+ipcMain.handle('browser:type', async (_, workspacePath: string, selector: string, text: string, options?: TypeOptions): Promise<ActionResult> => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.type(selector, text, options)
+})
+
+// Browser: Scroll
+ipcMain.handle('browser:scroll', async (_, workspacePath: string, options: ScrollOptions): Promise<ActionResult> => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.scroll(options)
+})
+
+// Browser: Screenshot
+ipcMain.handle('browser:screenshot', async (_, workspacePath: string, options?: ScreenshotOptions): Promise<ScreenshotResult> => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.screenshot(options)
+})
+
+// Browser: Get Content
+ipcMain.handle('browser:getContent', async (_, workspacePath: string, options: GetContentOptions): Promise<ContentResult> => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.getContent(options)
+})
+
+// Browser: Evaluate JavaScript
+ipcMain.handle('browser:evaluate', async (_, workspacePath: string, script: string): Promise<EvaluateResult> => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.evaluate(script)
+})
+
+// Browser: Wait for selector
+ipcMain.handle('browser:waitForSelector', async (_, workspacePath: string, selector: string, options?: WaitOptions): Promise<ActionResult> => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.waitForSelector(selector, options)
+})
+
+// Browser: Wait for timeout
+ipcMain.handle('browser:waitForTimeout', async (_, workspacePath: string, ms: number) => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.waitForTimeout(ms)
+})
+
+// Browser: Get tabs
+ipcMain.handle('browser:getTabs', async (_, workspacePath: string): Promise<TabInfo[]> => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.getTabs()
+})
+
+// Browser: Switch tab
+ipcMain.handle('browser:switchTab', async (_, workspacePath: string, tabId: string): Promise<ActionResult> => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.switchTab(tabId)
+})
+
+// Browser: New tab
+ipcMain.handle('browser:newTab', async (_, workspacePath: string, url?: string): Promise<TabInfo> => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.newTab(url)
+})
+
+// Browser: Close tab
+ipcMain.handle('browser:closeTab', async (_, workspacePath: string, tabId: string): Promise<ActionResult> => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.closeTab(tabId)
+})
+
+// Browser: Go back
+ipcMain.handle('browser:goBack', async (_, workspacePath: string): Promise<ActionResult> => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.goBack()
+})
+
+// Browser: Go forward
+ipcMain.handle('browser:goForward', async (_, workspacePath: string): Promise<ActionResult> => {
+  const manager = getBrowserManager(workspacePath)
+  return manager.goForward()
 })

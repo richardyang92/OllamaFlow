@@ -27,11 +27,22 @@ export type NodeType =
   | 'reactAgent'
 
 // ReAct Agent Tool Definition
+// Browser tool types
+export type BrowserToolType =
+  | 'browser_navigate'
+  | 'browser_click'
+  | 'browser_type'
+  | 'browser_scroll'
+  | 'browser_screenshot'
+  | 'browser_getContent'
+  | 'browser_evaluate'
+  | 'browser_wait'
+
 export interface ToolDefinition {
   id: string
   name: string
   description: string
-  type: 'readFile' | 'writeFile' | 'executeCommand' | 'httpRequest' | 'todos'
+  type: 'readFile' | 'writeFile' | 'executeCommand' | 'httpRequest' | 'todos' | 'getCurrentDate' | BrowserToolType
   config: Record<string, unknown>
 }
 
@@ -87,6 +98,87 @@ export const AVAILABLE_TOOLS = [
     description: '发送 HTTP 请求。输入: URL字符串',
     type: 'httpRequest' as const,
     builtIn: false,
+  },
+  {
+    id: 'getCurrentDate',
+    name: 'getCurrentDate',
+    label: '获取日期',
+    description: '获取当前日期和时间。输入可选: {"format": "full|date|time|timestamp"}。full=完整日期时间, date=仅日期, time=仅时间, timestamp=Unix时间戳',
+    type: 'getCurrentDate' as const,
+    builtIn: true,
+  },
+  // Browser automation tools
+  {
+    id: 'browser_navigate',
+    name: 'browser_navigate',
+    label: '浏览器导航',
+    description: '导航到指定URL。输入: {"url": "https://example.com"}',
+    type: 'browser_navigate' as const,
+    builtIn: false,
+    category: 'browser',
+  },
+  {
+    id: 'browser_click',
+    name: 'browser_click',
+    label: '浏览器点击',
+    description: '点击页面元素。输入: {"selector": "button.submit"} 或 {"selector": "#login-btn"}',
+    type: 'browser_click' as const,
+    builtIn: false,
+    category: 'browser',
+  },
+  {
+    id: 'browser_type',
+    name: 'browser_type',
+    label: '浏览器输入',
+    description: '在输入框中输入文本。输入: {"selector": "input[name=q]", "text": "搜索内容", "clear": true}',
+    type: 'browser_type' as const,
+    builtIn: false,
+    category: 'browser',
+  },
+  {
+    id: 'browser_scroll',
+    name: 'browser_scroll',
+    label: '浏览器滚动',
+    description: '滚动页面。输入: {"direction": "down", "amount": 500}。direction可选: up, down',
+    type: 'browser_scroll' as const,
+    builtIn: false,
+    category: 'browser',
+  },
+  {
+    id: 'browser_screenshot',
+    name: 'browser_screenshot',
+    label: '浏览器截图',
+    description: '截取页面截图。输入: {"fullPage": true} 或 {"selector": ".main-content"}',
+    type: 'browser_screenshot' as const,
+    builtIn: false,
+    category: 'browser',
+  },
+  {
+    id: 'browser_getContent',
+    name: 'browser_getContent',
+    label: '获取页面内容',
+    description: '获取页面文本或HTML内容。输入: {"format": "text"} 或 {"format": "html", "selector": ".article", "maxLength": 5000}',
+    type: 'browser_getContent' as const,
+    builtIn: false,
+    category: 'browser',
+  },
+  {
+    id: 'browser_evaluate',
+    name: 'browser_evaluate',
+    label: '执行JavaScript',
+    description: '在页面中执行JavaScript代码。输入: {"script": "document.title"} 或复杂脚本',
+    type: 'browser_evaluate' as const,
+    builtIn: false,
+    category: 'browser',
+  },
+  {
+    id: 'browser_wait',
+    name: 'browser_wait',
+    label: '浏览器等待',
+    description: '等待元素出现或指定时间。输入: {"selector": ".loading", "timeout": 5000}',
+    type: 'browser_wait' as const,
+    builtIn: false,
+    category: 'browser',
   },
 ] as const
 
@@ -198,6 +290,8 @@ export interface OutputNodeData extends BaseNodeData {
 // Image Node
 export interface ImageNodeData extends BaseNodeData {
   nodeType: 'image'
+  sourceType: 'input' | 'variable'  // 输入值或变量
+  variableName?: string  // 当 sourceType 为 'variable' 时的变量名
   imageUrl?: string
 }
 
@@ -407,6 +501,7 @@ export const nodeTemplates: NodeTemplate[] = [
       nodeType: 'image',
       label: '图片显示',
       category: 'Output',
+      sourceType: 'input',
       inputs: [{ id: 'data', name: 'data', label: '图片URL', dataType: 'string' }],
       outputs: [{ id: 'data', name: 'data', label: '图片URL', dataType: 'string' }],
     },

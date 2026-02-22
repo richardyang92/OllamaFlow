@@ -26,6 +26,7 @@ npm run lint         # Run ESLint
 
 ### Electron Structure
 - **main/** - Main process ([index.ts](src/main/index.ts)): Handles IPC, file system operations, shell commands, dialog windows
+  - **main/browser/** - Playwright browser automation ([index.ts](src/main/browser/index.ts), [types.ts](src/main/browser/types.ts)): `BrowserManager` class for headless browser control
 - **preload/** - Preload script ([index.ts](src/preload/index.ts)): Context bridge exposing typed APIs to renderer via `window.electronAPI`
 - **renderer/** - React UI application using Vite
 
@@ -80,8 +81,10 @@ Syntax: `{{variableName}}` supports dot notation for nested access (`{{node.fiel
 ### IPC Communication Pattern
 Renderer calls main process via `window.electronAPI`:
 - `workspace:*` - Workspace initialization, config/workflow persistence
-- `file:*` - File read/write/list operations (relative to workspace)
+- `file:*` - File read/write/list operations (relative to workspace), includes `file:readImage` for base64 image data
 - `command:*` - Shell command execution with timeout
+- `http:*` - HTTP fetch requests (main process bypasses CORS)
+- `browser:*` - Playwright browser automation (init, navigate, click, type, scroll, screenshot, getContent, evaluate, wait, tab management)
 - `recent:*` - Recent workspace list (stored via electron-store)
 
 All IPC handlers in main process are in [src/main/index.ts](src/main/index.ts).
@@ -118,6 +121,13 @@ Application-level settings (e.g., recent workspaces) are persisted via **electro
 ### Ollama Configuration
 The application connects to a local Ollama instance (default: `http://localhost:11434`). The Ollama host is configured per-workspace in `config.json`. Each `ollamaChat` node can specify its own model, or use the workspace default. The Ollama chat executor supports streaming responses via the `onStream()` callback in `ExecutionContext`.
 
+### Image Node
+The `image` node supports two source types via `sourceType` property:
+- `'input'` - Uses the value from connected input edge
+- `'variable'` - Resolves `variableName` from accumulated workflow variables (supports `{{variable}}` interpolation)
+
+This pattern is also used by the `output` node for flexible data sourcing.
+
 ## Type System
 - Path alias: `@/*` maps to `src/renderer/*`
 - Strict TypeScript enabled with strict null checks
@@ -152,6 +162,8 @@ The agent maintains state via `ReActExecutionState` in the execution store, trac
 **Loop Detection**: The executor includes `detectLoop()` to prevent infinite loops by monitoring repeated actions and blocking problematic patterns (e.g., excessive writeFile calls, over-planning with todos).
 
 **Tool Schema**: Tools are converted to Ollama's function format via `convertToOllamaTools()`. Each tool defines parameters with JSON schema for type validation.
+
+**Browser Automation Tools**: The agent can use Playwright-based browser tools (navigate, click, type, scroll, screenshot, getContent, evaluate, wait). Browser sessions are managed per-workspace via `BrowserManager` singleton in [src/main/browser/index.ts](src/main/browser/index.ts). Sessions are lazy-initialized and persist until explicitly closed or app termination.
 
 ## UI Localization
 The application UI uses Chinese localization throughout:

@@ -22,19 +22,21 @@ export function getToolById(toolId: AvailableToolId): ToolDefinition | undefined
   }
 }
 
-// 获取所有启用的工具定义（始终包含内置的 todos 工具）
+// 获取所有启用的工具定义（始终包含内置的 todos 和 getCurrentDate 工具）
 export function getEnabledTools(enabledToolIds: AvailableToolId[]): ToolDefinition[] {
-  // 始终包含 todos 工具
+  // 始终包含内置工具
   const todosTool = getToolById('todos')
+  const getCurrentDateTool = getToolById('getCurrentDate')
   const userTools = enabledToolIds
-    .filter((id) => id !== 'todos') // 排除 todos，稍后统一添加
+    .filter((id) => id !== 'todos' && id !== 'getCurrentDate') // 排除内置工具，稍后统一添加
     .map((id) => getToolById(id))
     .filter((t): t is ToolDefinition => t !== undefined)
 
-  if (todosTool) {
-    return [todosTool, ...userTools]
-  }
-  return userTools
+  const builtInTools: ToolDefinition[] = []
+  if (todosTool) builtInTools.push(todosTool)
+  if (getCurrentDateTool) builtInTools.push(getCurrentDateTool)
+
+  return [...builtInTools, ...userTools]
 }
 
 // Todos Manager class for managing task lists
@@ -329,6 +331,68 @@ async function executeShellCommand(
   }
 }
 
+// Execute get current date tool
+function executeGetCurrentDate(
+  actionInput?: string | Record<string, unknown>
+): ToolResult {
+  try {
+    // Parse format from input
+    let format = 'full'
+    if (actionInput) {
+      if (typeof actionInput === 'object') {
+        format = (actionInput.format as string) || 'full'
+      } else {
+        try {
+          const parsed = JSON.parse(actionInput)
+          format = (parsed.format as string) || 'full'
+        } catch {
+          // Use default format
+        }
+      }
+    }
+
+    const now = new Date()
+
+    switch (format) {
+      case 'date': {
+        const year = now.getFullYear()
+        const month = String(now.getMonth() + 1).padStart(2, '0')
+        const day = String(now.getDate()).padStart(2, '0')
+        return { success: true, output: `${year}-${month}-${day}` }
+      }
+      case 'time': {
+        const hours = String(now.getHours()).padStart(2, '0')
+        const minutes = String(now.getMinutes()).padStart(2, '0')
+        const seconds = String(now.getSeconds()).padStart(2, '0')
+        return { success: true, output: `${hours}:${minutes}:${seconds}` }
+      }
+      case 'timestamp': {
+        return { success: true, output: String(Math.floor(now.getTime() / 1000)) }
+      }
+      case 'full':
+      default: {
+        const year = now.getFullYear()
+        const month = String(now.getMonth() + 1).padStart(2, '0')
+        const day = String(now.getDate()).padStart(2, '0')
+        const hours = String(now.getHours()).padStart(2, '0')
+        const minutes = String(now.getMinutes()).padStart(2, '0')
+        const seconds = String(now.getSeconds()).padStart(2, '0')
+        const weekDay = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][now.getDay()]
+        return {
+          success: true,
+          output: `${year}-${month}-${day} ${hours}:${minutes}:${seconds} ${weekDay}`,
+        }
+      }
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      error: `获取日期错误: ${(error as Error).message}`,
+    }
+  }
+}
+
 // Execute HTTP request tool
 async function executeHttpRequest(
   actionInput: string | Record<string, unknown>,
@@ -395,6 +459,145 @@ async function executeHttpRequest(
   }
 }
 
+// Execute browser tool
+async function executeBrowserTool(
+  toolType: string,
+  actionInput: string | Record<string, unknown>,
+  workspacePath: string
+): Promise<ToolResult> {
+  try {
+    // Ensure browser is initialized
+    const status = await window.electronAPI.browser.getStatus(workspacePath)
+    if (!status.isConnected) {
+      await window.electronAPI.browser.init(workspacePath, { headless: true })
+    }
+
+    // Parse input
+    const input = typeof actionInput === 'object' ? actionInput : (() => {
+      try {
+        return JSON.parse(actionInput)
+      } catch {
+        return {}
+      }
+    })()
+
+    switch (toolType) {
+      case 'browser_navigate': {
+        const result = await window.electronAPI.browser.navigate(workspacePath, input.url as string)
+        return {
+          success: result.success,
+          output: result.success
+            ? `已导航到: ${result.url}\n页面标题: ${result.title}`
+            : '',
+          error: result.error,
+        }
+      }
+
+      case 'browser_click': {
+        const result = await window.electronAPI.browser.click(
+          workspacePath,
+          input.selector as string,
+          { clickCount: input.clickCount as number }
+        )
+        return {
+          success: result.success,
+          output: result.message,
+          error: result.error,
+        }
+      }
+
+      case 'browser_type': {
+        const result = await window.electronAPI.browser.type(
+          workspacePath,
+          input.selector as string,
+          input.text as string,
+          { clear: input.clear as boolean }
+        )
+        return {
+          success: result.success,
+          output: result.message,
+          error: result.error,
+        }
+      }
+
+      case 'browser_scroll': {
+        const result = await window.electronAPI.browser.scroll(workspacePath, {
+          direction: (input.direction as 'up' | 'down') || 'down',
+          amount: input.amount as number,
+        })
+        return {
+          success: result.success,
+          output: result.message,
+          error: result.error,
+        }
+      }
+
+      case 'browser_screenshot': {
+        const result = await window.electronAPI.browser.screenshot(workspacePath, {
+          fullPage: input.fullPage as boolean,
+          selector: input.selector as string,
+        })
+        return {
+          success: result.success,
+          output: result.success
+            ? `截图成功 (${result.width}x${result.height})`
+            : '',
+          error: result.error,
+        }
+      }
+
+      case 'browser_getContent': {
+        const result = await window.electronAPI.browser.getContent(workspacePath, {
+          format: (input.format as 'text' | 'html') || 'text',
+          selector: input.selector as string,
+          maxLength: input.maxLength as number,
+          trim: true,
+        })
+        return {
+          success: result.success,
+          output: result.success ? result.content : '',
+          error: result.success ? undefined : result.error,
+        }
+      }
+
+      case 'browser_evaluate': {
+        const result = await window.electronAPI.browser.evaluate(workspacePath, input.script as string)
+        return {
+          success: result.success,
+          output: result.success
+            ? (typeof result.result === 'object'
+              ? JSON.stringify(result.result, null, 2)
+              : String(result.result))
+            : '',
+          error: result.error,
+        }
+      }
+
+      case 'browser_wait': {
+        const result = await window.electronAPI.browser.waitForSelector(
+          workspacePath,
+          input.selector as string,
+          { timeout: input.timeout as number }
+        )
+        return {
+          success: result.success,
+          output: result.message,
+          error: result.error,
+        }
+      }
+
+      default:
+        return { success: false, output: '', error: `未知浏览器工具: ${toolType}` }
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      error: `浏览器工具执行错误: ${(error as Error).message}`,
+    }
+  }
+}
+
 // Main tool execution function
 export async function executeTool(
   tool: ToolDefinition,
@@ -422,6 +625,9 @@ export async function executeTool(
     case 'httpRequest':
       return executeHttpRequest(actionInput, tool.config)
 
+    case 'getCurrentDate':
+      return executeGetCurrentDate(actionInput)
+
     case 'todos': {
       if (!todosManager) {
         return { success: false, output: '', error: 'TodosManager 未初始化' }
@@ -436,6 +642,17 @@ export async function executeTool(
       }
       return todosManager.execute(parsed.action, parsed.content, parsed.taskId, parsed.tasks)
     }
+
+    // Browser tools
+    case 'browser_navigate':
+    case 'browser_click':
+    case 'browser_type':
+    case 'browser_scroll':
+    case 'browser_screenshot':
+    case 'browser_getContent':
+    case 'browser_evaluate':
+    case 'browser_wait':
+      return executeBrowserTool(tool.type, actionInput, workspacePath)
 
     default:
       return { success: false, output: '', error: `未知工具类型: ${tool.type}` }

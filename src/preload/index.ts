@@ -66,6 +66,104 @@ export interface HttpFetchResult {
   error?: string
 }
 
+// Browser types
+export interface BrowserInitOptions {
+  headless?: boolean
+  viewport?: { width: number; height: number }
+  timeout?: number
+}
+
+export interface BrowserSession {
+  id: string
+  createdAt: string
+  options: BrowserInitOptions
+}
+
+export interface BrowserStatus {
+  isConnected: boolean
+  currentPageUrl: string | null
+  pageTitle: string | null
+  tabs: TabInfo[]
+}
+
+export interface NavigateResult {
+  success: boolean
+  url: string
+  title: string
+  error?: string
+}
+
+export interface ClickOptions {
+  button?: 'left' | 'right' | 'middle'
+  clickCount?: number
+  delay?: number
+  timeout?: number
+}
+
+export interface TypeOptions {
+  delay?: number
+  clear?: boolean
+}
+
+export interface ActionResult {
+  success: boolean
+  message: string
+  error?: string
+}
+
+export interface ScreenshotOptions {
+  fullPage?: boolean
+  selector?: string
+  format?: 'png' | 'jpeg'
+}
+
+export interface ScreenshotResult {
+  success: boolean
+  dataUrl: string
+  width: number
+  height: number
+  error?: string
+}
+
+export interface GetContentOptions {
+  selector?: string
+  format: 'text' | 'html'
+  trim?: boolean
+  maxLength?: number
+}
+
+export interface ContentResult {
+  success: boolean
+  content: string
+  format: 'text' | 'html'
+  length: number
+  truncated?: boolean
+  error?: string
+}
+
+export interface EvaluateResult {
+  success: boolean
+  result: unknown
+  error?: string
+}
+
+export interface WaitOptions {
+  timeout?: number
+  state?: 'visible' | 'hidden' | 'attached' | 'detached'
+}
+
+export interface TabInfo {
+  id: string
+  url: string
+  title: string
+  isActive: boolean
+}
+
+export interface ScrollOptions {
+  direction: 'up' | 'down' | 'left' | 'right'
+  amount?: number
+}
+
 // Expose to renderer
 contextBridge.exposeInMainWorld('electronAPI', {
   // Workspace operations
@@ -128,6 +226,63 @@ contextBridge.exposeInMainWorld('electronAPI', {
     fetch: (options: HttpFetchOptions): Promise<HttpFetchResult> =>
       ipcRenderer.invoke('http:fetch', options),
   },
+
+  // Browser automation
+  browser: {
+    init: (workspacePath: string, options?: BrowserInitOptions): Promise<BrowserSession> =>
+      ipcRenderer.invoke('browser:init', workspacePath, options),
+
+    close: (workspacePath: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke('browser:close', workspacePath),
+
+    getStatus: (workspacePath: string): Promise<BrowserStatus> =>
+      ipcRenderer.invoke('browser:getStatus', workspacePath),
+
+    navigate: (workspacePath: string, url: string): Promise<NavigateResult> =>
+      ipcRenderer.invoke('browser:navigate', workspacePath, url),
+
+    click: (workspacePath: string, selector: string, options?: ClickOptions): Promise<ActionResult> =>
+      ipcRenderer.invoke('browser:click', workspacePath, selector, options),
+
+    type: (workspacePath: string, selector: string, text: string, options?: TypeOptions): Promise<ActionResult> =>
+      ipcRenderer.invoke('browser:type', workspacePath, selector, text, options),
+
+    scroll: (workspacePath: string, options: ScrollOptions): Promise<ActionResult> =>
+      ipcRenderer.invoke('browser:scroll', workspacePath, options),
+
+    screenshot: (workspacePath: string, options?: ScreenshotOptions): Promise<ScreenshotResult> =>
+      ipcRenderer.invoke('browser:screenshot', workspacePath, options),
+
+    getContent: (workspacePath: string, options: GetContentOptions): Promise<ContentResult> =>
+      ipcRenderer.invoke('browser:getContent', workspacePath, options),
+
+    evaluate: (workspacePath: string, script: string): Promise<EvaluateResult> =>
+      ipcRenderer.invoke('browser:evaluate', workspacePath, script),
+
+    waitForSelector: (workspacePath: string, selector: string, options?: WaitOptions): Promise<ActionResult> =>
+      ipcRenderer.invoke('browser:waitForSelector', workspacePath, selector, options),
+
+    waitForTimeout: (workspacePath: string, ms: number): Promise<void> =>
+      ipcRenderer.invoke('browser:waitForTimeout', workspacePath, ms),
+
+    getTabs: (workspacePath: string): Promise<TabInfo[]> =>
+      ipcRenderer.invoke('browser:getTabs', workspacePath),
+
+    switchTab: (workspacePath: string, tabId: string): Promise<ActionResult> =>
+      ipcRenderer.invoke('browser:switchTab', workspacePath, tabId),
+
+    newTab: (workspacePath: string, url?: string): Promise<TabInfo> =>
+      ipcRenderer.invoke('browser:newTab', workspacePath, url),
+
+    closeTab: (workspacePath: string, tabId: string): Promise<ActionResult> =>
+      ipcRenderer.invoke('browser:closeTab', workspacePath, tabId),
+
+    goBack: (workspacePath: string): Promise<ActionResult> =>
+      ipcRenderer.invoke('browser:goBack', workspacePath),
+
+    goForward: (workspacePath: string): Promise<ActionResult> =>
+      ipcRenderer.invoke('browser:goForward', workspacePath),
+  },
 })
 
 // Type declaration for window.electronAPI
@@ -159,6 +314,26 @@ declare global {
       }
       http: {
         fetch: (options: HttpFetchOptions) => Promise<HttpFetchResult>
+      }
+      browser: {
+        init: (workspacePath: string, options?: BrowserInitOptions) => Promise<BrowserSession>
+        close: (workspacePath: string) => Promise<{ success: boolean }>
+        getStatus: (workspacePath: string) => Promise<BrowserStatus>
+        navigate: (workspacePath: string, url: string) => Promise<NavigateResult>
+        click: (workspacePath: string, selector: string, options?: ClickOptions) => Promise<ActionResult>
+        type: (workspacePath: string, selector: string, text: string, options?: TypeOptions) => Promise<ActionResult>
+        scroll: (workspacePath: string, options: ScrollOptions) => Promise<ActionResult>
+        screenshot: (workspacePath: string, options?: ScreenshotOptions) => Promise<ScreenshotResult>
+        getContent: (workspacePath: string, options: GetContentOptions) => Promise<ContentResult>
+        evaluate: (workspacePath: string, script: string) => Promise<EvaluateResult>
+        waitForSelector: (workspacePath: string, selector: string, options?: WaitOptions) => Promise<ActionResult>
+        waitForTimeout: (workspacePath: string, ms: number) => Promise<void>
+        getTabs: (workspacePath: string) => Promise<TabInfo[]>
+        switchTab: (workspacePath: string, tabId: string) => Promise<ActionResult>
+        newTab: (workspacePath: string, url?: string) => Promise<TabInfo>
+        closeTab: (workspacePath: string, tabId: string) => Promise<ActionResult>
+        goBack: (workspacePath: string) => Promise<ActionResult>
+        goForward: (workspacePath: string) => Promise<ActionResult>
       }
     }
   }

@@ -11,6 +11,7 @@ import ReadFileProperties from './properties/ReadFileProperties'
 import WriteFileProperties from './properties/WriteFileProperties'
 import ExecuteCommandProperties from './properties/ExecuteCommandProperties'
 import ReactAgentProperties from './properties/ReactAgentProperties'
+import ImageProperties from './properties/ImageProperties'
 import { cn } from '@/lib/utils'
 
 // Toast notification component
@@ -70,12 +71,7 @@ function PropertiesPanelContent({ selectedNode, selectedNodeId, updateNodeData, 
       case 'output':
         return <OutputProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'image':
-        return <div className="space-y-4">
-          <div className="bg-white/5 rounded-lg p-3 text-xs text-zinc-400 border border-white/5">
-            <div className="font-medium text-zinc-300 mb-1">说明：</div>
-            <div>此节点用于显示图片，输入应为有效的图片URL</div>
-          </div>
-        </div>
+        return <ImageProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'readFile':
         return <ReadFileProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'writeFile':

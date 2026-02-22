@@ -11,7 +11,12 @@ function ImageNode(props: NodeProps) {
   const id = props.id as string
   const nodeResult = useExecutionStore((state) => state.getNodeStatus(id))
   const currentWorkspace = useWorkspaceStore((state) => state.currentWorkspace)
-  
+
+  const sourceTypeLabels = {
+    input: '输入值',
+    variable: '变量',
+  }
+
   // Safely get imageUrl from node result or node data
   let imageUrl: string | undefined = data.imageUrl
   
@@ -155,6 +160,11 @@ function ImageNode(props: NodeProps) {
   return (
     <BaseNode {...props} icon="🖼️">
       <div className="text-xs space-y-2">
+        <div className="text-gray-400">来源: {sourceTypeLabels[data.sourceType || 'input']}
+          {data.sourceType === 'variable' && data.variableName && (
+            <span className="text-cyan-400 ml-1">({data.variableName})</span>
+          )}
+        </div>
         {imageUrl && (
           <div className="space-y-2">
             <div className="text-gray-400">图片URL:</div>

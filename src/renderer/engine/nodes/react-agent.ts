@@ -74,6 +74,79 @@ function getToolParameters(toolType: string): {
         },
         required: ['url']
       }
+    // Browser tools
+    case 'browser_navigate':
+      return {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: '要导航的URL地址（如 https://example.com）' }
+        },
+        required: ['url']
+      }
+    case 'browser_click':
+      return {
+        type: 'object',
+        properties: {
+          selector: { type: 'string', description: 'CSS选择器（如 "button.submit", "#login-btn", "a[href*=login]"）' },
+          clickCount: { type: 'number', description: '点击次数，2表示双击（可选）' }
+        },
+        required: ['selector']
+      }
+    case 'browser_type':
+      return {
+        type: 'object',
+        properties: {
+          selector: { type: 'string', description: '输入框的CSS选择器' },
+          text: { type: 'string', description: '要输入的文本内容' },
+          clear: { type: 'boolean', description: '是否先清空输入框（可选，默认false）' }
+        },
+        required: ['selector', 'text']
+      }
+    case 'browser_scroll':
+      return {
+        type: 'object',
+        properties: {
+          direction: { type: 'string', enum: ['up', 'down'], description: '滚动方向' },
+          amount: { type: 'number', description: '滚动像素数（可选，默认300）' }
+        },
+        required: ['direction']
+      }
+    case 'browser_screenshot':
+      return {
+        type: 'object',
+        properties: {
+          fullPage: { type: 'boolean', description: '是否截取完整页面（可选）' },
+          selector: { type: 'string', description: '指定元素的CSS选择器（可选）' }
+        },
+        required: []
+      }
+    case 'browser_getContent':
+      return {
+        type: 'object',
+        properties: {
+          format: { type: 'string', enum: ['text', 'html'], description: '内容格式' },
+          selector: { type: 'string', description: '指定元素的CSS选择器，不填则获取整个页面（可选）' },
+          maxLength: { type: 'number', description: '最大字符数限制（可选）' }
+        },
+        required: ['format']
+      }
+    case 'browser_evaluate':
+      return {
+        type: 'object',
+        properties: {
+          script: { type: 'string', description: '要执行的JavaScript代码' }
+        },
+        required: ['script']
+      }
+    case 'browser_wait':
+      return {
+        type: 'object',
+        properties: {
+          selector: { type: 'string', description: '等待的元素CSS选择器' },
+          timeout: { type: 'number', description: '超时时间（毫秒，可选，默认5000）' }
+        },
+        required: ['selector']
+      }
     default:
       return { type: 'object', properties: {}, required: [] }
   }
@@ -282,6 +355,49 @@ export function createReactAgentExecutor(): NodeExecutor {
 ### httpRequest - HTTP请求
 发送 HTTP 请求获取网页或 API 数据。
 输入: {"url": "https://api.example.com"}
+
+### 浏览器自动化工具
+用于控制浏览器执行网页操作。
+
+#### browser_navigate - 导航到网页
+打开指定URL的网页。
+输入: {"url": "https://example.com"}
+
+#### browser_click - 点击元素
+点击页面上的元素（按钮、链接等）。
+输入: {"selector": "button.submit"} 或 {"selector": "#login-btn"}
+CSS选择器示例: "button.primary", "a[href*=login]", ".submit-btn"
+
+#### browser_type - 输入文本
+在输入框中输入文本。
+输入: {"selector": "input[name=q]", "text": "搜索内容", "clear": true}
+- clear: 可选，是否先清空输入框
+
+#### browser_scroll - 滚动页面
+向上或向下滚动页面。
+输入: {"direction": "down", "amount": 500}
+- direction: "up" 或 "down"
+- amount: 可选，滚动像素数，默认300
+
+#### browser_screenshot - 截图
+截取当前页面的截图。
+输入: {"fullPage": true} 或 {"selector": ".main-content"}
+
+#### browser_getContent - 获取页面内容
+获取页面的文本或HTML内容。
+输入: {"format": "text"} 或 {"format": "html", "selector": ".article", "maxLength": 5000}
+- format: "text" 或 "html"
+- selector: 可选，获取特定元素
+- maxLength: 可选，限制内容长度
+
+#### browser_evaluate - 执行JavaScript
+在页面中执行JavaScript代码。
+输入: {"script": "document.title"}
+可以执行更复杂的脚本获取页面数据。
+
+#### browser_wait - 等待元素
+等待指定元素出现在页面上。
+输入: {"selector": ".result", "timeout": 5000}
 
 ## 工作流程（ReAct循环）
 

@@ -13,7 +13,7 @@ OllamaFlow 是一个基于 Electron 的桌面应用程序，允许用户通过�
   - 🤖 **Ollama 对话** - AI 文本生成和对话
   - 🧠 **ReAct 智能体** - 基于 Function Calling 的自主推理与工具调用
   - 📁 **文件操作** - 读取/写入文件
-  - 🖼️ **图片显示** - 显示图片内容
+  - 🖼️ **图片显示** - 显示本地或网络图片，支持从变量获取
   - 🔁 **循环控制** - 批处理和迭代操作
   - ⚙️ **执行命令** - 执行系统命令
   - 🔀 **条件判断** - 基于条件的分支逻辑
@@ -21,10 +21,20 @@ OllamaFlow 是一个基于 Electron 的桌面应用程序，允许用户通过�
   - 📤 **输出** - 显示、复制或下载输出内容
 - **ReAct 智能体工具**：
   - ✅ **待办事项** - 任务规划与管理（内置）
+  - 📅 **获取日期** - 获取当前日期和时间（内置）
   - 💻 **执行命令** - 运行 Shell 脚本和程序
   - 📖 **读取文件** - 从工作区读取文件内容
   - ✏️ **写入文件** - 将内容保存到文件
   - 🌐 **HTTP 请求** - 发送网络请求获取数据
+  - 🌐 **浏览器自动化** - Playwright 驱动的网页交互：
+    - 导航到 URL
+    - 点击元素
+    - 输入文本
+    - 滚动页面
+    - 截取屏幕截图
+    - 获取页面内容
+    - 执行 JavaScript
+    - 等待元素出现
 - **实时执行监控** - 查看节点状态和执行日志
 - **流式输出** - 实时显示 Ollama 响应
 - **变量插值** - 使用 `{{variableName}}` 语法在节点间传递数据
@@ -133,11 +143,25 @@ ReAct 智能体是一个基于 **Reasoning + Acting** 模式的自主代理节�
 
 #### 可用工具
 
+**内置工具**（始终可用）：
 - **todos（待办事项）** - 规划和管理任务列表
+- **getCurrentDate（获取日期）** - 获取当前日期和时间
+
+**可选工具**：
 - **executeCommand（执行命令）** - 运行 Shell 命令
 - **readFile（读取文件）** - 读取工作区文件
 - **writeFile（写入文件）** - 创建或修改文件
 - **httpRequest（HTTP 请求）** - 发送网络请求
+
+**浏览器自动化工具**：
+- **browser_navigate（导航）** - 打开指定网页
+- **browser_click（点击）** - 点击页面元素
+- **browser_type（输入）** - 在输入框中输入文本
+- **browser_scroll（滚动）** - 滚动页面
+- **browser_screenshot（截图）** - 截取页面截图
+- **browser_getContent（获取内容）** - 获取页面文本或HTML
+- **browser_evaluate（执行JS）** - 执行 JavaScript 代码
+- **browser_wait（等待）** - 等待元素出现
 
 #### 使用示例
 
@@ -153,6 +177,20 @@ ReAct 智能体是一个基于 **Reasoning + Acting** 模式的自主代理节�
    - 保存到文件
    - 执行脚本
    - 返回结果
+
+#### 浏览器自动化示例
+
+创建一个能自动浏览网页的智能体：
+
+1. 拖入 **ReAct 智能体** 节点
+2. 设置任务：`"打开 GitHub 首页，搜索 electron 相关项目，获取前5个项目的名称"`
+3. 启用浏览器工具：`browser_navigate`、`browser_type`、`browser_click`、`browser_screenshot`、`browser_getContent`
+4. 运行工作流，智能体将自动：
+   - 导航到 GitHub
+   - 输入搜索关键词
+   - 点击搜索按钮
+   - 获取搜索结果
+   - 返回提取的信息
 
 ### 工作空间结构
 
@@ -172,7 +210,8 @@ workspace-folder/
 OllamaFlow/
 ├── src/
 │   ├── main/           # Electron 主进程
-│   │   └── index.ts    # IPC 处理、文件系统操作
+│   │   ├── index.ts    # IPC 处理、文件系统操作
+│   │   └── browser/    # Playwright 浏览器自动化
 │   ├── preload/        # 预加载脚本
 │   │   └── index.ts    # Context Bridge 暴露 API
 │   └── renderer/       # React UI 应用
@@ -180,7 +219,8 @@ OllamaFlow/
 │       │   ├── nodes/      # 节点可视化组件
 │       │   └── workflow/   # 工作流编辑器
 │       ├── engine/     # 执行引擎
-│       │   └── nodes/      # 节点执行器
+│       │   ├── nodes/      # 节点执行器
+│       │   └── tools/      # ReAct 智能体工具
 │       ├── store/      # Zustand 状态管理
 │       └── types/      # TypeScript 类型定义
 ├── scripts/
@@ -205,6 +245,7 @@ OllamaFlow/
 - **UI 库** - React Flow、TailwindCSS、Framer Motion
 - **状态管理** - Zustand
 - **AI 集成** - Ollama (JavaScript SDK)
+- **浏览器自动化** - Playwright Core
 - **存储** - electron-store
 
 ## 许可证
@@ -220,3 +261,4 @@ Apache 2.0 License - 详见 LICENSE 文件
 - [Ollama](https://ollama.ai) - 本地 LLM 运行时
 - [React Flow](https://reactflow.dev) - 强大的节点编辑器
 - [Electron](https://www.electronjs.org) - 跨平台桌面应用框架
+- [Playwright](https://playwright.dev) - 浏览器自动化框架
