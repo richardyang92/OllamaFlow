@@ -146,7 +146,7 @@ function AnimatedBackground() {
 }
 
 export default function WelcomePage() {
-  const { setCurrentWorkspace, setRecentWorkspaces, recentWorkspaces } = useWorkspaceStore()
+  const { setCurrentWorkspace, setRecentWorkspaces, recentWorkspaces, setCurrentPage } = useWorkspaceStore()
   const { setWorkflow } = useWorkflowStore()
   const [isLoading, setIsLoading] = useState(false)
 
@@ -154,6 +154,10 @@ export default function WelcomePage() {
   useEffect(() => {
     window.electronAPI.recent.get().then(setRecentWorkspaces)
   }, [setRecentWorkspaces])
+
+  const handleNewProject = () => {
+    setCurrentPage('wizard')
+  }
 
   const handleOpenWorkspace = async () => {
     setIsLoading(true)
@@ -238,7 +242,7 @@ export default function WelcomePage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="glass-panel-heavy p-10 space-y-8 w-96 max-w-full relative z-10"
+        className="glass-panel-heavy p-10 space-y-4 w-96 max-w-full relative z-10"
       >
         <motion.button
           initial={{ opacity: 0 }}
@@ -246,9 +250,24 @@ export default function WelcomePage() {
           transition={{ duration: 0.5, delay: 0.2 }}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          onClick={handleOpenWorkspace}
+          onClick={handleNewProject}
           disabled={isLoading}
           className="btn-sci-fi btn-primary btn-lg btn-spotlight w-full"
+        >
+          <span className="relative z-10">
+            ✨ 新建项目
+          </span>
+        </motion.button>
+
+        <motion.button
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={handleOpenWorkspace}
+          disabled={isLoading}
+          className="btn-sci-fi btn-ghost btn-lg w-full"
         >
           <span className="relative z-10">
             {isLoading ? '加载中...' : '📂 打开工作区'}
@@ -259,7 +278,7 @@ export default function WelcomePage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.4 }}
-          className="text-center text-base"
+          className="text-center text-base pt-4"
           style={{ color: '#E0E0E0' }}
         >
           选择一个文件夹来创建或打开工作区

@@ -7,7 +7,10 @@ OllamaFlow 是一个基于 Electron 的桌面应用程序，允许用户通过�
 ## 功能特性
 
 - **可视化节点编辑器** - 基于 React Flow 的直观拖拽式工作流设计
-- **Ollama 集成** - 直接与本地 Ollama 实例交互，支持所有可用模型
+- **多 AI 后端支持**：
+  - 🦙 **Ollama** - 直接与本地 Ollama 实例交互，支持所有可用模型
+  - 🌐 **OpenAI 兼容 API** - 支持 OpenAI、DeepSeek、Azure OpenAI 等兼容 API
+- **项目模板向导** - 通过引导式向导快速创建工作流，提供多种预设模板
 - **多种节点类型**：
   - 📥 **用户输入** - 工作流启动时收集用户输入
   - 🤖 **Ollama 对话** - AI 文本生成和对话
@@ -65,9 +68,13 @@ ReAct 智能体节点支持自主推理和工具调用，能够自动分解复�
 ## 系统要求
 
 - **Node.js** >= 18.0.0
-- **Ollama** - 需要本地安装并运行 Ollama
-  - 下载地址：https://ollama.ai/download
-  - 默认主机：`http://localhost:11434`
+- **AI 后端**（任选其一）：
+  - **Ollama** - 本地运行，无需联网
+    - 下载地址：https://ollama.ai/download
+    - 默认主机：`http://localhost:11434`
+  - **OpenAI 兼容 API** - 支持云端或自托管服务
+    - OpenAI、DeepSeek、Azure OpenAI、vLLM 等
+    - 需要提供 API 端点和 API Key
 
 ## 安装
 
@@ -107,13 +114,31 @@ npm run build:unpack
 
 ## 使用指南
 
+### 创建新项目
+
+使用新建项目向导快速创建工作流：
+
+1. **选择位置** - 选择项目存储路径
+2. **基本信息** - 设置项目名称和描述
+3. **AI 配置** - 选择 AI 后端（Ollama 或 OpenAI 兼容 API）并配置模型
+4. **确认创建** - 选择项目模板并完成创建
+
+**可用的项目模板**：
+
+| 模板 | 图标 | 描述 |
+|------|------|------|
+| 空白项目 | 📄 | 从零开始创建工作流 |
+| 基础对话 | 💬 | 包含用户输入、AI 对话和输出节点的简单工作流 |
+| 智能助手 | 🧠 | 包含 ReAct 智能体的工作流，支持工具调用 |
+
 ### 创建工作流
 
-1. 点击工具栏中的"新建工作区"创建新的工作空间
-2. 从左侧节点面板拖拽节点到画布
-3. 连接节点以定义数据流向
-4. 点击节点在右侧面板配置其属性
-5. 点击"运行"按钮执行工作流
+1. 从欢迎界面点击"新建项目"进入向导
+2. 或在工具栏中点击"新建工作区"创建新的工作空间
+3. 从左侧节点面板拖拽节点到画布
+4. 连接节点以定义数据流向
+5. 点击节点在右侧面板配置其属性
+6. 点击"运行"按钮执行工作流
 
 ### 变量插值
 
@@ -129,13 +154,17 @@ ReAct 智能体是一个基于 **Reasoning + Acting** 模式的自主代理节�
 
 1. **自主推理** - 分析任务需求，制定执行计划
 2. **工具调用** - 通过 Function Calling 使用各种工具
-3. **迭代执行** - 循环"思考-行动-观察"直到任务完成
+3. **多后端支持** - 兼容 Ollama 和 OpenAI 格式的 API
+4. **迭代执行** - 循环"思考-行动-观察"直到任务完成
 
 #### 配置选项
 
 | 选项 | 说明 |
 |------|------|
-| 模型 | 使用的 Ollama 模型（推荐支持 Function Calling 的模型） |
+| AI 后端 | 选择 Ollama 或 OpenAI 兼容 API |
+| 模型 | 使用的 AI 模型（推荐支持 Function Calling 的模型） |
+| API 端点 | API 服务地址（OpenAI 模式需要） |
+| API Key | 认证密钥（OpenAI 模式需要） |
 | 系统提示 | 智能体的角色和行为指南 |
 | 用户消息 | 要执行的任务描述 |
 | 最大迭代 | 推理循环的最大次数（防止无限循环） |
@@ -217,10 +246,13 @@ OllamaFlow/
 │   └── renderer/       # React UI 应用
 │       ├── components/ # UI 组件
 │       │   ├── nodes/      # 节点可视化组件
-│       │   └── workflow/   # 工作流编辑器
+│       │   ├── workflow/   # 工作流编辑器
+│       │   └── wizard/     # 新建项目向导
 │       ├── engine/     # 执行引擎
 │       │   ├── nodes/      # 节点执行器
+│       │   ├── react-agent/ # ReAct 智能体 LLM 抽象层
 │       │   └── tools/      # ReAct 智能体工具
+│       ├── pages/      # 页面组件
 │       ├── store/      # Zustand 状态管理
 │       └── types/      # TypeScript 类型定义
 ├── scripts/
@@ -244,7 +276,7 @@ OllamaFlow/
 - **构建工具** - Vite + electron-vite
 - **UI 库** - React Flow、TailwindCSS、Framer Motion
 - **状态管理** - Zustand
-- **AI 集成** - Ollama (JavaScript SDK)
+- **AI 集成** - Ollama (JavaScript SDK)、OpenAI 兼容 API
 - **浏览器自动化** - Playwright Core
 - **存储** - electron-store
 

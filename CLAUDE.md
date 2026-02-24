@@ -34,8 +34,13 @@ npm run lint         # Run ESLint
 Located in [src/renderer/store/](src/renderer/store/):
 - **workflow-store.ts** - React Flow nodes/edges, node CRUD operations, dirty tracking
 - **execution-store.ts** - Workflow execution state, node results, logs, streaming output
-- **workspace-store.ts** - Current workspace, config, recent workspaces list
+- **workspace-store.ts** - Current workspace, config, recent workspaces list, app page navigation
 - **settings-store.ts** - Application settings
+
+**App Pages**: The application uses a `currentPage` state in workspace-store to navigate between:
+- `'welcome'` - Welcome screen with recent workspaces
+- `'wizard'` - New project creation wizard
+- `'editor'` - Workflow editor (main UI)
 
 ### Node Architecture
 Each node type has three components:
@@ -77,6 +82,21 @@ Syntax: `{{variableName}}` supports dot notation for nested access (`{{node.fiel
 - [PropertiesPanel.tsx](src/renderer/components/workflow/PropertiesPanel.tsx) - Selected node configuration
 - [ExecutionPanel.tsx](src/renderer/components/workflow/ExecutionPanel.tsx) - Execution logs and node status
 - [Toolbar.tsx](src/renderer/components/workflow/Toolbar.tsx) - Workflow controls (run, save, settings)
+- [NewProjectWizard.tsx](src/renderer/pages/NewProjectWizard.tsx) - Multi-step wizard for creating new projects with templates
+
+### Project Wizard
+The new project wizard ([NewProjectWizard.tsx](src/renderer/pages/NewProjectWizard.tsx)) provides a guided 4-step flow:
+1. **Location** - Select project folder path
+2. **Basic Info** - Set project name and description
+3. **AI Configuration** - Choose AI backend (Ollama or OpenAI-compatible), configure API endpoint and model
+4. **Confirm** - Select a project template and create
+
+**Available Templates** ([templates.ts](src/renderer/components/wizard/templates.ts)):
+- `empty` - Blank project with no nodes
+- `basic-chat` - Input → Ollama Chat → Output
+- `agent` - Input → ReAct Agent → Output
+
+Templates include pre-configured nodes with sensible defaults for the selected model.
 
 ### IPC Communication Pattern
 Renderer calls main process via `window.electronAPI`:
@@ -118,8 +138,12 @@ Workspaces are folders containing `.ollamaflow/` directory:
 
 Application-level settings (e.g., recent workspaces) are persisted via **electron-store** in the main process.
 
-### Ollama Configuration
-The application connects to a local Ollama instance (default: `http://localhost:11434`). The Ollama host is configured per-workspace in `config.json`. Each `ollamaChat` node can specify its own model, or use the workspace default. The Ollama chat executor supports streaming responses via the `onStream()` callback in `ExecutionContext`.
+### AI Backend Configuration
+The application supports multiple AI backends configured per-workspace in `config.json`:
+- **Ollama** (default): `http://localhost:11434` - Local LLM runtime
+- **OpenAI-compatible APIs**: Any service compatible with OpenAI's API format (OpenAI, DeepSeek, Azure OpenAI, vLLM, etc.)
+
+For OpenAI-compatible APIs, API keys are stored securely via electron-store (not in the workspace folder). Each node can specify its own model, or use the workspace default. Chat executors support streaming responses via the `onStream()` callback in `ExecutionContext`.
 
 ### Image Node
 The `image` node supports two source types via `sourceType` property:
@@ -132,6 +156,11 @@ This pattern is also used by the `output` node for flexible data sourcing.
 - Path alias: `@/*` maps to `src/renderer/*`
 - Strict TypeScript enabled with strict null checks
 - All electronAPI types are duplicated in preload script for type safety in renderer
+- OpenAI client types are in [openai-client.ts](src/renderer/engine/openai-client.ts):
+  - `OpenAIMessage` - Message format with role, content, tool_calls, and optional `reasoning_content` (for DeepSeek reasoner models)
+  - `OpenAITool` / `OpenAIToolCall` - Function calling types
+  - `OpenAIChatOptions` / `OpenAIChatResponse` - Request/response types
+  - `parseToolCallArgs()` - Safe JSON parsing for tool arguments
 
 ## Styling
 - **Tailwind CSS** for utility-first styling
@@ -150,7 +179,7 @@ Each node defines `PortDefinition` objects for inputs/outputs with:
 - The executor retrieves the field matching `sourceHandle` from the source node's output object
 
 ### ReAct Agent Node
-The `reactAgent` node type implements a Reasoning + Acting pattern using Ollama's Function Calling API:
+The `reactAgent` node type implements a Reasoning + Acting pattern using Function Calling API:
 - **Executor**: [react-agent.ts](src/renderer/engine/nodes/react-agent.ts) - Implements the think-act-observe loop
 - **Tools**: [engine/tools/index.ts](src/renderer/engine/tools/index.ts) - Built-in tools (todos, readFile, writeFile, executeCommand, httpRequest)
 
@@ -161,9 +190,18 @@ The agent maintains state via `ReActExecutionState` in the execution store, trac
 
 **Loop Detection**: The executor includes `detectLoop()` to prevent infinite loops by monitoring repeated actions and blocking problematic patterns (e.g., excessive writeFile calls, over-planning with todos).
 
-**Tool Schema**: Tools are converted to Ollama's function format via `convertToOllamaTools()`. Each tool defines parameters with JSON schema for type validation.
+**Tool Schema**: Tools are converted to the provider's function format. Each tool defines parameters with JSON schema for type validation.
 
 **Browser Automation Tools**: The agent can use Playwright-based browser tools (navigate, click, type, scroll, screenshot, getContent, evaluate, wait). Browser sessions are managed per-workspace via `BrowserManager` singleton in [src/main/browser/index.ts](src/main/browser/index.ts). Sessions are lazy-initialized and persist until explicitly closed or app termination.
+
+**Multi-Backend Support**: The ReAct agent supports multiple AI backends:
+- **Ollama** (default): Uses the Ollama JavaScript SDK
+- **OpenAI-compatible APIs**: Via `debugMode.enabled` with the `OpenAIClient` ([openai-client.ts](src/renderer/engine/openai-client.ts))
+
+When using OpenAI-compatible APIs, the agent stores API keys via electron-store with IPC handlers:
+- `openai:getApiKey` - Retrieve stored API key
+- `openai:setApiKey` - Store API key
+- `openai:deleteApiKey` - Delete stored API key
 
 ## UI Localization
 The application UI uses Chinese localization throughout:

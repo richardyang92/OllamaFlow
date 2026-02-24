@@ -6,6 +6,7 @@ import { interpolateVariables } from '../executor'
 import { Ollama } from 'ollama/browser'
 import { executeTool, TodosManager, getEnabledTools } from '../tools'
 import { useExecutionStore } from '@/store/execution-store'
+import { OpenAIClient, OpenAIMessage, parseToolCallArgs } from '../openai-client'
 
 // Tool parameter property type
 interface ToolParamProperty {
@@ -291,6 +292,11 @@ export function createReactAgentExecutor(): NodeExecutor {
     ): Promise<unknown> {
       const data = node.data as ReactAgentNodeData
       const vars = { ...context.variables, ...input }
+
+      // Check if debug mode is enabled with OpenAI
+      if (data.debugMode?.enabled) {
+        return executeReActWithOpenAI(node, data, input, context)
+      }
 
       // Interpolate variables in prompts
       const systemPrompt = interpolateVariables(data.systemPrompt, vars)
@@ -859,5 +865,431 @@ CSS选择器示例: "button.primary", "a[href*=login]", ".submit-btn"
         response: finalAnswer,
       }
     },
+  }
+}
+
+/**
+ * Execute ReAct with OpenAI API (Debug Mode)
+ */
+async function executeReActWithOpenAI(
+  node: Node<WorkflowNodeData>,
+  data: ReactAgentNodeData,
+  input: Record<string, unknown>,
+  context: ExecutionContext
+): Promise<unknown> {
+  const vars = { ...context.variables, ...input }
+  const debugMode = data.debugMode!
+
+  // Interpolate variables in prompts
+  const systemPrompt = interpolateVariables(data.systemPrompt, vars)
+  const userMessage = interpolateVariables(data.userMessage, vars)
+
+  // Get API key from secure storage or use the one provided
+  let apiKey = debugMode.apiKey
+  if (!apiKey) {
+    // Try node-specific key first
+    const storedKey = await window.electronAPI.openai.getApiKey(`react-${node.id}`)
+    if (storedKey) {
+      apiKey = storedKey
+    } else {
+      // Fall back to workspace default key
+      const workspaceKey = await window.electronAPI.openai.getApiKey('workspace-default')
+      if (workspaceKey) {
+        apiKey = workspaceKey
+      }
+    }
+  }
+
+  if (!apiKey) {
+    throw new Error('OpenAI API Key 未配置。请在调试模式设置中输入 API Key，或在向导中配置工作区默认 API Key。')
+  }
+
+  const client = new OpenAIClient(apiKey, debugMode.apiEndpoint)
+
+  // Initialize TodosManager
+  const todosManager = new TodosManager()
+
+  // Get enabled tools and convert to OpenAI format
+  const allTools = getEnabledTools(data.enabledTools || [])
+  const openaiTools = allTools.map(tool => {
+    const params = getToolParameters(tool.type)
+    return {
+      type: 'function' as const,
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: {
+          type: params.type,
+          properties: params.properties as Record<string, unknown>,
+          required: params.required
+        }
+      }
+    }
+  })
+
+  const maxIterations = data.maxIterations || 10
+  let finalAnswer: string | null = null
+  let iteration = 0
+
+  // Initialize ReAct state in execution store
+  const executionStore = useExecutionStore.getState()
+  executionStore.initReActState(node.id, maxIterations)
+
+  context.onLog?.({
+    nodeId: node.id,
+    nodeName: data.label,
+    level: 'info',
+    message: `开始 ReAct 智能体执行 (OpenAI Debug Mode)，最大迭代: ${maxIterations}，模型: ${debugMode.model}`,
+  })
+
+  // Build system prompt with rules (same as Ollama version for fair comparison)
+  const fullSystemPrompt = `${systemPrompt}
+
+## 你的能力
+你是一个 ReAct 智能体，遵循"思考-行动-观察"循环来解决问题。
+你可以调用工具来执行实际操作，不要只靠想象给出答案。
+
+## 可用工具
+
+### todos - 任务规划工具
+用于规划和追踪复杂任务的执行步骤。
+- **推荐**: 一次性创建任务列表: {"action": "init", "tasks": ["任务1", "任务2", "任务3"]}
+- 添加单个任务: {"action": "add", "content": "任务描述"}
+- 完成任务: {"action": "complete", "content": "任务关键词"}
+- 查看列表: {"action": "list"}
+- 清空列表: {"action": "clear"}
+
+### executeCommand - 执行命令
+执行 Shell 命令（如 python、node、curl 等）。
+输入: {"command": "python script.py"}
+
+### readFile - 读取文件
+读取工作区中的文件内容。
+输入: {"filePath": "data/input.txt"}
+
+### writeFile - 写入文件
+将内容写入工作区文件（代码、数据、结果等）。
+输入: {"filename": "output.py", "content": "print('hello')"}
+
+### httpRequest - HTTP请求
+发送 HTTP 请求获取网页或 API 数据。
+输入: {"url": "https://api.example.com"}
+
+### 浏览器自动化工具
+用于控制浏览器执行网页操作。
+
+#### browser_navigate - 导航到网页
+打开指定URL的网页。
+输入: {"url": "https://example.com"}
+
+#### browser_click - 点击元素
+点击页面上的元素（按钮、链接等）。
+输入: {"selector": "button.submit"} 或 {"selector": "#login-btn"}
+CSS选择器示例: "button.primary", "a[href*=login]", ".submit-btn"
+
+#### browser_type - 输入文本
+在输入框中输入文本。
+输入: {"selector": "input[name=q]", "text": "搜索内容", "clear": true}
+- clear: 可选，是否先清空输入框
+
+#### browser_scroll - 滚动页面
+向上或向下滚动页面。
+输入: {"direction": "down", "amount": 500}
+- direction: "up" 或 "down"
+- amount: 可选，滚动像素数，默认300
+
+#### browser_screenshot - 截图
+截取当前页面的截图。
+输入: {"fullPage": true} 或 {"selector": ".main-content"}
+
+#### browser_getContent - 获取页面内容
+获取页面的文本或HTML内容。
+输入: {"format": "text"} 或 {"format": "html", "selector": ".article", "maxLength": 5000}
+- format: "text" 或 "html"
+- selector: 可选，获取特定元素
+- maxLength: 可选，限制内容长度
+
+#### browser_evaluate - 执行JavaScript
+在页面中执行JavaScript代码。
+输入: {"script": "document.title"}
+可以执行更复杂的脚本获取页面数据。
+
+#### browser_wait - 等待元素
+等待指定元素出现在页面上。
+输入: {"selector": ".result", "timeout": 5000}
+
+## 工作流程（ReAct循环）
+
+1. **思考** (Think): 分析任务，决定下一步行动
+2. **行动** (Act): 调用合适的工具执行操作
+3. **观察** (Observe): 查看工具返回的结果
+4. **重复**: 直到任务完成
+
+## 任务执行指南
+
+### 何时使用 todos 规划？
+- 任务需要3个以上步骤
+- 任务包含多个子任务
+- 需要按顺序完成多个操作
+- 示例：搜索新闻 → 阅读内容 → 提取要点 → 写总结
+
+### 如何使用 todos.init 一次性规划？
+**推荐做法**: 使用 init 一次性创建所有任务
+行动: {"action": "init", "tasks": ["步骤1描述", "步骤2描述", "步骤3描述", ...]}
+
+**不推荐**: 多次调用 add 添加任务（浪费迭代次数）
+行动: {"action": "add", "content": "步骤1"}  ← 不要这样做
+
+### 如何正确执行任务？
+
+**错误示范**: 直接给出答案，不调用任何工具
+你: 我无法完成这个任务...（错误！应该先尝试使用可用工具）
+
+**正确做法**: 使用工具逐步执行
+思考: 这是一个需要实际操作的任务，我应该先规划步骤，然后调用工具执行
+行动: 先用 todos.init 创建任务列表，再逐步调用合适的工具完成每一步
+
+## 🚨 核心执行流程（必须严格遵守）
+
+### 标准执行流程
+1. **规划阶段**: 用 todos.init 一次性创建所有任务
+2. **执行阶段**: 按顺序执行每个任务
+   - 调用工具完成当前任务（如 httpRequest、executeCommand、writeFile 等）
+   - **立即调用 todos.complete 标记任务完成**
+   - 再执行下一个任务
+3. **完成阶段**: 所有任务完成后给出最终答案
+
+### ⚠️ 必须遵守的规则
+1. **每完成一个任务，必须立即调用 todos.complete**
+   - 执行完工具后，观察结果如果成功，立即: {"action": "complete", "content": "任务关键词"}
+   - 然后再继续下一个任务
+2. **按顺序执行任务**，不要跳过或乱序
+3. **每个任务只能标记完成一次**
+
+### 示例执行流程
+---示例开始---
+任务列表: ["获取热搜数据", "解析内容", "生成文章"]
+
+迭代1: todos.init → 创建3个任务
+迭代2: httpRequest 获取数据 → 观察成功 → todos.complete "获取热搜数据"
+迭代3: 解析内容（或调用工具）→ 观察成功 → todos.complete "解析内容"
+迭代4: writeFile 生成文章 → 观察成功 → todos.complete "生成文章"
+迭代5: 所有任务完成 → 给出最终答案（不再调用工具）
+---示例结束---
+
+## 重要规则
+
+1. **多步任务先用 todos 规划** - 添加任务列表后再逐步执行
+2. **必须调用工具执行实际操作** - 不要空想，要行动
+3. **完成一步立即标记** - 每完成一个任务必须调用 todos.complete
+4. **按顺序执行** - 按任务列表顺序逐个完成
+5. **写入脚本后立即执行** - 用 writeFile 写代码后，用 executeCommand 运行
+6. **每次只调用一个工具** - 等待观察结果后再决定下一步
+7. **所有任务完成后给出最终答案** - 不再调用工具，直接回答
+
+## JSON格式提醒
+- 代码中的反斜杠必须双写转义（\\\\cos -> \\\\\\\\cos，\\\\n -> \\\\\\\\n）
+- 确保所有字符串正确转义`
+
+  // Initialize messages using OpenAI format
+  const messages: OpenAIMessage[] = [
+    { role: 'system', content: fullSystemPrompt },
+    { role: 'user', content: userMessage }
+  ]
+
+  while (iteration < maxIterations && !finalAnswer) {
+    iteration++
+
+    // Create new step in ReAct state
+    const stepId = `step-${iteration}-${Date.now()}`
+    const newStep: ReActStep = {
+      id: stepId,
+      iteration,
+      status: 'thinking',
+      thought: '',
+      thoughtStreaming: true,
+      action: null,
+      actionInput: null,
+      observation: null,
+      observationStreaming: false,
+      observationError: false,
+      startedAt: Date.now(),
+    }
+    executionStore.updateReActStep(node.id, newStep)
+
+    try {
+      const response = await client.chat({
+        model: debugMode.model,
+        messages,
+        temperature: data.temperature,
+        max_tokens: data.maxTokens,
+        tools: openaiTools,
+      })
+
+      const content = response.content || ''
+      // DeepSeek reasoner requires reasoning_content to be preserved in message history
+      const assistantMessage: OpenAIMessage = { role: 'assistant', content, tool_calls: response.tool_calls }
+      if (response.reasoning_content) {
+        assistantMessage.reasoning_content = response.reasoning_content
+      }
+      messages.push(assistantMessage)
+
+      // Update step with thought
+      const thought = content || '(思考中...)'
+      executionStore.updateReActStep(node.id, {
+        id: stepId,
+        thought,
+        thoughtStreaming: false,
+      })
+
+      context.onLog?.({
+        nodeId: node.id,
+        nodeName: data.label,
+        level: 'info',
+        message: `思考: ${thought.slice(0, 200)}${thought.length > 200 ? '...' : ''}`,
+      })
+
+      // Check if no tool calls - means final answer
+      if (!response.tool_calls || response.tool_calls.length === 0) {
+        finalAnswer = content || '任务完成'
+        executionStore.updateReActStep(node.id, { id: stepId, status: 'completed' })
+        executionStore.completeReActStep(node.id, stepId)
+        executionStore.setReActFinalAnswer(node.id, finalAnswer)
+
+        context.onLog?.({
+          nodeId: node.id,
+          nodeName: data.label,
+          level: 'info',
+          message: `达到最终答案`,
+        })
+
+        if (data.stream) {
+          context.onStream?.(node.id, `\n✅ 最终答案: ${finalAnswer}\n`)
+        }
+        break
+      }
+
+      // Process tool calls
+      for (const toolCall of response.tool_calls) {
+        const toolName = toolCall.function.name
+        const toolArgs = parseToolCallArgs(toolCall.function.arguments)
+
+        context.onLog?.({
+          nodeId: node.id,
+          nodeName: data.label,
+          level: 'info',
+          message: `调用工具: ${toolName}`,
+        })
+
+        executionStore.updateReActStep(node.id, {
+          id: stepId,
+          status: 'acting',
+          action: toolName,
+          actionInput: JSON.stringify(toolArgs),
+        })
+
+        // Find and execute the tool
+        const tool = allTools.find(t => t.name === toolName)
+
+        if (!tool) {
+          const errorObs = `错误: 未知工具 "${toolName}"`
+          messages.push({ role: 'tool', content: errorObs, tool_call_id: toolCall.id })
+          executionStore.updateReActStep(node.id, {
+            id: stepId,
+            status: 'error',
+            observation: errorObs,
+            observationError: true,
+          })
+          executionStore.completeReActStep(node.id, stepId)
+          continue
+        }
+
+        // Execute the tool
+        executionStore.updateReActStep(node.id, { id: stepId, status: 'observing' })
+
+        if (data.stream) {
+          context.onStream?.(node.id, `🔧 调用: ${toolName}\n`)
+        }
+
+        try {
+          const result = await executeTool(tool, toolArgs, context, todosManager)
+
+          // Sync todos state to store after each tool execution
+          const todosStatus = todosManager.getStatus()
+          executionStore.updateReActTodos(node.id, todosStatus.items)
+
+          const observation = result.success ? result.output : `错误: ${result.error}`
+          messages.push({ role: 'tool', content: observation, tool_call_id: toolCall.id })
+
+          executionStore.updateReActStep(node.id, {
+            id: stepId,
+            observation,
+            observationError: !result.success,
+          })
+          executionStore.completeReActStep(node.id, stepId)
+
+          context.onLog?.({
+            nodeId: node.id,
+            nodeName: data.label,
+            level: result.success ? 'info' : 'error',
+            message: `观察: ${observation.slice(0, 200)}${observation.length > 200 ? '...' : ''}`,
+          })
+
+          if (data.stream) {
+            const truncatedObs = observation.length > 500 ? observation.slice(0, 500) + '...' : observation
+            context.onStream?.(node.id, `👁 观察: ${truncatedObs}\n`)
+          }
+        } catch (error) {
+          const errorObs = `工具执行错误: ${(error as Error).message}`
+          messages.push({ role: 'tool', content: errorObs, tool_call_id: toolCall.id })
+          executionStore.updateReActStep(node.id, {
+            id: stepId,
+            status: 'error',
+            observation: errorObs,
+            observationError: true,
+          })
+          executionStore.completeReActStep(node.id, stepId)
+
+          if (data.stream) {
+            context.onStream?.(node.id, `❌ ${errorObs}\n`)
+          }
+        }
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      context.onLog?.({
+        nodeId: node.id,
+        nodeName: data.label,
+        level: 'error',
+        message: `OpenAI 请求失败: ${errorMessage}`,
+      })
+      throw error
+    }
+  }
+
+  if (!finalAnswer) {
+    finalAnswer = `在 ${maxIterations} 次迭代后未能得出最终答案。`
+    executionStore.setReActFinalAnswer(node.id, finalAnswer)
+    context.onLog?.({
+      nodeId: node.id,
+      nodeName: data.label,
+      level: 'warn',
+      message: `达到最大迭代次数，未获得最终答案`,
+    })
+    if (data.stream) {
+      context.onStream?.(node.id, `\n⚠️ 达到最大迭代次数\n`)
+    }
+  }
+
+  context.onLog?.({
+    nodeId: node.id,
+    nodeName: data.label,
+    level: 'info',
+    message: `ReAct 智能体执行完成 (OpenAI)，迭代次数: ${iteration}`,
+  })
+
+  return {
+    response: finalAnswer,
+    provider: 'openai',
   }
 }

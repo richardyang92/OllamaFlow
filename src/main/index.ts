@@ -81,7 +81,26 @@ ipcMain.handle('workspace:open', async () => {
 })
 
 // Workspace: Initialize a new workspace
-ipcMain.handle('workspace:init', async (_, workspacePath: string, config: { name: string }) => {
+interface WorkspaceInitOptions {
+  name: string
+  description?: string
+  ollamaHost?: string
+  defaultModel?: string
+  initialWorkflow?: {
+    metadata: {
+      id: string
+      name: string
+      createdAt: string
+      updatedAt: string
+      version: string
+    }
+    nodes: unknown[]
+    edges: unknown[]
+    viewport?: { x: number; y: number; zoom: number }
+  }
+}
+
+ipcMain.handle('workspace:init', async (_, workspacePath: string, options: WorkspaceInitOptions) => {
   const ollamaflowDir = path.join(workspacePath, '.ollamaflow')
   const configPath = path.join(ollamaflowDir, 'config.json')
   const workflowPath = path.join(ollamaflowDir, 'workflow.json')
@@ -90,22 +109,22 @@ ipcMain.handle('workspace:init', async (_, workspacePath: string, config: { name
   await fs.mkdir(ollamaflowDir, { recursive: true })
   await fs.mkdir(path.join(ollamaflowDir, 'cache'), { recursive: true })
 
-  // Create config.json
+  // Create config.json with provided options
   const configData = {
-    name: config.name,
-    description: '',
-    ollamaHost: 'http://127.0.0.1:11434',
-    defaultModel: 'llama3.1',
+    name: options.name,
+    description: options.description || '',
+    ollamaHost: options.ollamaHost || 'http://127.0.0.1:11434',
+    defaultModel: options.defaultModel || 'llama3.1',
     created: new Date().toISOString(),
     lastOpened: new Date().toISOString(),
   }
   await fs.writeFile(configPath, JSON.stringify(configData, null, 2))
 
-  // Create empty workflow.json
-  const workflowData = {
+  // Create workflow.json - use provided workflow or create empty one
+  const workflowData = options.initialWorkflow || {
     metadata: {
       id: crypto.randomUUID(),
-      name: config.name,
+      name: options.name,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       version: '1.0.0',
@@ -367,6 +386,33 @@ ipcMain.handle('recent:remove', async (_, workspacePath: string) => {
 
   s.set('recent-workspaces', recent)
   return recent
+})
+
+// ==================== OpenAI API Key Storage ====================
+
+// OpenAI: Get API key
+ipcMain.handle('openai:getApiKey', async (_, keyId: string) => {
+  const s = await getStore()
+  const keys = s.get('openai-api-keys', {}) as Record<string, string>
+  return keys[keyId] || null
+})
+
+// OpenAI: Set API key
+ipcMain.handle('openai:setApiKey', async (_, keyId: string, apiKey: string) => {
+  const s = await getStore()
+  const keys = s.get('openai-api-keys', {}) as Record<string, string>
+  keys[keyId] = apiKey
+  s.set('openai-api-keys', keys)
+  return true
+})
+
+// OpenAI: Delete API key
+ipcMain.handle('openai:deleteApiKey', async (_, keyId: string) => {
+  const s = await getStore()
+  const keys = s.get('openai-api-keys', {}) as Record<string, string>
+  delete keys[keyId]
+  s.set('openai-api-keys', keys)
+  return true
 })
 
 // HTTP: Fetch URL

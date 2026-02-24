@@ -10,6 +10,14 @@ export interface WorkspaceConfig {
   lastOpened: string
 }
 
+export interface WorkspaceInitOptions {
+  name: string
+  description?: string
+  ollamaHost?: string
+  defaultModel?: string
+  initialWorkflow?: WorkflowData
+}
+
 export interface WorkflowData {
   metadata: {
     id: string
@@ -170,8 +178,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   workspace: {
     open: (): Promise<string | null> => ipcRenderer.invoke('workspace:open'),
 
-    init: (path: string, config: { name: string }): Promise<{ config: WorkspaceConfig; workflow: WorkflowData }> =>
-      ipcRenderer.invoke('workspace:init', path, config),
+    init: (path: string, options: WorkspaceInitOptions): Promise<{ config: WorkspaceConfig; workflow: WorkflowData }> =>
+      ipcRenderer.invoke('workspace:init', path, options),
 
     readConfig: (path: string): Promise<WorkspaceConfig | null> =>
       ipcRenderer.invoke('workspace:readConfig', path),
@@ -283,6 +291,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     goForward: (workspacePath: string): Promise<ActionResult> =>
       ipcRenderer.invoke('browser:goForward', workspacePath),
   },
+
+  // OpenAI API Key storage
+  openai: {
+    getApiKey: (keyId: string): Promise<string | null> =>
+      ipcRenderer.invoke('openai:getApiKey', keyId),
+
+    setApiKey: (keyId: string, apiKey: string): Promise<boolean> =>
+      ipcRenderer.invoke('openai:setApiKey', keyId, apiKey),
+
+    deleteApiKey: (keyId: string): Promise<boolean> =>
+      ipcRenderer.invoke('openai:deleteApiKey', keyId),
+  },
 })
 
 // Type declaration for window.electronAPI
@@ -291,7 +311,7 @@ declare global {
     electronAPI: {
       workspace: {
         open: () => Promise<string | null>
-        init: (path: string, config: { name: string }) => Promise<{ config: WorkspaceConfig; workflow: WorkflowData }>
+        init: (path: string, options: WorkspaceInitOptions) => Promise<{ config: WorkspaceConfig; workflow: WorkflowData }>
         readConfig: (path: string) => Promise<WorkspaceConfig | null>
         updateConfig: (path: string, config: Partial<WorkspaceConfig>) => Promise<WorkspaceConfig>
         readWorkflow: (path: string) => Promise<WorkflowData | null>
@@ -334,6 +354,11 @@ declare global {
         closeTab: (workspacePath: string, tabId: string) => Promise<ActionResult>
         goBack: (workspacePath: string) => Promise<ActionResult>
         goForward: (workspacePath: string) => Promise<ActionResult>
+      }
+      openai: {
+        getApiKey: (keyId: string) => Promise<string | null>
+        setApiKey: (keyId: string, apiKey: string) => Promise<boolean>
+        deleteApiKey: (keyId: string) => Promise<boolean>
       }
     }
   }

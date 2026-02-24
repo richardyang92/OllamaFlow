@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type { WorkspaceConfig, RecentWorkspace } from '@/types/workspace'
 
+type AppPage = 'welcome' | 'wizard' | 'editor'
+
 interface WorkspaceState {
   currentWorkspace: {
     path: string
@@ -9,6 +11,7 @@ interface WorkspaceState {
   recentWorkspaces: RecentWorkspace[]
   isLoading: boolean
   error: string | null
+  currentPage: AppPage
 
   // Actions
   setCurrentWorkspace: (path: string, config: WorkspaceConfig) => void
@@ -18,6 +21,7 @@ interface WorkspaceState {
   addRecentWorkspace: (workspace: RecentWorkspace) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
+  setCurrentPage: (page: AppPage) => void
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
@@ -25,6 +29,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   recentWorkspaces: [],
   isLoading: false,
   error: null,
+  currentPage: 'welcome',
 
   setCurrentWorkspace: (path, config) => {
     set({
@@ -69,4 +74,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setLoading: (loading) => set({ isLoading: loading }),
 
   setError: (error) => set({ error }),
+
+  setCurrentPage: (page) => set({ currentPage: page }),
 }))

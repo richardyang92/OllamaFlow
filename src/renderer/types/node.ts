@@ -187,6 +187,14 @@ export type AvailableToolId = (typeof AVAILABLE_TOOLS)[number]['id']
 // Node status
 export type NodeStatus = 'idle' | 'running' | 'success' | 'error'
 
+// Debug Mode Configuration for OpenAI API
+export interface DebugModeConfig {
+  enabled: boolean
+  apiEndpoint: string  // e.g., "https://api.openai.com/v1"
+  apiKey: string       // Runtime only, not persisted to workflow
+  model: string        // e.g., "gpt-4o"
+}
+
 // ReAct Agent Step Status
 export type ReActStepStatus = 'thinking' | 'acting' | 'observing' | 'completed' | 'error'
 
@@ -248,6 +256,7 @@ export interface OllamaChatNodeData extends BaseNodeData {
   topP: number
   maxTokens: number
   stream: boolean
+  debugMode?: DebugModeConfig
 }
 
 // Set Node
@@ -332,6 +341,7 @@ export interface ReactAgentNodeData extends BaseNodeData {
   maxIterations: number
   enabledTools: AvailableToolId[]
   stream: boolean
+  debugMode?: DebugModeConfig
 }
 
 

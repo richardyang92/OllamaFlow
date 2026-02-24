@@ -84,13 +84,22 @@ function ReactAgentNode(props: NodeProps) {
   const totalToolsCount = enabledTools.length
 
   return (
-    <BaseNode {...props} icon="🧠">
+    <BaseNode {...props} icon={data.debugMode?.enabled ? "🔬" : "🧠"}>
       <div className="space-y-3 w-full">
         {/* Primary Badge - Model Name */}
         <div className="node-primary-badge ai">
-          <span className="text-lg">🧠</span>
-          <span className="font-semibold truncate">{data.model}</span>
+          <span className="text-lg">{data.debugMode?.enabled ? "🔬" : "🧠"}</span>
+          <span className="font-semibold truncate">
+            {data.debugMode?.enabled ? data.debugMode.model : data.model}
+          </span>
         </div>
+
+        {/* Debug Mode Indicator */}
+        {data.debugMode?.enabled && (
+          <div className="text-[10px] px-2 py-1 bg-amber-500/20 text-amber-400 rounded flex items-center gap-1">
+            <span>🔬</span> Debug Mode (OpenAI)
+          </div>
+        )}
 
         {/* Secondary Info - Tools and Max Iterations */}
         <div className="node-secondary-info flex justify-between items-center">
