@@ -202,17 +202,17 @@ function OllamaChatNode(props: NodeProps) {
         >
           <div className="bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg p-3 space-y-2">
               {/* Status Details */}
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              <div className="space-y-1">
-                <span className="text-[var(--color-text-subtle)]">当前步骤 </span>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-subtle)]">当前步骤</span>
                 <span className="text-[var(--color-text)] truncate">{inferenceStatus.currentStep}</span>
               </div>
-              <div className="space-y-1">
-                <span className="text-[var(--color-text-subtle)]">处理 token </span>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-subtle)]">处理 token</span>
                 <span className="text-[var(--color-text)]">{inferenceStatus.tokensProcessed}</span>
               </div>
-              <div className="space-y-1">
-                <span className="text-[var(--color-text-subtle)]">每秒 token </span>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-subtle)]">每秒 token</span>
                 <span className="text-[var(--color-text)]">{inferenceStatus.tokensPerSecond.toFixed(1)}</span>
               </div>
             </div>

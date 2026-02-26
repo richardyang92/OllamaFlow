@@ -160,14 +160,19 @@ function ImageNode(props: NodeProps) {
   return (
     <BaseNode {...props} icon="🖼️">
       <div className="text-xs space-y-2">
-        <div className="text-[var(--color-text-muted)]">来源: {sourceTypeLabels[data.sourceType || 'input']}
-          {data.sourceType === 'variable' && data.variableName && (
-            <span className="text-[var(--color-node-input)] ml-1">({data.variableName})</span>
-          )}
+        <div className="flex justify-between">
+          <span className="text-[var(--color-text-muted)]">来源</span>
+          <span className="text-[var(--color-text)]">{sourceTypeLabels[data.sourceType || 'input']}
+            {data.sourceType === 'variable' && data.variableName && (
+              <span className="text-[var(--color-node-input)]">({data.variableName})</span>
+            )}
+          </span>
         </div>
         {imageUrl && (
           <div className="space-y-2">
-            <div className="text-[var(--color-text-muted)]">图片URL:</div>
+            <div className="flex justify-between">
+              <span className="text-[var(--color-text-muted)]">图片URL</span>
+            </div>
             <div className={cn(
               'bg-[var(--color-bg-input)] rounded-md p-2',
               'text-[var(--color-text)] font-mono text-xs',

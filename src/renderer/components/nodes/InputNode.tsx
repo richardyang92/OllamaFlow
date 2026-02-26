@@ -21,9 +21,12 @@ function InputNode(props: NodeProps<InputNodeData>) {
           <span className="text-[var(--color-text)]">{inputTypeLabels[data.inputType]}</span>
         </div>
         {data.defaultValue && (
-          <div className="text-[var(--color-text-subtle)] truncate">
-            默认值: {data.defaultValue.substring(0, 20)}
-            {data.defaultValue.length > 20 && '...'}
+          <div className="flex justify-between">
+            <span className="text-[var(--color-text-muted)]">默认值</span>
+            <span className="text-[var(--color-text)] truncate max-w-[60%]">
+              {data.defaultValue.substring(0, 20)}
+              {data.defaultValue.length > 20 && '...'}
+            </span>
           </div>
         )}
       </div>

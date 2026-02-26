@@ -9,6 +9,8 @@ interface FloatingToolbarProps {
   isDirty: boolean
   executionStatus: ExecutionStatus
   showPalette: boolean
+  showLogs: boolean
+  saveActive: boolean
   onSave: () => void
   onClose: () => void
   onExecute: () => void
@@ -16,11 +18,69 @@ interface FloatingToolbarProps {
   onTogglePalette: () => void
 }
 
+function StatusIndicator({
+  isDirty,
+  executionStatus,
+}: {
+  isDirty: boolean
+  executionStatus: ExecutionStatus
+}) {
+  const getStatusStyle = () => {
+    switch (executionStatus) {
+      case 'running':
+        return {
+          className: 'bg-yellow-400',
+          animate: { opacity: [0.5, 1, 0.5], scale: [1, 1.2, 1] },
+          repeat: Infinity,
+        }
+      case 'completed':
+        return {
+          className: 'bg-green-400',
+          animate: { opacity: 1, scale: 1 },
+          repeat: 0,
+        }
+      case 'failed':
+      case 'cancelled':
+        return {
+          className: 'bg-red-400',
+          animate: { opacity: 1, scale: 1 },
+          repeat: 0,
+        }
+      case 'idle':
+      default:
+        if (isDirty) {
+          return {
+            className: 'bg-yellow-400',
+            animate: { opacity: [0.5, 1, 0.5] },
+            repeat: Infinity,
+          }
+        }
+        return {
+          className: 'bg-gray-400',
+          animate: { opacity: 1, scale: 1 },
+          repeat: 0,
+        }
+    }
+  }
+
+  const { className, animate, repeat } = getStatusStyle()
+
+  return (
+    <motion.span
+      animate={animate}
+      transition={{ duration: 2, repeat }}
+      className={cn('w-2 h-2 rounded-full', className)}
+    />
+  )
+}
+
 export function FloatingToolbar({
   workspaceName,
   isDirty,
   executionStatus,
   showPalette,
+  showLogs,
+  saveActive,
   onSave,
   onClose,
   onExecute,
@@ -66,13 +126,7 @@ export function FloatingToolbar({
         <span className="text-sm font-medium text-[var(--color-text)] max-w-32 truncate">
           {workspaceName}
         </span>
-        {isDirty && (
-          <motion.span
-            animate={{ opacity: [0.5, 1, 0.5] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="w-2 h-2 rounded-full bg-yellow-400"
-          />
-        )}
+        <StatusIndicator isDirty={isDirty} executionStatus={executionStatus} />
       </div>
 
       {/* Divider */}
@@ -89,13 +143,14 @@ export function FloatingToolbar({
         icon={FileText}
         onClick={onToggleLogs}
         tooltip="执行日志"
+        active={showLogs}
       />
       <ToolbarButton
         icon={Save}
         onClick={onSave}
-        disabled={!isDirty}
+        disabled={!isDirty && !saveActive}
         tooltip="保存 (⌘S)"
-        highlight={isDirty}
+        active={saveActive}
       />
       <ToolbarButton
         icon={executionStatus === 'running' ? Square : Play}

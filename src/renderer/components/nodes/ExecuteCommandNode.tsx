@@ -27,8 +27,9 @@ function ExecuteCommandNode(props: NodeProps<ExecuteCommandNodeData>) {
               <span className="text-[var(--color-text-subtle)]">无命令</span>
             )}
           </div>
-          <div className="text-[var(--color-text-subtle)] text-[10px] mt-1.5">
-            超时: {data.timeout / 1000}s
+          <div className="flex justify-between text-[10px] mt-1.5">
+            <span className="text-[var(--color-text-subtle)]">超时</span>
+            <span className="text-[var(--color-text)]">{data.timeout / 1000}s</span>
           </div>
         </div>
       </div>

@@ -27,12 +27,18 @@ function OutputNode(props: NodeProps<OutputNodeData>) {
     <BaseNode {...props} icon={<ArrowUpFromLine className="w-4 h-4" />}>
       <div className="text-xs space-y-2">
         <div className="flex flex-col gap-1">
-          <div className="text-[var(--color-text-muted)]">来源: {sourceTypeLabels[data.sourceType || 'input']}
-            {data.sourceType === 'variable' && data.variableName && (
-              <span className="text-[var(--color-node-input)] ml-1">({data.variableName})</span>
-            )}
+          <div className="flex justify-between">
+            <span className="text-[var(--color-text-muted)]">来源</span>
+            <span className="text-[var(--color-text)]">{sourceTypeLabels[data.sourceType || 'input']}
+              {data.sourceType === 'variable' && data.variableName && (
+                <span className="text-[var(--color-node-input)]">({data.variableName})</span>
+              )}
+            </span>
           </div>
-          <div className="text-[var(--color-text-muted)]">类型: {outputTypeLabels[data.outputType]}</div>
+          <div className="flex justify-between">
+            <span className="text-[var(--color-text-muted)]">类型</span>
+            <span className="text-[var(--color-text)]">{outputTypeLabels[data.outputType]}</span>
+          </div>
         </div>
         {displayOutput && (
           <div className={cn(

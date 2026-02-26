@@ -13,7 +13,6 @@ import PropertiesPanel from '@/components/workflow/PropertiesPanel'
 import WorkspaceFiles from '@/components/workflow/WorkspaceFiles'
 import ExecutionPanel from '@/components/workflow/ExecutionPanel'
 import InputDialog from '@/components/workflow/InputDialog'
-import { ResizablePanel } from '@/components/ui/ResizablePanel'
 import { CollapsibleDrawer } from '@/components/ui/CollapsibleDrawer'
 import { WorkflowExecutor, initializeExecutors } from '@/engine/executor'
 
@@ -45,6 +44,7 @@ export default function EditorPage() {
   const [showLogs, setShowLogs] = useState(false)
   const [showInputDialog, setShowInputDialog] = useState(false)
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null)
+  const [saveActive, setSaveActive] = useState(false)
   const executorRef = useRef<WorkflowExecutor | null>(null)
   const previousSelectedNodeId = useRef<string | null>(null)
 
@@ -56,8 +56,10 @@ export default function EditorPage() {
   }, [selectedNodeId, showProperties])
 
   const handleSave = useCallback(async () => {
-    if (!currentWorkspace || !workflow) return
+    if (!currentWorkspace || !workflow || saveActive) return
 
+    setSaveActive(true)
+    const startTime = Date.now()
     try {
       const { nodes, edges } = useWorkflowStore.getState()
       
@@ -102,13 +104,20 @@ export default function EditorPage() {
       
       if (success) {
         useWorkflowStore.getState().setWorkflow(updatedWorkflow)
-        markClean()
         useExecutionStore.getState().addLog({
           level: 'info',
           message: '工作流保存成功',
         })
         setSaveFeedback('工作流保存成功')
         setTimeout(() => setSaveFeedback(null), 2000)
+        markClean()
+        const elapsed = Date.now() - startTime
+        const minDisplayTime = 300
+        if (elapsed < minDisplayTime) {
+          setTimeout(() => setSaveActive(false), minDisplayTime - elapsed)
+        } else {
+          setSaveActive(false)
+        }
       } else {
         throw new Error('保存返回失败')
       }
@@ -118,8 +127,9 @@ export default function EditorPage() {
         level: 'error',
         message: `保存工作流失败: ${error instanceof Error ? error.message : String(error)}`,
       })
+      setSaveActive(false)
     }
-  }, [currentWorkspace, workflow, markClean])
+  }, [currentWorkspace, workflow, markClean, saveActive])
 
   const handleClose = useCallback(() => {
     if (isDirty) {
@@ -210,44 +220,52 @@ export default function EditorPage() {
           isDirty={isDirty}
           executionStatus={executionStatus}
           showPalette={showPalette}
+          showLogs={showLogs}
+          saveActive={saveActive}
           onSave={handleSave}
           onClose={handleClose}
           onExecute={handleExecute}
-          onToggleLogs={() => setShowLogs(!showLogs)}
+          onToggleLogs={() => {
+            if (!showLogs) {
+              setShowFiles(true)
+            }
+            setShowLogs(!showLogs)
+          }}
           onTogglePalette={() => setShowPalette(!showPalette)}
         />
 
-        <div className="flex-1 flex flex-col overflow-hidden pt-2">
-          <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex overflow-hidden relative">
             <FlowCanvas 
               colorMode={resolvedTheme}
               onDragStart={handleDragStart}
             />
-          </div>
-
-          <div className="px-4 pb-4">
-            <ResizablePanel
-              defaultHeight={240}
-              minHeight={120}
-              maxHeight={400}
-              defaultCollapsed={true}
-              className="glass-panel rounded-glass-lg"
-            >
-              <div className="flex h-full pt-6">
-                {showFiles && (
-                  <div className="w-56 shrink-0 pr-2 border-r border-[var(--color-border-subtle)]">
-                    <WorkspaceFiles onClose={() => setShowFiles(false)} />
+            
+            <AnimatePresence>
+              {showLogs && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 20 }}
+                  className="absolute bottom-4 left-4 right-4 z-30 h-64 glass-panel rounded-glass-lg"
+                >
+                  <div className="flex h-full">
+                    {showFiles && (
+                      <div className="w-56 shrink-0 pr-2 border-r border-[var(--color-border-subtle)]">
+                        <WorkspaceFiles onClose={() => setShowFiles(false)} />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <ExecutionPanel 
+                        onClose={() => setShowLogs(false)} 
+                        onToggleFiles={() => setShowFiles(!showFiles)} 
+                        showFiles={showFiles} 
+                      />
+                    </div>
                   </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <ExecutionPanel 
-                    onClose={() => setShowLogs(false)} 
-                    onToggleFiles={() => setShowFiles(!showFiles)} 
-                    showFiles={showFiles} 
-                  />
-                </div>
-              </div>
-            </ResizablePanel>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 

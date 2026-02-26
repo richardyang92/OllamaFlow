@@ -36,8 +36,24 @@ body {
    React Flow Styles
    ============================================ */
 
+/* Fix for macOS: ensure controls and panels are clickable */
+.react-flow__controls,
+.react-flow__controls-button,
+.react-flow__panel,
+.react-flow__minimap,
+.react-flow__attribution {
+  -webkit-app-region: no-drag;
+}
+
 .react-flow__node {
   cursor: grab;
+  --xy-node-boxshadow-selected: none;
+  --xy-node-boxshadow-hover: none;
+}
+
+.react-flow__node:hover .glass-node {
+  box-shadow: 0 0 20px rgba(96, 165, 250, 0.3),
+              0 0 40px rgba(139, 92, 246, 0.2);
 }
 
 .react-flow__node:active {

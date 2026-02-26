@@ -67,7 +67,6 @@ function BaseNode({ data, selected, children, icon, className }: BaseNodeProps) 
         selected && [
           'border-[var(--color-accent)]',
           'ring-2 ring-[var(--color-accent-border)]',
-          'shadow-[0_0_20px_var(--color-accent-bg)]',
         ],
         statusStyle.shadow,
         'transition-all duration-200 ease-out',

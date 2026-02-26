@@ -40,41 +40,41 @@ export default function WorkspaceFiles({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-panel-bg backdrop-blur-md rounded-lg border border-white/5 overflow-hidden">
+    <div className="h-full flex flex-col bg-[var(--color-bg-panel)] backdrop-blur-md rounded-lg border border-[var(--color-border-subtle)] overflow-hidden">
       {/* Header with unified styling */}
-      <div className="flex items-center justify-between p-3 border-b border-white/10">
-        <span className="text-xs font-medium text-zinc-400">📁 文件</span>
-        <button onClick={onClose} className="text-zinc-400 hover:text-white text-xs transition-colors">
+      <div className="flex items-center justify-between p-3 border-b border-[var(--color-border-subtle)]">
+        <span className="text-xs font-medium text-[var(--color-text-muted)]">📁 文件</span>
+        <button onClick={onClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] text-xs transition-colors">
           ▼
         </button>
       </div>
 
       {/* Breadcrumb with consistent padding */}
       {currentPath && (
-        <div className="p-3 border-b border-white/10">
+        <div className="p-3 border-b border-[var(--color-border-subtle)]">
           <button
             onClick={handleBack}
-            className="text-xs text-zinc-400 hover:text-white transition-colors"
+            className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
           >
             ← 返回上级
           </button>
-          <span className="text-xs text-zinc-500 ml-2">/{currentPath}</span>
+          <span className="text-xs text-[var(--color-text-subtle)] ml-2">/{currentPath}</span>
         </div>
       )}
 
       {/* File list */}
       <div className="flex-1 overflow-y-auto p-2">
         {files.length === 0 ? (
-          <div className="text-zinc-500 text-xs text-center py-4">暂无文件</div>
+          <div className="text-[var(--color-text-subtle)] text-xs text-center py-4">暂无文件</div>
         ) : (
           files.map((file) => (
             <div
               key={file.path}
               onClick={() => handleFileClick(file)}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded cursor-pointer transition-colors"
+              className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--color-bg-hover)] rounded cursor-pointer transition-colors"
             >
               <span>{file.isDirectory ? '📁' : '📄'}</span>
-              <span className="text-xs truncate text-zinc-300">{file.name}</span>
+              <span className="text-xs truncate text-[var(--color-text)]">{file.name}</span>
             </div>
           ))
         )}

@@ -25,8 +25,9 @@ function ReadFileNode(props: NodeProps<ReadFileNodeData>) {
               </span>
             ) : null}
           </div>
-          <div className="text-[var(--color-text-subtle)] text-[10px] mt-1.5">
-            编码: {data.encoding}
+          <div className="flex justify-between text-[10px] mt-1.5">
+            <span className="text-[var(--color-text-subtle)]">编码</span>
+            <span className="text-[var(--color-text)]">{data.encoding}</span>
           </div>
         </div>
       </div>
