@@ -8,9 +8,9 @@ import { getEdgeColorByNodeType, getEdgeHoverColorByNodeType } from '@/store/wor
 
 const statusStyles = {
   idle: {
-    border: 'border-white/8',
+    border: 'border-[var(--color-border-subtle)]',
     shadow: '',
-    dot: 'bg-zinc-500',
+    dot: 'bg-[var(--color-text-muted)]',
   },
   running: {
     border: 'border-yellow-500/40',
@@ -30,14 +30,14 @@ const statusStyles = {
 }
 
 const categoryBadgeColors = {
-  'Input': 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30',
-  'AI': 'bg-purple-500/20 text-purple-400 border border-purple-500/30',
-  'Logic': 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
-  'Data': 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30',
-  'File': 'bg-orange-500/20 text-orange-400 border border-orange-500/30',
-  'System': 'bg-red-500/20 text-red-400 border border-red-500/30',
-  'Output': 'bg-teal-500/20 text-teal-400 border border-teal-500/30',
-  default: 'bg-gray-500/20 text-gray-400 border border-gray-500/30',
+  'Input': 'bg-[var(--color-node-input-bg)] text-[var(--color-node-input)] border border-[var(--color-node-input-border)]',
+  'AI': 'bg-[var(--color-node-ai-bg)] text-[var(--color-node-ai)] border border-[var(--color-node-ai-border)]',
+  'Logic': 'bg-[var(--color-node-logic-bg)] text-[var(--color-node-logic)] border border-[var(--color-node-logic-border)]',
+  'Data': 'bg-[var(--color-node-data-bg)] text-[var(--color-node-data)] border border-[var(--color-node-data-border)]',
+  'File': 'bg-[var(--color-node-file-bg)] text-[var(--color-node-file)] border border-[var(--color-node-file-border)]',
+  'System': 'bg-[var(--color-node-system-bg)] text-[var(--color-node-system)] border border-[var(--color-node-system-border)]',
+  'Output': 'bg-[var(--color-node-output-bg)] text-[var(--color-node-output)] border border-[var(--color-node-output-border)]',
+  default: 'bg-[var(--color-bg-input)] text-[var(--color-text-muted)] border border-[var(--color-border-subtle)]',
 }
 
 function LoopNode(props: NodeProps) {
@@ -108,9 +108,9 @@ function LoopNode(props: NodeProps) {
           id={input.id}
           className={cn(
             '!w-3 !h-3',
-            '!bg-zinc-500',
-            '!border-2 !border-zinc-700',
-            'hover:!bg-white hover:shadow-[0_0_4px_rgba(255,255,255,0.3)]',
+            '!bg-[var(--color-text-muted)]',
+            '!border-2 !border-[var(--color-border)]',
+            'hover:!bg-[var(--color-accent)] hover:shadow-[var(--shadow-handle-hover)]',
             'transition-all duration-200'
           )}
           style={{
@@ -160,27 +160,27 @@ function LoopNode(props: NodeProps) {
         className={cn(
           'min-w-[400px] min-h-[300px]',
           'rounded-xl',
-          'bg-card-bg',
+          'bg-[var(--color-bg-card)]',
           'backdrop-blur-sm',
           'border',
           statusStyle.border,
           selected as boolean && [
-            'border-blue-400/50',
-            'ring-2 ring-blue-400/30',
-            'shadow-[0_0_20px_rgba(96,165,250,0.2)]',
-            'bg-white/[0.04]'
+            'border-[var(--color-accent)]',
+            'ring-2 ring-[var(--color-accent-border)]',
+            'shadow-[0_0_20px_var(--color-accent-bg)]',
+            'bg-[var(--color-bg-input)]'
           ],
           statusStyle.shadow,
           'transition-all duration-200 ease-out',
           isDraggingOver && [
-            'border-blue-500',
-            'ring-2 ring-blue-500/50',
-            'bg-blue-500/5'
+            'border-[var(--color-accent)]',
+            'ring-2 ring-[var(--color-accent-border)]',
+            'bg-[var(--color-accent-bg)]'
           ]
         )}
       >
         {/* Header */}
-        <div className="flex items-center gap-2.5 px-5 py-3 border-b border-white/5 rounded-t-xl bg-white/[0.02]">
+        <div className="flex items-center gap-2.5 px-5 py-3 border-b border-[var(--color-border-subtle)] rounded-t-xl bg-[var(--color-bg-elevated)]">
           <motion.div
             className={cn('w-2.5 h-2.5 rounded-full', statusStyle.dot)}
             animate={status === 'running' ? {
@@ -190,7 +190,7 @@ function LoopNode(props: NodeProps) {
             transition={{ duration: 1.5, repeat: Infinity }}
           />
           <span className="text-base">🔄</span>
-          <span className="font-medium text-sm truncate flex-1 text-slate-100">
+          <span className="font-medium text-sm truncate flex-1 text-[var(--color-text)]">
             {nodeData.label}
           </span>
           <span className={cn(
@@ -202,29 +202,29 @@ function LoopNode(props: NodeProps) {
         </div>
 
         {/* Info Bar */}
-        <div className="px-5 py-3 border-b border-white/5 bg-white/[0.01]">
+        <div className="px-5 py-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-input)]">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <div className="node-primary-badge logic flex items-center gap-2 flex-1">
-                <span className="font-mono font-semibold text-xs">
+                <span className="font-mono font-semibold text-xs text-[var(--color-text)]">
                   {getLoopDescription()}
                 </span>
               </div>
               {childNodes.length > 0 && (
-                <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[10px] font-medium">
+                <span className="px-2 py-0.5 rounded bg-[var(--color-node-logic-bg)] text-[var(--color-node-logic)] border border-[var(--color-node-logic-border)] text-[10px] font-medium">
                   {childNodes.length} 个子节点
                 </span>
               )}
             </div>
             
-            <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-              <span className="px-1.5 py-0.5 rounded bg-white/5">
+            <div className="flex items-center gap-2 text-[10px] text-[var(--color-text-subtle)]">
+              <span className="px-1.5 py-0.5 rounded bg-[var(--color-bg-input)]">
                 变量: {nodeData.loopVariable}
               </span>
-              <span className="px-1.5 py-0.5 rounded bg-white/5">
+              <span className="px-1.5 py-0.5 rounded bg-[var(--color-bg-input)]">
                 索引: {nodeData.indexVariable}
               </span>
-              <span className="font-mono text-gray-400 truncate flex-1">
+              <span className="font-mono text-[var(--color-text-muted)] truncate flex-1">
                 {getLoopDetail()}
               </span>
             </div>
@@ -234,8 +234,8 @@ function LoopNode(props: NodeProps) {
         {/* Container Area - where child nodes are shown */}
         <div className="flex-1 p-4 min-h-[200px] relative">
           {childNodes.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center m-4 border-2 border-dashed border-white/10 rounded-lg pointer-events-none">
-              <div className="text-center text-zinc-500">
+            <div className="absolute inset-0 flex items-center justify-center m-4 border-2 border-dashed border-[var(--color-border-subtle)] rounded-lg pointer-events-none">
+              <div className="text-center text-[var(--color-text-subtle)]">
                 <div className="text-3xl mb-2">📦</div>
                 <div className="text-sm">拖拽节点到此处</div>
                 <div className="text-xs mt-1">添加到循环体</div>
@@ -251,7 +251,7 @@ function LoopNode(props: NodeProps) {
             animate={{ height: 'auto', opacity: 1 }}
             className="px-4 py-2 bg-red-500/10 border-t border-red-500/20 rounded-b-lg"
           >
-            <p className="text-red-400 text-xs">{nodeData.error}</p>
+            <p className="text-red-500 text-xs">{nodeData.error}</p>
           </motion.div>
         )}
       </motion.div>

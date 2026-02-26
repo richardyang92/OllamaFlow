@@ -12,29 +12,29 @@ export default function SetProperties({ node, updateNodeData }: Props) {
     <div className="space-y-4">
       {/* 变量名 */}
       <div>
-        <label className="block text-xs font-medium text-zinc-400 mb-1">变量名</label>
+        <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">变量名</label>
         <input
           type="text"
           value={data.variableName}
           onChange={(e) => updateNodeData(node.id, { variableName: e.target.value })}
           placeholder="myVariable"
-          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-white/20 focus:bg-white/8 transition-all font-mono"
+          className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all font-mono"
         />
-        <p className="text-xs text-zinc-500 mt-1">用于存储值的变量名称</p>
+        <p className="text-xs text-[var(--color-text-muted)] mt-1">用于存储值的变量名称</p>
       </div>
 
       {/* 变量值 */}
       <div>
-        <label className="block text-xs font-medium text-zinc-400 mb-1">
+        <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">
           变量值
-          <span className="text-zinc-500 ml-1">(支持 {`{{变量}}`})</span>
+          <span className="text-[var(--color-text-muted)] ml-1">(支持 {`{{变量}}`})</span>
         </label>
         <textarea
           value={data.variableValue}
           onChange={(e) => updateNodeData(node.id, { variableValue: e.target.value })}
           rows={4}
           placeholder="输入变量的值..."
-          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-white/20 focus:bg-white/8 transition-all resize-none"
+          className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all resize-none"
         />
       </div>
 
@@ -45,20 +45,20 @@ export default function SetProperties({ node, updateNodeData }: Props) {
           id="useExpression"
           checked={data.useExpression}
           onChange={(e) => updateNodeData(node.id, { useExpression: e.target.checked })}
-          className="rounded border-white/20 bg-white/5"
+          className="rounded border-[var(--color-border-subtle)] bg-[var(--color-bg-input)]"
         />
-        <label htmlFor="useExpression" className="text-sm text-zinc-300">
+        <label htmlFor="useExpression" className="text-sm text-[var(--color-text)]">
           作为 JavaScript 表达式求值
         </label>
       </div>
-      <p className="text-xs text-zinc-500 ml-6">启用后将使用 eval() 计算表达式的值</p>
+      <p className="text-xs text-[var(--color-text-muted)] ml-6">启用后将使用 eval() 计算表达式的值</p>
 
-      <div className="bg-white/5 rounded-lg p-3 text-xs text-zinc-400 border border-white/5">
-        <div className="font-medium text-zinc-300 mb-1">示例：</div>
+      <div className="bg-[var(--color-bg-input)] rounded-lg p-3 text-xs text-[var(--color-text-muted)] border border-[var(--color-border-subtle)]">
+        <div className="font-medium text-[var(--color-text)] mb-1">示例：</div>
         <div className="space-y-0.5">
-          <div>• 变量名: <code className="text-zinc-300">userName</code></div>
-          <div>• 变量值: <code className="text-zinc-300">{`{{input}}`}</code></div>
-          <div>• 表达式: <code className="text-zinc-300">{`{{count}} + 1`}</code></div>
+          <div>• 变量名: <code className="text-[var(--color-text)]">userName</code></div>
+          <div>• 变量值: <code className="text-[var(--color-text)]">{`{{input}}`}</code></div>
+          <div>• 表达式: <code className="text-[var(--color-text)]">{`{{count}} + 1`}</code></div>
         </div>
       </div>
     </div>

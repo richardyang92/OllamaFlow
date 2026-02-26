@@ -55,7 +55,7 @@ function ReActStepsPanel({ state }: ReActStepsPanelProps) {
   return (
     <div className="space-y-2">
       {/* Progress indicator */}
-      <div className="flex items-center justify-between text-[10px] text-gray-500 mb-2">
+      <div className="flex items-center justify-between text-[10px] text-[var(--color-text-subtle)] mb-2">
         <span>迭代进度</span>
         <span className="font-mono">
           {state.currentIteration} / {state.maxIterations}
@@ -67,14 +67,14 @@ function ReActStepsPanel({ state }: ReActStepsPanelProps) {
         <motion.div
           initial={{ opacity: 0, y: -5 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-2 mb-2"
+          className="rounded-lg border border-[var(--color-node-logic-border)] bg-[var(--color-node-logic-bg)] p-2 mb-2"
         >
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-1.5">
               <span className="text-xs">📋</span>
-              <span className="text-[10px] text-blue-400 font-medium">任务列表</span>
+              <span className="text-[10px] text-[var(--color-node-logic)] font-medium">任务列表</span>
             </div>
-            <span className="text-[10px] text-gray-400">
+            <span className="text-[10px] text-[var(--color-text-muted)]">
               {completedCount}/{totalCount} 完成
             </span>
           </div>
@@ -85,7 +85,7 @@ function ReActStepsPanel({ state }: ReActStepsPanelProps) {
                 initial={{ opacity: 0, x: -5 }}
                 animate={{ opacity: 1, x: 0 }}
                 className={`flex items-center gap-1.5 text-[10px] ${
-                  todo.completed ? 'text-green-400' : 'text-gray-300'
+                  todo.completed ? 'text-green-500' : 'text-[var(--color-text)]'
                 }`}
               >
                 <span>{todo.completed ? '✅' : '⬜'}</span>
@@ -96,9 +96,9 @@ function ReActStepsPanel({ state }: ReActStepsPanelProps) {
             ))}
           </div>
           {/* Progress bar */}
-          <div className="mt-2 h-1 bg-gray-700 rounded-full overflow-hidden">
+          <div className="mt-2 h-1 bg-[var(--color-bg-input)] rounded-full overflow-hidden">
             <motion.div
-              className="h-full bg-blue-500"
+              className="h-full bg-[var(--color-node-logic)]"
               initial={{ width: 0 }}
               animate={{ width: `${totalCount > 0 ? (completedCount / totalCount) * 100 : 0}%` }}
               transition={{ duration: 0.3 }}
@@ -129,9 +129,9 @@ function ReActStepsPanel({ state }: ReActStepsPanelProps) {
           >
             <div className="flex items-center gap-1.5 mb-2">
               <span className="text-sm">✅</span>
-              <span className="text-[10px] text-green-400 font-medium">最终答案</span>
+              <span className="text-[10px] text-green-500 font-medium">最终答案</span>
             </div>
-            <p className="text-xs text-gray-300 whitespace-pre-wrap leading-relaxed">
+            <p className="text-xs text-[var(--color-text)] whitespace-pre-wrap leading-relaxed">
               {state.finalAnswer}
             </p>
           </motion.div>
@@ -146,9 +146,9 @@ function ReActStepsPanel({ state }: ReActStepsPanelProps) {
           >
             <div className="flex items-center gap-1.5 mb-1">
               <span className="text-sm">❌</span>
-              <span className="text-[10px] text-red-400 font-medium">错误</span>
+              <span className="text-[10px] text-red-500 font-medium">错误</span>
             </div>
-            <p className="text-xs text-red-300">{state.error}</p>
+            <p className="text-xs text-red-400">{state.error}</p>
           </motion.div>
         )}
       </div>

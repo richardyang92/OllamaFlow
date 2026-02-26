@@ -65,9 +65,9 @@ function ReactAgentNode(props: NodeProps) {
         }
       default:
         return {
-          color: 'text-gray-400',
-          bg: 'bg-gray-500/10',
-          border: 'border-gray-500/20',
+          color: 'text-[var(--color-text-muted)]',
+          bg: 'bg-[var(--color-bg-input)]',
+          border: 'border-[var(--color-border-subtle)]',
           icon: '⏸️',
           label: '空闲',
         }
@@ -103,8 +103,8 @@ function ReactAgentNode(props: NodeProps) {
 
         {/* Secondary Info - Tools and Max Iterations */}
         <div className="node-secondary-info flex justify-between items-center">
-          <span className="text-gray-400">工具: {totalToolsCount}</span>
-          <span className="text-gray-400">最大迭代: {data.maxIterations}</span>
+          <span className="text-[var(--color-text-muted)]">工具: {totalToolsCount}</span>
+          <span className="text-[var(--color-text-muted)]">最大迭代: {data.maxIterations}</span>
         </div>
 
         {/* Status Indicator */}
@@ -131,7 +131,7 @@ function ReactAgentNode(props: NodeProps) {
             </span>
             {/* Show current iteration */}
             {reactState?.isRunning && (
-              <span className="text-[10px] text-gray-500 ml-1">
+              <span className="text-[10px] text-[var(--color-text-subtle)] ml-1">
                 ({reactState.currentIteration}/{reactState.maxIterations})
               </span>
             )}
@@ -155,13 +155,13 @@ function ReactAgentNode(props: NodeProps) {
           transition={{ duration: 0.3 }}
           className="overflow-hidden"
         >
-          <div className="bg-gray-900/50 border border-gray-700/50 rounded-lg p-3 space-y-2">
-            <div className="text-xs text-gray-400 mb-2">已启用工具:</div>
+          <div className="bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg p-3 space-y-2">
+            <div className="text-xs text-[var(--color-text-muted)] mb-2">已启用工具:</div>
             {enabledTools.map((tool) => (
-              <div key={tool.id} className="text-xs text-gray-300 flex items-center gap-2">
-                <span className="text-purple-400">•</span>
+              <div key={tool.id} className="text-xs text-[var(--color-text)] flex items-center gap-2">
+                <span className="text-[var(--color-node-ai)]">•</span>
                 <span>{tool.label}</span>
-                {tool.builtIn && <span className="text-gray-500">(内置)</span>}
+                {tool.builtIn && <span className="text-[var(--color-text-subtle)]">(内置)</span>}
               </div>
             ))}
           </div>
@@ -169,14 +169,14 @@ function ReactAgentNode(props: NodeProps) {
 
         {/* Structured Reasoning Steps */}
         {(reactState?.steps?.length || nodeStatus === 'running') && (
-          <div className="mt-3 pt-3 border-t border-white/10">
-            <div className="text-xs text-gray-400 mb-2 flex items-center gap-2">
+          <div className="mt-3 pt-3 border-t border-[var(--color-border-subtle)]">
+            <div className="text-xs text-[var(--color-text-muted)] mb-2 flex items-center gap-2">
               <span>推理过程:</span>
               {nodeStatus === 'running' && (
                 <motion.span
                   animate={{ opacity: [1, 0.5, 1] }}
                   transition={{ duration: 1, repeat: Infinity }}
-                  className="text-purple-400"
+                  className="text-[var(--color-node-ai)]"
                 >
                   ●
                 </motion.span>
@@ -185,7 +185,7 @@ function ReactAgentNode(props: NodeProps) {
             {reactState ? (
               <ReActStepsPanel state={reactState} />
             ) : (
-              <div className="text-xs text-gray-500 italic">等待开始...</div>
+              <div className="text-xs text-[var(--color-text-subtle)] italic">等待开始...</div>
             )}
           </div>
         )}

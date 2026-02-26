@@ -20,20 +20,20 @@ function WriteFileNode(props: NodeProps<WriteFileNodeData>) {
 
         {/* Secondary Info - Full path and mode */}
         <div className="node-secondary-info flex justify-between items-center">
-          <div className="text-gray-400 flex-1">
+          <div className="text-[var(--color-text-muted)] flex-1">
             {data.filePath && data.filePath.includes('/') ? (
               <span className="font-mono text-[10px] truncate block">
                 {data.filePath}
               </span>
             ) : (
-              <span className="text-gray-500">无路径</span>
+              <span className="text-[var(--color-text-subtle)]">无路径</span>
             )}
           </div>
           <span className={cn(
             "text-[10px] font-medium px-2 py-0.5 rounded",
             data.writeMode === 'overwrite'
-              ? "bg-orange-500/20 text-orange-400"
-              : "bg-blue-500/20 text-blue-400"
+              ? "bg-[var(--color-node-file-bg)] text-[var(--color-node-file)]"
+              : "bg-[var(--color-node-logic-bg)] text-[var(--color-node-logic)]"
           )}>
             {data.writeMode === 'overwrite' ? '覆盖' : '追加'}
           </span>

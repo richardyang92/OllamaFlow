@@ -1,4 +1,5 @@
 import { Node } from '@xyflow/react'
+import type { NodeIconType } from '@/components/icons'
 
 // Port types
 export type PortDataType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'any'
@@ -366,7 +367,7 @@ export type WorkflowNode = Node<WorkflowNodeData>
 export interface NodeTemplate {
   type: NodeType
   label: string
-  icon: string
+  icon: NodeIconType
   category: string
   description: string
   defaultData: Partial<WorkflowNodeData>
@@ -377,7 +378,7 @@ export const nodeTemplates: NodeTemplate[] = [
   {
     type: 'input',
     label: '输入',
-    icon: '📥',
+    icon: 'input',
     category: 'Input',
     colorScheme: 'cyan',
     description: '在工作流执行时获取用户输入',
@@ -395,7 +396,7 @@ export const nodeTemplates: NodeTemplate[] = [
   {
     type: 'ollamaChat',
     label: 'Ollama 对话',
-    icon: '🤖',
+    icon: 'ollamaChat',
     category: 'AI',
     colorScheme: 'purple',
     description: '与 Ollama 模型对话',
@@ -417,7 +418,7 @@ export const nodeTemplates: NodeTemplate[] = [
   {
     type: 'set',
     label: '设置变量',
-    icon: '✏️',
+    icon: 'set',
     category: 'Data',
     colorScheme: 'yellow',
     description: '设置一个变量',
@@ -435,7 +436,7 @@ export const nodeTemplates: NodeTemplate[] = [
   {
     type: 'if',
     label: '条件判断',
-    icon: '🔀',
+    icon: 'if',
     category: 'Logic',
     colorScheme: 'blue',
     description: '条件分支',
@@ -454,7 +455,7 @@ export const nodeTemplates: NodeTemplate[] = [
   {
     type: 'loop',
     label: '循环',
-    icon: '🔄',
+    icon: 'loop',
     category: 'Logic',
     colorScheme: 'blue',
     description: '循环执行',
@@ -486,7 +487,7 @@ export const nodeTemplates: NodeTemplate[] = [
   {
     type: 'output',
     label: '输出',
-    icon: '📤',
+    icon: 'output',
     category: 'Output',
     colorScheme: 'teal',
     description: '显示输出',
@@ -503,7 +504,7 @@ export const nodeTemplates: NodeTemplate[] = [
   {
     type: 'image',
     label: '图片显示',
-    icon: '🖼️',
+    icon: 'image',
     category: 'Output',
     colorScheme: 'teal',
     description: '显示图片',
@@ -519,7 +520,7 @@ export const nodeTemplates: NodeTemplate[] = [
   {
     type: 'readFile',
     label: '读取文件',
-    icon: '📄',
+    icon: 'readFile',
     category: 'File',
     colorScheme: 'orange',
     description: '从工作区读取文件',
@@ -540,7 +541,7 @@ export const nodeTemplates: NodeTemplate[] = [
   {
     type: 'writeFile',
     label: '写入文件',
-    icon: '💾',
+    icon: 'writeFile',
     category: 'File',
     colorScheme: 'orange',
     description: '写入文件到工作区',
@@ -562,7 +563,7 @@ export const nodeTemplates: NodeTemplate[] = [
   {
     type: 'executeCommand',
     label: '执行命令',
-    icon: '⚡',
+    icon: 'executeCommand',
     category: 'System',
     colorScheme: 'red',
     description: '执行 Shell 命令',
@@ -585,7 +586,7 @@ export const nodeTemplates: NodeTemplate[] = [
   {
     type: 'reactAgent',
     label: 'ReAct 智能体',
-    icon: '🧠',
+    icon: 'reactAgent',
     category: 'AI',
     colorScheme: 'purple',
     description: '推理与行动的 AI 智能体，支持多工具协作',

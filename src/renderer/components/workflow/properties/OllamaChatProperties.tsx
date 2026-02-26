@@ -90,7 +90,7 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
     <div className="space-y-4">
       {/* 模型选择 */}
       <div>
-        <label className="block text-xs font-medium text-zinc-400 mb-1">
+        <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">
           {data.debugMode?.enabled ? '模型 (Debug Mode)' : '模型'}
         </label>
         {data.debugMode?.enabled ? (
@@ -98,10 +98,10 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
           <div className="space-y-2">
             <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/30 rounded-lg">
               <span className="text-green-400">🔬</span>
-              <span className="text-sm text-zinc-200">{data.debugMode?.model || 'gpt-4o'}</span>
-              <span className="text-xs text-zinc-500 ml-auto">OpenAI</span>
+              <span className="text-sm text-[var(--color-text)]">{data.debugMode?.model || 'gpt-4o'}</span>
+              <span className="text-xs text-[var(--color-text-muted)] ml-auto">OpenAI</span>
             </div>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-[var(--color-text-muted)]">
               Debug Mode 已启用，使用 OpenAI API。可在下方 Debug Mode 区域修改配置。
             </p>
           </div>
@@ -113,12 +113,11 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
               onChange={(e) => updateNodeData(node.id, { model: e.target.value })}
               className={cn(
                 'w-full px-3 py-2 rounded-lg',
-                'bg-white/5',
-                'border border-white/10',
-                'text-white text-sm',
-                'focus:outline-none focus:border-white/20 focus:bg-white/8',
-                'transition-all duration-200',
-                'select-sci-fi'
+                'bg-[var(--color-bg-input)]',
+                'border border-[var(--color-border-subtle)]',
+                'text-[var(--color-text)] text-sm',
+                'focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)]',
+                'transition-all duration-200'
               )}
             >
               {isLoading ? (
@@ -145,34 +144,34 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
 
       {/* 系统提示词 */}
       <div>
-        <label className="block text-xs font-medium text-zinc-400 mb-1">系统提示词</label>
+        <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">系统提示词</label>
         <textarea
           value={data.systemPrompt}
           onChange={(e) => updateNodeData(node.id, { systemPrompt: e.target.value })}
           rows={3}
-          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-white/20 focus:bg-white/8 transition-all resize-none"
+          className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all resize-none"
           placeholder="设置 AI 的角色和行为..."
         />
       </div>
 
       {/* 用户消息 */}
       <div>
-        <label className="block text-xs font-medium text-zinc-400 mb-1">
+        <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">
           用户消息
-          <span className="text-zinc-500 ml-1">(支持 {'{{变量}}'})</span>
+          <span className="text-[var(--color-text-muted)] ml-1">(支持 {'{{变量}}'})</span>
         </label>
         <textarea
           value={data.userMessage}
           onChange={(e) => updateNodeData(node.id, { userMessage: e.target.value })}
           rows={3}
-          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-white/20 focus:bg-white/8 transition-all resize-none"
+          className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all resize-none"
           placeholder="输入要发送给 AI 的消息..."
         />
       </div>
 
       {/* 温度 */}
       <div>
-        <label className="block text-xs font-medium text-zinc-400 mb-1">
+        <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">
           温度: {data.temperature}
         </label>
         <input
@@ -184,12 +183,12 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
           onChange={(e) => updateNodeData(node.id, { temperature: parseFloat(e.target.value) })}
           className="w-full"
         />
-        <p className="text-xs text-zinc-500 mt-1">控制输出的随机性，值越高越随机</p>
+        <p className="text-xs text-[var(--color-text-muted)] mt-1">控制输出的随机性，值越高越随机</p>
       </div>
 
       {/* Top P */}
       <div>
-        <label className="block text-xs font-medium text-zinc-400 mb-1">Top P: {data.topP}</label>
+        <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">Top P: {data.topP}</label>
         <input
           type="range"
           min="0"
@@ -199,21 +198,21 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
           onChange={(e) => updateNodeData(node.id, { topP: parseFloat(e.target.value) })}
           className="w-full"
         />
-        <p className="text-xs text-zinc-500 mt-1">控制词汇的多样性</p>
+        <p className="text-xs text-[var(--color-text-muted)] mt-1">控制词汇的多样性</p>
       </div>
 
       {/* 最大 Token 数 */}
       <div>
-        <label className="block text-xs font-medium text-zinc-400 mb-1">最大 Token 数</label>
+        <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">最大 Token 数</label>
         <input
           type="number"
           min="1"
           max="32768"
           value={data.maxTokens}
           onChange={(e) => updateNodeData(node.id, { maxTokens: parseInt(e.target.value) })}
-          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-white/20 focus:bg-white/8 transition-all"
+          className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all"
         />
-        <p className="text-xs text-zinc-500 mt-1">限制生成的最大长度</p>
+        <p className="text-xs text-[var(--color-text-muted)] mt-1">限制生成的最大长度</p>
       </div>
 
       {/* 流式输出 */}
@@ -223,21 +222,21 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
           id="stream"
           checked={data.stream}
           onChange={(e) => updateNodeData(node.id, { stream: e.target.checked })}
-          className="rounded border-white/20 bg-white/5"
+          className="rounded border-[var(--color-border-subtle)] bg-[var(--color-bg-input)]"
         />
-        <label htmlFor="stream" className="text-sm text-zinc-300">
+        <label htmlFor="stream" className="text-sm text-[var(--color-text)]">
           启用流式输出
         </label>
       </div>
 
       {/* 调试模式 - 可折叠区域 */}
-      <div className="border-t border-white/10 pt-4">
+      <div className="border-t border-[var(--color-border-subtle)] pt-4">
         <button
           type="button"
           onClick={() => setIsDebugExpanded(!isDebugExpanded)}
           className="flex items-center justify-between w-full text-left"
         >
-          <span className="text-xs font-medium text-zinc-400 flex items-center gap-2">
+          <span className="text-xs font-medium text-[var(--color-text-muted)] flex items-center gap-2">
             <span>🔬</span> Debug Mode (OpenAI)
             {data.debugMode?.enabled && (
               <span className="text-[10px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded">
@@ -247,7 +246,7 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
           </span>
           <span
             className={cn(
-              'text-zinc-500 transition-transform',
+              'text-[var(--color-text-muted)] transition-transform',
               isDebugExpanded && 'rotate-180'
             )}
           >
@@ -273,9 +272,9 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
                     },
                   })
                 }
-                className="rounded border-white/20 bg-white/5"
+                className="rounded border-[var(--color-border-subtle)] bg-[var(--color-bg-input)]"
               />
-              <label htmlFor="debugMode" className="text-sm text-zinc-300">
+              <label htmlFor="debugMode" className="text-sm text-[var(--color-text)]">
                 启用 Debug Mode
               </label>
             </div>
@@ -284,7 +283,7 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
               <>
                 {/* API Endpoint */}
                 <div>
-                  <label className="block text-xs text-zinc-400 mb-1">API Endpoint</label>
+                  <label className="block text-xs text-[var(--color-text-muted)] mb-1">API Endpoint</label>
                   <input
                     type="text"
                     value={data.debugMode?.apiEndpoint || ''}
@@ -294,29 +293,29 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
                       })
                     }
                     placeholder="https://api.openai.com/v1"
-                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-white/20 focus:bg-white/8 transition-all"
+                    className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all"
                   />
                 </div>
 
                 {/* API Key */}
                 <div>
-                  <label className="block text-xs text-zinc-400 mb-1">API Key</label>
+                  <label className="block text-xs text-[var(--color-text-muted)] mb-1">API Key</label>
                   <input
                     type="password"
                     placeholder={hasWorkspaceApiKey ? "使用工作区默认 Key（留空）" : "sk-..."}
                     onBlur={(e) => handleSaveApiKey(e.target.value)}
-                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-white/20 focus:bg-white/8 transition-all"
+                    className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all"
                   />
                   {hasWorkspaceApiKey ? (
                     <p className="text-xs text-green-500 mt-1">✓ 已有工作区默认 API Key，可留空使用</p>
                   ) : (
-                    <p className="text-xs text-zinc-500 mt-1">安全存储于本地，不会保存到工作流文件</p>
+                    <p className="text-xs text-[var(--color-text-muted)] mt-1">安全存储于本地，不会保存到工作流文件</p>
                   )}
                 </div>
 
                 {/* Model Input */}
                 <div>
-                  <label className="block text-xs text-zinc-400 mb-1">模型名称</label>
+                  <label className="block text-xs text-[var(--color-text-muted)] mb-1">模型名称</label>
                   <input
                     type="text"
                     value={data.debugMode?.model || ''}
@@ -326,9 +325,9 @@ export default function OllamaChatProperties({ node, updateNodeData }: Props) {
                       })
                     }
                     placeholder="gpt-4o, deepseek-chat, etc."
-                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-white/20 focus:bg-white/8 transition-all"
+                    className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all"
                   />
-                  <p className="text-xs text-zinc-500 mt-1">支持 OpenAI 兼容 API 的模型名称</p>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1">支持 OpenAI 兼容 API 的模型名称</p>
                 </div>
 
                 {/* Save to Workspace */}

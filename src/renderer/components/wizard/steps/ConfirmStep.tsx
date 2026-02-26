@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { AlertTriangle, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { projectTemplates } from '../templates'
 
@@ -34,55 +35,53 @@ export default function ConfirmStep({
       className="space-y-6"
     >
       <div className="text-center">
-        <h3 className="text-xl font-medium text-white mb-2">确认创建</h3>
-        <p className="text-sm text-zinc-400">
+        <h3 className="text-xl font-medium text-[var(--color-text)] mb-2">确认创建</h3>
+        <p className="text-sm text-[var(--color-text-muted)]">
           检查您的设置并选择初始模板
         </p>
       </div>
 
       <div className="space-y-4">
-        {/* Settings Summary */}
-        <div className="p-4 bg-white/5 border border-white/10 rounded-lg space-y-3">
-          <h4 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
-            <span>📋</span> 配置摘要
+        <div className="p-4 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg space-y-3">
+          <h4 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
+            <ClipboardList className="w-4 h-4" /> 配置摘要
           </h4>
 
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
-              <p className="text-zinc-500 text-xs">项目名称</p>
-              <p className="text-zinc-200">{projectName || '(未设置)'}</p>
+              <p className="text-[var(--color-text-muted)] text-xs">项目名称</p>
+              <p className="text-[var(--color-text)]">{projectName || '(未设置)'}</p>
             </div>
             <div>
-              <p className="text-zinc-500 text-xs">AI 后端</p>
-              <p className="text-zinc-200">
-                {aiBackend === 'ollama' ? '🦙 Ollama' : '🌐 OpenAI 兼容'}
+              <p className="text-[var(--color-text-muted)] text-xs">AI 后端</p>
+              <p className="text-[var(--color-text)]">
+                {aiBackend === 'ollama' ? 'Ollama' : 'OpenAI 兼容'}
               </p>
             </div>
             <div className="col-span-2">
-              <p className="text-zinc-500 text-xs">保存位置</p>
-              <p className="text-zinc-200 text-xs break-all">{projectPath}</p>
+              <p className="text-[var(--color-text-muted)] text-xs">保存位置</p>
+              <p className="text-[var(--color-text)] text-xs break-all">{projectPath}</p>
             </div>
             <div>
-              <p className="text-zinc-500 text-xs">API 端点</p>
-              <p className="text-zinc-200 text-xs">{apiEndpoint}</p>
+              <p className="text-[var(--color-text-muted)] text-xs">API 端点</p>
+              <p className="text-[var(--color-text)] text-xs">{apiEndpoint}</p>
             </div>
             <div>
-              <p className="text-zinc-500 text-xs">默认模型</p>
-              <p className="text-zinc-200">{defaultModel || '(未设置)'}</p>
+              <p className="text-[var(--color-text-muted)] text-xs">默认模型</p>
+              <p className="text-[var(--color-text)]">{defaultModel || '(未设置)'}</p>
             </div>
           </div>
 
           {description && (
             <div>
-              <p className="text-zinc-500 text-xs">项目描述</p>
-              <p className="text-zinc-400 text-sm">{description}</p>
+              <p className="text-[var(--color-text-muted)] text-xs">项目描述</p>
+              <p className="text-[var(--color-text-muted)] text-sm">{description}</p>
             </div>
           )}
         </div>
 
-        {/* Template Selection */}
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-zinc-300">
+          <label className="block text-sm font-medium text-[var(--color-text)]">
             选择初始模板
           </label>
           <div className="grid grid-cols-3 gap-3">
@@ -94,14 +93,14 @@ export default function ConfirmStep({
                   'p-4 rounded-lg border transition-all text-left',
                   selectedTemplate === template.id
                     ? 'bg-blue-500/20 border-blue-500/50 ring-1 ring-blue-500/30'
-                    : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
+                    : 'bg-[var(--color-bg-input)] border-[var(--color-border-subtle)] hover:bg-[var(--color-bg-hover)] hover:border-[var(--color-border)]'
                 )}
               >
                 <div className="text-2xl mb-2">{template.icon}</div>
-                <div className="font-medium text-sm text-zinc-200">
+                <div className="font-medium text-sm text-[var(--color-text)]">
                   {template.name}
                 </div>
-                <div className="text-xs text-zinc-500 mt-1">
+                <div className="text-xs text-[var(--color-text-muted)] mt-1">
                   {template.description}
                 </div>
               </button>
@@ -109,11 +108,10 @@ export default function ConfirmStep({
           </div>
         </div>
 
-        {/* Warning for existing workspace */}
         <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
           <div className="flex items-start gap-2">
-            <span className="text-yellow-400">⚠️</span>
-            <p className="text-xs text-zinc-400">
+            <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-[var(--color-text-muted)]">
               如果所选目录已包含工作区配置，将会被覆盖。
             </p>
           </div>

@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { NodeProps } from '@xyflow/react'
+import { GitBranch } from 'lucide-react'
 import BaseNode from './BaseNode'
 import { IfNodeData } from '@/types/node'
 
@@ -7,11 +8,10 @@ function IfNode(props: NodeProps<IfNodeData>) {
   const { data } = props
 
   return (
-    <BaseNode {...props} icon="🔀">
+    <BaseNode {...props} icon={<GitBranch className="w-4 h-4" />}>
       <div className="space-y-3 w-full">
-        {/* Primary Badge - Expression Preview */}
         <div className="node-primary-badge logic">
-          <span className="text-lg">🔀</span>
+          <GitBranch className="w-4 h-4" />
           <span className="font-mono font-semibold text-sm truncate">
             {data.expression.length > 20
               ? `${data.expression.substring(0, 20)}...`
@@ -19,10 +19,9 @@ function IfNode(props: NodeProps<IfNodeData>) {
           </span>
         </div>
 
-        {/* Secondary Info - Full expression */}
         {data.expression && data.expression.length > 20 && (
           <div className="node-secondary-info">
-            <div className="font-mono text-[10px] text-gray-400 truncate">
+            <div className="font-mono text-[10px] text-[var(--color-text-muted)] truncate">
               {data.expression}
             </div>
           </div>

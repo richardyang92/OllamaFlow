@@ -124,12 +124,12 @@ function ImageNode(props: NodeProps) {
 
       // Create modal content
       const modalContent = document.createElement('div')
-      modalContent.className = 'relative bg-zinc-900 rounded-lg p-4 m-4 max-w-[90vw] max-h-[90vh] overflow-auto'
+      modalContent.className = 'relative bg-[var(--color-bg-elevated)] rounded-lg p-4 m-4 max-w-[90vw] max-h-[90vh] overflow-auto'
       modalContent.onclick = (e) => e.stopPropagation()
 
       // Create close button
       const closeButton = document.createElement('button')
-      closeButton.className = 'absolute top-2 right-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full p-1 transition-colors'
+      closeButton.className = 'absolute top-2 right-2 bg-[var(--color-bg-input)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text)] rounded-full p-1 transition-colors'
       closeButton.textContent = '×'
       closeButton.onclick = () => {
         document.body.removeChild(modalElement)
@@ -143,7 +143,7 @@ function ImageNode(props: NodeProps) {
 
       // Create URL info
       const urlInfo = document.createElement('div')
-      urlInfo.className = 'mt-4 text-center text-zinc-400 text-sm'
+      urlInfo.className = 'mt-4 text-center text-[var(--color-text-muted)] text-sm'
       urlInfo.textContent = imageUrl || ''
 
       // Assemble modal
@@ -160,28 +160,28 @@ function ImageNode(props: NodeProps) {
   return (
     <BaseNode {...props} icon="🖼️">
       <div className="text-xs space-y-2">
-        <div className="text-gray-400">来源: {sourceTypeLabels[data.sourceType || 'input']}
+        <div className="text-[var(--color-text-muted)]">来源: {sourceTypeLabels[data.sourceType || 'input']}
           {data.sourceType === 'variable' && data.variableName && (
-            <span className="text-cyan-400 ml-1">({data.variableName})</span>
+            <span className="text-[var(--color-node-input)] ml-1">({data.variableName})</span>
           )}
         </div>
         {imageUrl && (
           <div className="space-y-2">
-            <div className="text-gray-400">图片URL:</div>
+            <div className="text-[var(--color-text-muted)]">图片URL:</div>
             <div className={cn(
-              'bg-white/5 rounded-md p-2',
-              'text-zinc-300 font-mono text-xs',
-              'border border-white/10',
+              'bg-[var(--color-bg-input)] rounded-md p-2',
+              'text-[var(--color-text)] font-mono text-xs',
+              'border border-[var(--color-border-subtle)]',
               'max-h-12',
               'overflow-y-auto'
             )}>
               {imageUrl}
             </div>
             <div className={cn(
-              'bg-white/5 rounded-md p-2',
-              'border border-white/10',
+              'bg-[var(--color-bg-input)] rounded-md p-2',
+              'border border-[var(--color-border-subtle)]',
               'flex items-center justify-center',
-              'cursor-pointer hover:bg-white/10 transition-colors'
+              'cursor-pointer hover:bg-[var(--color-bg-hover)] transition-colors'
             )} onClick={handleImageClick}>
               {imageDataUrl ? (
                 <img 
@@ -194,16 +194,16 @@ function ImageNode(props: NodeProps) {
                   }}
                 />
               ) : loadError ? (
-                <div className="text-zinc-400">图片加载失败</div>
+                <div className="text-[var(--color-text-muted)]">图片加载失败</div>
               ) : (
-                <div className="text-zinc-400">加载中...</div>
+                <div className="text-[var(--color-text-muted)]">加载中...</div>
               )}
-              <div className="hidden text-zinc-400">图片加载失败</div>
+              <div className="hidden text-[var(--color-text-muted)]">图片加载失败</div>
             </div>
           </div>
         )}
         {!imageUrl && (
-          <div className="text-zinc-400">等待输入图片URL...</div>
+          <div className="text-[var(--color-text-muted)]">等待输入图片URL...</div>
         )}
       </div>
     </BaseNode>

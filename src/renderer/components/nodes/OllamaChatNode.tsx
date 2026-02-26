@@ -1,5 +1,6 @@
 import { memo, useRef, useEffect, useState } from 'react'
 import { NodeProps } from '@xyflow/react'
+import { Bot, Microscope, ChevronDown, Loader2, CheckCircle, XCircle, Circle } from 'lucide-react'
 import BaseNode from './BaseNode'
 import { OllamaChatNodeData, NodeStatus } from '@/types/node'
 import { useStreamOutput } from '@/hooks/useStreamOutput'
@@ -104,34 +105,34 @@ function OllamaChatNode(props: NodeProps) {
     switch (status) {
       case 'running':
         return {
-          color: 'text-blue-400',
+          color: 'text-blue-500',
           bg: 'bg-blue-500/10',
           border: 'border-blue-500/20',
-          icon: '🔄',
+          icon: <Loader2 className="w-3.5 h-3.5" />,
           label: '推理中'
         }
       case 'success':
         return {
-          color: 'text-green-400',
+          color: 'text-green-500',
           bg: 'bg-green-500/10',
           border: 'border-green-500/20',
-          icon: '✅',
+          icon: <CheckCircle className="w-3.5 h-3.5" />,
           label: '完成'
         }
       case 'error':
         return {
-          color: 'text-red-400',
+          color: 'text-red-500',
           bg: 'bg-red-500/10',
           border: 'border-red-500/20',
-          icon: '❌',
+          icon: <XCircle className="w-3.5 h-3.5" />,
           label: '错误'
         }
       default:
         return {
-          color: 'text-gray-400',
-          bg: 'bg-gray-500/10',
-          border: 'border-gray-500/20',
-          icon: '⏸️',
+          color: 'text-[var(--color-text-muted)]',
+          bg: 'bg-[var(--color-bg-input)]',
+          border: 'border-[var(--color-border-subtle)]',
+          icon: <Circle className="w-3.5 h-3.5" />,
           label: '空闲'
         }
     }
@@ -140,27 +141,25 @@ function OllamaChatNode(props: NodeProps) {
   const statusStyle = getStatusStyle()
 
   return (
-    <BaseNode {...props} icon={data.debugMode?.enabled ? "🔬" : "🤖"}>
+    <BaseNode {...props} icon={data.debugMode?.enabled ? <Microscope className="w-4 h-4" /> : <Bot className="w-4 h-4" />}>
       <div className="space-y-3 w-full">
-        {/* Primary Badge - Model Name */}
         <div className="node-primary-badge ai">
-          <span className="text-lg">{data.debugMode?.enabled ? "🔬" : "🤖"}</span>
+          {data.debugMode?.enabled ? <Microscope className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
           <span className="font-semibold truncate">
             {data.debugMode?.enabled ? data.debugMode.model : data.model}
           </span>
         </div>
 
-        {/* Debug Mode Indicator */}
         {data.debugMode?.enabled && (
           <div className="text-[10px] px-2 py-1 bg-amber-500/20 text-amber-400 rounded flex items-center gap-1">
-            <span>🔬</span> Debug Mode (OpenAI)
+            <Microscope className="w-3 h-3" /> Debug Mode (OpenAI)
           </div>
         )}
 
         {/* Secondary Info - Temperature and Stream */}
         <div className="node-secondary-info flex justify-between items-center">
-          <span className="text-gray-400">温度: {data.temperature}</span>
-          {data.stream && <span className="text-blue-400 text-[10px] font-medium">● 流式</span>}
+          <span className="text-[var(--color-text-muted)]">温度: {data.temperature}</span>
+          {data.stream && <span className="text-[var(--color-node-logic)] text-[10px] font-medium">● 流式</span>}
         </div>
 
         {/* Inference Status Indicator */}
@@ -187,7 +186,7 @@ function OllamaChatNode(props: NodeProps) {
             animate={{ rotate: isDetailsExpanded ? 180 : 0 }}
             transition={{ duration: 0.2 }}
           >
-            ▼
+            <ChevronDown className="w-3.5 h-3.5" />
           </motion.span>
         </motion.div>
 
@@ -201,20 +200,20 @@ function OllamaChatNode(props: NodeProps) {
           transition={{ duration: 0.3, ease: 'easeInOut' }}
           className="overflow-hidden"
         >
-          <div className="bg-gray-900/50 border border-gray-700/50 rounded-lg p-3 space-y-2">
+          <div className="bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg p-3 space-y-2">
               {/* Status Details */}
             <div className="grid grid-cols-3 gap-2 text-xs">
               <div className="space-y-1">
-                <span className="text-gray-500">当前步骤 </span>
-                <span className="text-gray-300 truncate">{inferenceStatus.currentStep}</span>
+                <span className="text-[var(--color-text-subtle)]">当前步骤 </span>
+                <span className="text-[var(--color-text)] truncate">{inferenceStatus.currentStep}</span>
               </div>
               <div className="space-y-1">
-                <span className="text-gray-500">处理 token </span>
-                <span className="text-gray-300">{inferenceStatus.tokensProcessed}</span>
+                <span className="text-[var(--color-text-subtle)]">处理 token </span>
+                <span className="text-[var(--color-text)]">{inferenceStatus.tokensProcessed}</span>
               </div>
               <div className="space-y-1">
-                <span className="text-gray-500">每秒 token </span>
-                <span className="text-gray-300">{inferenceStatus.tokensPerSecond.toFixed(1)}</span>
+                <span className="text-[var(--color-text-subtle)]">每秒 token </span>
+                <span className="text-[var(--color-text)]">{inferenceStatus.tokensPerSecond.toFixed(1)}</span>
               </div>
             </div>
           </div>
@@ -222,11 +221,11 @@ function OllamaChatNode(props: NodeProps) {
 
         {/* Show streaming output if available */}
         {streamOutput && (
-          <div className="mt-3 pt-3 border-t border-white/10">
-            <div className="text-xs text-gray-400 mb-1.5">输出:</div>
+          <div className="mt-3 pt-3 border-t border-[var(--color-border-subtle)]">
+            <div className="text-xs text-[var(--color-text-muted)] mb-1.5">输出:</div>
             <div 
               ref={outputRef}
-              className="text-xs text-gray-300 max-h-24 overflow-y-auto whitespace-pre-wrap break-words leading-relaxed"
+              className="text-xs text-[var(--color-text)] max-h-24 overflow-y-auto whitespace-pre-wrap break-words leading-relaxed"
             >
               {streamOutput}
             </div>

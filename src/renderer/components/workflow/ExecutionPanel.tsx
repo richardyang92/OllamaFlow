@@ -2,6 +2,7 @@ import { useExecutionStore } from '@/store/execution-store'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useRef, useEffect } from 'react'
+import { Trash2, ChevronDown, FolderOpen, Folder, ClipboardList } from 'lucide-react'
 
 export default function ExecutionPanel({
   onClose,
@@ -53,25 +54,25 @@ export default function ExecutionPanel({
         <div className="flex items-center gap-2">
           <button
             onClick={clearLogs}
-            className="text-zinc-400 hover:text-white text-xs transition-colors"
+            className="text-zinc-400 hover:text-white transition-colors p-1 rounded hover:bg-white/10"
             title="清空日志"
           >
-            🗑️
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={onToggleFiles}
-            className="text-zinc-400 hover:text-white text-xs transition-colors"
+            className="text-zinc-400 hover:text-white transition-colors p-1 rounded hover:bg-white/10"
             title={showFiles ? '隐藏文件' : '显示文件'}
           >
-            {showFiles ? '📁' : '📂'}
+            {showFiles ? <FolderOpen className="w-3.5 h-3.5" /> : <Folder className="w-3.5 h-3.5" />}
           </button>
           {onClose && (
             <button
               onClick={onClose}
-              className="text-zinc-400 hover:text-white text-xs transition-colors"
+              className="text-zinc-400 hover:text-white transition-colors p-1 rounded hover:bg-white/10"
               title="收起"
             >
-              ▼
+              <ChevronDown className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
@@ -81,7 +82,7 @@ export default function ExecutionPanel({
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-2 space-y-1.5 font-mono text-[10px]">
         {logs.length === 0 ? (
           <div className="text-zinc-500 text-center py-4">
-            <div className="text-2xl mb-1.5 opacity-50">📋</div>
+            <ClipboardList className="w-6 h-6 mx-auto mb-1.5 opacity-50" />
             <p className="text-xs">点击"执行"按钮运行工作流</p>
           </div>
         ) : (

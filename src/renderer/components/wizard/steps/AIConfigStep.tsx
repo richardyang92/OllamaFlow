@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
+import { Loader2, Check, X, Lightbulb } from 'lucide-react'
 
 type AIBackend = 'ollama' | 'openai'
 
@@ -57,7 +58,6 @@ export default function AIConfigStep({
           setModels(json.models || [])
           setConnectionStatus('success')
 
-          // Set first model as default if current model is empty
           if (!defaultModel && json.models?.length > 0) {
             onModelChange(json.models[0].name)
           }
@@ -65,7 +65,6 @@ export default function AIConfigStep({
           throw new Error(`HTTP ${response.status}: ${response.statusText}`)
         }
       } else {
-        // OpenAI compatible endpoint
         const response = await fetch(`${apiEndpoint}/models`, {
           method: 'GET',
           headers: {
@@ -82,7 +81,6 @@ export default function AIConfigStep({
           setModels(modelList)
           setConnectionStatus('success')
 
-          // Set first model as default if current model is empty
           if (!defaultModel && modelList.length > 0) {
             onModelChange(modelList[0].name)
           }
@@ -99,7 +97,6 @@ export default function AIConfigStep({
     }
   }, [aiBackend, apiEndpoint, apiKey, defaultModel, onModelChange])
 
-  // Auto-check connection when endpoint changes (debounced)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (aiBackend === 'ollama' ? apiEndpoint : (apiEndpoint && apiKey)) {
@@ -110,7 +107,6 @@ export default function AIConfigStep({
     return () => clearTimeout(timer)
   }, [aiBackend, apiEndpoint, apiKey, checkConnection])
 
-  // Reset status when switching backend
   useEffect(() => {
     setConnectionStatus('idle')
     setConnectionError(null)
@@ -121,14 +117,11 @@ export default function AIConfigStep({
   const getStatusIcon = () => {
     switch (connectionStatus) {
       case 'checking':
-        return <svg className="animate-spin h-4 w-4 text-blue-400" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-        </svg>
+        return <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
       case 'success':
-        return <span className="text-green-400">✓</span>
+        return <Check className="w-4 h-4 text-green-400" />
       case 'error':
-        return <span className="text-red-400">✕</span>
+        return <X className="w-4 h-4 text-red-400" />
       default:
         return null
     }
@@ -143,16 +136,15 @@ export default function AIConfigStep({
       className="space-y-6"
     >
       <div className="text-center">
-        <h3 className="text-xl font-medium text-white mb-2">AI 配置</h3>
-        <p className="text-sm text-zinc-400">
+        <h3 className="text-xl font-medium text-[var(--color-text)] mb-2">AI 配置</h3>
+        <p className="text-sm text-[var(--color-text-muted)]">
           配置您的 AI 后端和默认模型
         </p>
       </div>
 
       <div className="space-y-4">
-        {/* Backend Selection */}
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-zinc-300">
+          <label className="block text-sm font-medium text-[var(--color-text)]">
             AI 后端
           </label>
           <div className="grid grid-cols-2 gap-2">
@@ -160,32 +152,29 @@ export default function AIConfigStep({
               onClick={() => onBackendChange('ollama')}
               className={`p-3 rounded-lg border transition-all text-left ${
                 aiBackend === 'ollama'
-                  ? 'bg-purple-500/20 border-purple-500/50 text-white'
-                  : 'bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10'
+                  ? 'bg-purple-500/20 border-purple-500/50 text-[var(--color-text)]'
+                  : 'bg-[var(--color-bg-input)] border-[var(--color-border-subtle)] text-[var(--color-text-muted)] hover:bg-[var(--color-bg-hover)]'
               }`}
             >
-              <span className="text-lg">🦙</span>
               <p className="text-sm font-medium mt-1">Ollama</p>
-              <p className="text-xs text-zinc-500">本地模型</p>
+              <p className="text-xs text-[var(--color-text-muted)]">本地模型</p>
             </button>
             <button
               onClick={() => onBackendChange('openai')}
               className={`p-3 rounded-lg border transition-all text-left ${
                 aiBackend === 'openai'
-                  ? 'bg-blue-500/20 border-blue-500/50 text-white'
-                  : 'bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10'
+                  ? 'bg-blue-500/20 border-blue-500/50 text-[var(--color-text)]'
+                  : 'bg-[var(--color-bg-input)] border-[var(--color-border-subtle)] text-[var(--color-text-muted)] hover:bg-[var(--color-bg-hover)]'
               }`}
             >
-              <span className="text-lg">🌐</span>
               <p className="text-sm font-medium mt-1">OpenAI 兼容</p>
-              <p className="text-xs text-zinc-500">远程 API</p>
+              <p className="text-xs text-[var(--color-text-muted)]">远程 API</p>
             </button>
           </div>
         </div>
 
-        {/* API Endpoint */}
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-zinc-300">
+          <label className="block text-sm font-medium text-[var(--color-text)]">
             {aiBackend === 'ollama' ? 'Ollama 主机地址' : 'API 端点'}
           </label>
           <div className="flex gap-2">
@@ -195,7 +184,7 @@ export default function AIConfigStep({
                 value={apiEndpoint}
                 onChange={(e) => onEndpointChange(e.target.value)}
                 placeholder={aiBackend === 'ollama' ? 'http://127.0.0.1:11434' : 'https://api.openai.com/v1'}
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-blue-500/50 transition-all pr-10"
+                className="w-full px-4 py-3 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-blue-500/50 transition-all pr-10"
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
                 {getStatusIcon()}
@@ -204,17 +193,16 @@ export default function AIConfigStep({
             <button
               onClick={checkConnection}
               disabled={isLoadingModels || (aiBackend === 'openai' && !apiKey)}
-              className="px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-300 hover:bg-white/10 hover:border-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-3 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] hover:border-[var(--color-border)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               测试
             </button>
           </div>
         </div>
 
-        {/* API Key (OpenAI only) */}
         {aiBackend === 'openai' && (
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-zinc-300">
+            <label className="block text-sm font-medium text-[var(--color-text)]">
               API Key <span className="text-red-400">*</span>
             </label>
             <input
@@ -222,27 +210,25 @@ export default function AIConfigStep({
               value={apiKey}
               onChange={(e) => onApiKeyChange(e.target.value)}
               placeholder="sk-..."
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-blue-500/50 transition-all"
+              className="w-full px-4 py-3 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-blue-500/50 transition-all"
             />
           </div>
         )}
 
-        {/* Connection Status */}
         {connectionError && (
           <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
             <div className="flex items-start gap-2">
-              <span className="text-red-400">⚠️</span>
+              <X className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm text-red-400">连接失败</p>
-                <p className="text-xs text-zinc-500 mt-1">{connectionError}</p>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">{connectionError}</p>
               </div>
             </div>
           </div>
         )}
 
-        {/* Model Selection */}
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-zinc-300">
+          <label className="block text-sm font-medium text-[var(--color-text)]">
             默认模型
           </label>
 
@@ -251,18 +237,18 @@ export default function AIConfigStep({
               <select
                 value={defaultModel}
                 onChange={(e) => onModelChange(e.target.value)}
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-blue-500/50 transition-all"
+                className="w-full px-4 py-3 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] focus:outline-none focus:border-blue-500/50 transition-all"
               >
-                <option value="" className="bg-zinc-800">选择模型...</option>
+                <option value="" className="bg-[var(--color-bg-input)]">选择模型...</option>
                 {models.map((model) => (
-                  <option key={model.name} value={model.name} className="bg-zinc-800">
+                  <option key={model.name} value={model.name} className="bg-[var(--color-bg-input)]">
                     {model.name}
                   </option>
                 ))}
               </select>
               <button
                 onClick={() => setManualModelInput(true)}
-                className="text-xs text-zinc-500 hover:text-zinc-400 transition-colors"
+                className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
               >
                 手动输入模型名称
               </button>
@@ -274,12 +260,12 @@ export default function AIConfigStep({
                 value={defaultModel}
                 onChange={(e) => onModelChange(e.target.value)}
                 placeholder="例如: llama3.1, gpt-4"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-blue-500/50 transition-all"
+                className="w-full px-4 py-3 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-blue-500/50 transition-all"
               />
               {models.length > 0 && (
                 <button
                   onClick={() => setManualModelInput(false)}
-                  className="text-xs text-zinc-500 hover:text-zinc-400 transition-colors"
+                  className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
                 >
                   从列表中选择
                 </button>
@@ -288,12 +274,11 @@ export default function AIConfigStep({
           )}
         </div>
 
-        {/* Help */}
         {aiBackend === 'ollama' && connectionStatus === 'error' && (
           <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
             <div className="flex items-start gap-2">
-              <span className="text-yellow-400">💡</span>
-              <div className="text-xs text-zinc-400">
+              <Lightbulb className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
+              <div className="text-xs text-[var(--color-text-muted)]">
                 <p>如果 Ollama 未运行，请先启动 Ollama 服务。</p>
                 <p className="mt-1">
                   或者可以切换到 "OpenAI 兼容" 模式使用其他 API 端点。

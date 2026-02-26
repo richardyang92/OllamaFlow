@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { NodeProps } from '@xyflow/react'
+import { Pencil } from 'lucide-react'
 import BaseNode from './BaseNode'
 import { SetNodeData } from '@/types/node'
 
@@ -7,14 +8,14 @@ function SetNode(props: NodeProps<SetNodeData>) {
   const { data } = props
 
   return (
-    <BaseNode {...props} icon="✏️">
+    <BaseNode {...props} icon={<Pencil className="w-4 h-4" />}>
       <div className="space-y-1 text-xs">
         <div className="flex justify-between">
-          <span className="text-gray-400">变量:</span>
-          <span className="text-white">{data.variableName}</span>
+          <span className="text-[var(--color-text-muted)]">变量:</span>
+          <span className="text-[var(--color-text)]">{data.variableName}</span>
         </div>
         {data.variableValue && (
-          <div className="text-gray-500 truncate">
+          <div className="text-[var(--color-text-subtle)] truncate">
             = {data.variableValue.substring(0, 20)}
             {data.variableValue.length > 20 && '...'}
           </div>

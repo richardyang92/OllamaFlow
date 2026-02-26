@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { ArrowLeft, ArrowRight, Loader2, FolderCog, FileText, Bot, Check, Sun, Moon, Monitor } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { useWorkflowStore } from '@/store/workflow-store'
+import { useTheme, type ThemeMode } from '@/contexts/ThemeContext'
 import { cn } from '@/lib/utils'
 import LocationStep from '@/components/wizard/steps/LocationStep'
 import BasicInfoStep from '@/components/wizard/steps/BasicInfoStep'
@@ -24,15 +26,16 @@ interface WizardState {
 }
 
 const steps = [
-  { id: 'location', title: '选择位置', icon: '📁' },
-  { id: 'basic', title: '基本信息', icon: '✏️' },
-  { id: 'ai', title: 'AI 配置', icon: '🤖' },
-  { id: 'confirm', title: '确认创建', icon: '✅' },
+  { id: 'location', title: '选择位置', icon: FolderCog },
+  { id: 'basic', title: '基本信息', icon: FileText },
+  { id: 'ai', title: 'AI 配置', icon: Bot },
+  { id: 'confirm', title: '确认创建', icon: Check },
 ]
 
 export default function NewProjectWizard() {
   const { setCurrentWorkspace, setCurrentPage } = useWorkspaceStore()
   const { setWorkflow } = useWorkflowStore()
+  const { themeMode, setThemeMode, resolvedTheme } = useTheme()
 
   const [state, setState] = useState<WizardState>({
     currentStep: 0,
@@ -48,6 +51,15 @@ export default function NewProjectWizard() {
 
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const handleThemeToggle = () => {
+    const modes: ThemeMode[] = ['light', 'dark', 'system']
+    const currentIndex = modes.indexOf(themeMode)
+    const nextMode = modes[(currentIndex + 1) % modes.length]
+    setThemeMode(nextMode)
+  }
+
+  const ThemeIcon = themeMode === 'system' ? Monitor : resolvedTheme === 'dark' ? Moon : Sun
 
   const canGoNext = () => {
     switch (state.currentStep) {
@@ -90,14 +102,12 @@ export default function NewProjectWizard() {
     setError(null)
 
     try {
-      // Generate workflow from template
       const workflow = generateTemplateWorkflow(
         state.selectedTemplate,
         state.projectName,
         state.defaultModel
       )
 
-      // Create workspace
       const result = await window.electronAPI.workspace.init(state.projectPath, {
         name: state.projectName,
         description: state.description,
@@ -106,16 +116,12 @@ export default function NewProjectWizard() {
         initialWorkflow: workflow,
       })
 
-      // Save API Key to secure storage if provided (for OpenAI-compatible APIs)
       if (state.apiKey && state.aiBackend === 'openai') {
         await window.electronAPI.openai.setApiKey('workspace-default', state.apiKey)
       }
 
-      // Set current workspace and workflow
       setCurrentWorkspace(state.projectPath, result.config)
       setWorkflow(workflow)
-
-      // Navigate to editor (currentPage will automatically switch to 'editor' when currentWorkspace is set)
     } catch (err) {
       setError(`创建失败: ${(err as Error).message}`)
     } finally {
@@ -173,58 +179,76 @@ export default function NewProjectWizard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0d0d0d] flex items-center justify-center p-4">
-      {/* Background effect */}
+    <div className="min-h-screen bg-[var(--color-bg-canvas)] flex items-center justify-center p-4">
       <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/10 via-transparent to-blue-900/10" />
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-blue-500/5" />
       </div>
 
+      <motion.button
+        onClick={handleThemeToggle}
+        className={cn(
+          'fixed top-6 right-6 z-20',
+          'w-10 h-10 rounded-full',
+          'flex items-center justify-center',
+          'glass-floating',
+          'text-[var(--color-text-muted)]',
+          'hover:text-[var(--color-text)]',
+          'transition-all duration-200'
+        )}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        title={`主题: ${themeMode === 'system' ? '跟随系统' : themeMode === 'dark' ? '深色' : '浅色'}`}
+      >
+        <ThemeIcon className="w-5 h-5" />
+      </motion.button>
+
       <div className="w-full max-w-2xl relative z-10">
-        {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">✨ 新建项目</h1>
-          <p className="text-zinc-400">创建一个新的 OllamaFlow 工作区</p>
+          <h1 className="text-3xl font-bold text-[var(--color-text)] mb-2 bg-gradient-to-r from-purple-500 to-blue-500 bg-clip-text text-transparent">
+            新建项目
+          </h1>
+          <p className="text-[var(--color-text-muted)]">创建一个新的 OllamaFlow 工作区</p>
         </div>
 
-        {/* Step Indicator */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          {steps.map((step, index) => (
-            <div key={step.id} className="flex items-center">
-              <button
-                onClick={() => index < state.currentStep && setState((s) => ({ ...s, currentStep: index }))}
-                disabled={index > state.currentStep}
-                className={cn(
-                  'flex items-center gap-2 px-3 py-2 rounded-lg transition-all',
-                  index === state.currentStep
-                    ? 'bg-blue-500/20 text-blue-400'
-                    : index < state.currentStep
-                    ? 'bg-white/5 text-zinc-300 hover:bg-white/10 cursor-pointer'
-                    : 'text-zinc-600 cursor-not-allowed'
-                )}
-              >
-                <span>{step.icon}</span>
-                <span className="text-sm hidden sm:inline">{step.title}</span>
-              </button>
-              {index < steps.length - 1 && (
-                <div
+          {steps.map((step, index) => {
+            const StepIcon = step.icon
+            return (
+              <div key={step.id} className="flex items-center">
+                <button
+                  onClick={() => index < state.currentStep && setState((s) => ({ ...s, currentStep: index }))}
+                  disabled={index > state.currentStep}
                   className={cn(
-                    'w-8 h-0.5 mx-1',
-                    index < state.currentStep ? 'bg-blue-500/50' : 'bg-white/10'
+                    'flex items-center gap-2 px-3 py-2 rounded-lg transition-all',
+                    index === state.currentStep
+                      ? 'bg-blue-500/20 text-blue-400'
+                      : index < state.currentStep
+                      ? 'bg-[var(--color-bg-input)] text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer'
+                      : 'text-[var(--color-text-muted)] cursor-not-allowed opacity-50'
                   )}
-                />
-              )}
-            </div>
-          ))}
+                >
+                  <StepIcon className="w-4 h-4" />
+                  <span className="text-sm hidden sm:inline">{step.title}</span>
+                </button>
+                {index < steps.length - 1 && (
+                  <div
+                    className={cn(
+                      'w-8 h-0.5 mx-1',
+                      index < state.currentStep ? 'bg-blue-500/50' : 'bg-[var(--color-border-subtle)]'
+                    )}
+                  />
+                )}
+              </div>
+            )
+          })}
         </div>
 
-        {/* Step Content */}
-        <div className="bg-[#1a1a1a] border border-white/10 rounded-xl p-6 mb-6">
+        <div className="glass-panel p-6 mb-6">
           <AnimatePresence mode="wait">
             {renderStep()}
           </AnimatePresence>
         </div>
 
-        {/* Error Message */}
         {error && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -235,13 +259,24 @@ export default function NewProjectWizard() {
           </motion.div>
         )}
 
-        {/* Navigation */}
         <div className="flex items-center justify-between">
           <button
             onClick={state.currentStep === 0 ? handleCancel : handleBack}
-            className="px-4 py-2 text-sm text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+            className={cn(
+              'px-4 py-2 text-sm rounded-lg transition-all',
+              'text-[var(--color-text-muted)]',
+              'hover:text-[var(--color-text)]',
+              'hover:bg-[var(--color-bg-input)]'
+            )}
           >
-            {state.currentStep === 0 ? '取消' : '← 上一步'}
+            <span className="flex items-center gap-1">
+              {state.currentStep === 0 ? '取消' : (
+                <>
+                  <ArrowLeft className="w-4 h-4" />
+                  上一步
+                </>
+              )}
+            </span>
           </button>
 
           <div className="flex items-center gap-2">
@@ -249,14 +284,17 @@ export default function NewProjectWizard() {
               <button
                 onClick={handleCreate}
                 disabled={!canGoNext() || isCreating}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                className={cn(
+                  'px-6 py-2 rounded-lg transition-all font-medium',
+                  'bg-gradient-to-r from-purple-500/80 to-blue-500/80',
+                  'hover:from-purple-500 hover:to-blue-500',
+                  'text-white',
+                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                )}
               >
                 {isCreating ? (
                   <span className="flex items-center gap-2">
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     创建中...
                   </span>
                 ) : (
@@ -267,9 +305,18 @@ export default function NewProjectWizard() {
               <button
                 onClick={handleNext}
                 disabled={!canGoNext()}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                className={cn(
+                  'px-6 py-2 rounded-lg transition-all font-medium',
+                  'bg-gradient-to-r from-purple-500/80 to-blue-500/80',
+                  'hover:from-purple-500 hover:to-blue-500',
+                  'text-white',
+                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                )}
               >
-                下一步 →
+                <span className="flex items-center gap-1">
+                  下一步
+                  <ArrowRight className="w-4 h-4" />
+                </span>
               </button>
             )}
           </div>

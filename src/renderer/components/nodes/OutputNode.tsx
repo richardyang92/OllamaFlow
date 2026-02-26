@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { NodeProps } from '@xyflow/react'
+import { ArrowUpFromLine } from 'lucide-react'
 import BaseNode from './BaseNode'
 import { OutputNodeData } from '@/types/node'
 import { cn } from '@/lib/utils'
@@ -23,26 +24,26 @@ function OutputNode(props: NodeProps<OutputNodeData>) {
   }
 
   return (
-    <BaseNode {...props} icon="📤">
+    <BaseNode {...props} icon={<ArrowUpFromLine className="w-4 h-4" />}>
       <div className="text-xs space-y-2">
         <div className="flex flex-col gap-1">
-          <div className="text-gray-400">来源: {sourceTypeLabels[data.sourceType || 'input']}
+          <div className="text-[var(--color-text-muted)]">来源: {sourceTypeLabels[data.sourceType || 'input']}
             {data.sourceType === 'variable' && data.variableName && (
-              <span className="text-cyan-400 ml-1">({data.variableName})</span>
+              <span className="text-[var(--color-node-input)] ml-1">({data.variableName})</span>
             )}
           </div>
-          <div className="text-gray-400">类型: {outputTypeLabels[data.outputType]}</div>
+          <div className="text-[var(--color-text-muted)]">类型: {outputTypeLabels[data.outputType]}</div>
         </div>
         {displayOutput && (
           <div className={cn(
-            'bg-white/5 rounded-md p-2',
-            'text-zinc-300 font-mono text-xs',
-            'border border-white/10',
+            'bg-[var(--color-bg-input)] rounded-md p-2',
+            'text-[var(--color-text)] font-mono text-xs',
+            'border border-[var(--color-border-subtle)]',
             'max-h-16',
             'overflow-y-auto',
             'text-left'
           )}>
-            <div className="text-gray-500 mb-1">输出:</div>
+            <div className="text-[var(--color-text-subtle)] mb-1">输出:</div>
             <div className="whitespace-pre-wrap break-words">{typeof displayOutput === 'object' && displayOutput !== null ? JSON.stringify(displayOutput, null, 2) : String(displayOutput)}</div>
           </div>
         )}

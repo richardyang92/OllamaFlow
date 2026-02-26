@@ -1,5 +1,6 @@
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useState, useEffect } from 'react'
+import { ArrowDownToLine } from 'lucide-react'
 import type { WorkflowNode, InputNodeData } from '@/types/node'
 
 interface InputField {
@@ -113,16 +114,16 @@ export default function InputDialog({ nodes, onSubmit, onCancel }: Props) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         transition={{ duration: 0.2 }}
-        className="relative w-full max-w-md bg-[#1a1a1a] rounded-xl border border-white/10 shadow-2xl overflow-hidden"
+        className="relative w-full max-w-md bg-[var(--color-bg-panel)] backdrop-blur-xl rounded-xl border border-[var(--color-border-subtle)] shadow-2xl overflow-hidden"
         onKeyDown={handleKeyDown}
       >
         {/* Header */}
-        <div className="px-5 py-4 border-b border-white/10">
+        <div className="px-5 py-4 border-b border-[var(--color-border-subtle)]">
           <div className="flex items-center gap-2">
-            <span className="text-xl">📥</span>
-            <h2 className="text-lg font-medium text-white">工作流输入</h2>
+            <ArrowDownToLine className="w-5 h-5 text-cyan-400" />
+            <h2 className="text-lg font-medium text-[var(--color-text)]">工作流输入</h2>
           </div>
-          <p className="text-sm text-zinc-400 mt-1">
+          <p className="text-sm text-[var(--color-text-muted)] mt-1">
             请提供以下输入以执行工作流
           </p>
         </div>
@@ -131,8 +132,8 @@ export default function InputDialog({ nodes, onSubmit, onCancel }: Props) {
         <div className="px-5 py-4 space-y-4 max-h-96 overflow-y-auto">
           {fields.map(field => (
             <div key={field.nodeId} className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-medium text-zinc-300">
-                <span className="text-zinc-500">[{field.label}]</span>
+              <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text)]">
+                <span className="text-[var(--color-text-muted)]">[{field.label}]</span>
                 <span>{field.prompt}</span>
               </label>
 
@@ -141,7 +142,7 @@ export default function InputDialog({ nodes, onSubmit, onCancel }: Props) {
                   data-node-id={field.nodeId}
                   value={field.value}
                   onChange={(e) => updateField(field.nodeId, e.target.value)}
-                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-blue-500/50 focus:bg-white/8 transition-all"
+                  className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all"
                 >
                   <option value="">请选择...</option>
                   <option value="true">真 (True)</option>
@@ -154,10 +155,10 @@ export default function InputDialog({ nodes, onSubmit, onCancel }: Props) {
                   value={field.value}
                   onChange={(e) => updateField(field.nodeId, e.target.value)}
                   placeholder={`请输入${field.inputType === 'number' ? '数字' : '文本'}...`}
-                  className={`w-full px-3 py-2 bg-white/5 border rounded-lg text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:bg-white/8 transition-all ${
+                  className={`w-full px-3 py-2 bg-[var(--color-bg-input)] border rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:bg-[var(--color-bg-hover)] transition-all ${
                     errors[field.nodeId]
                       ? 'border-red-500/50 focus:border-red-500/50'
-                      : 'border-white/10 focus:border-blue-500/50'
+                      : 'border-[var(--color-border-subtle)] focus:border-[var(--color-border)]'
                   }`}
                 />
               )}
@@ -167,7 +168,7 @@ export default function InputDialog({ nodes, onSubmit, onCancel }: Props) {
               )}
 
               {field.defaultValue && (
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-[var(--color-text-muted)]">
                   默认值: {field.defaultValue}
                 </p>
               )}
@@ -176,14 +177,14 @@ export default function InputDialog({ nodes, onSubmit, onCancel }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-white/10 flex items-center justify-between">
-          <div className="text-xs text-zinc-500">
+        <div className="px-5 py-4 border-t border-[var(--color-border-subtle)] flex items-center justify-between">
+          <div className="text-xs text-[var(--color-text-muted)]">
             提示: Ctrl+Enter 提交, Esc 取消
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onCancel}
-              className="px-4 py-2 text-sm text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+              className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-input)] rounded-lg transition-all"
             >
               取消
             </button>

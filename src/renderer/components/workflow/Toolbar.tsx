@@ -20,8 +20,14 @@ export default function Toolbar({
   onExecute,
   onToggleLogs,
 }: ToolbarProps) {
+  // 检测 macOS 以适配交通灯按钮位置
+  const isMac = navigator.userAgent.toLowerCase().includes('mac')
+
   return (
-    <div className="h-14 flex items-center justify-between px-5 bg-panel-bg backdrop-blur-md">
+    <div
+      className="h-14 flex items-center justify-between bg-panel-bg backdrop-blur-md"
+      style={{ paddingLeft: isMac ? '78px' : '20px', paddingRight: '20px' }}
+    >
       {/* Left side - Workspace info */}
       <div className="flex items-center gap-4">
         <motion.button
