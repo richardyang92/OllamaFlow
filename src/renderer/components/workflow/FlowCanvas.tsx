@@ -1,4 +1,4 @@
-import { useCallback, useRef, DragEvent, useState, useEffect } from 'react'
+import { useCallback, useRef, DragEvent, useState } from 'react'
 import {
   ReactFlow,
   Background,
@@ -24,6 +24,7 @@ import OllamaChatNode from '@/components/nodes/OllamaChatNode'
 import SetNode from '@/components/nodes/SetNode'
 import IfNode from '@/components/nodes/IfNode'
 import LoopNode from '@/components/nodes/LoopNode'
+import SmartRouterNode from '@/components/nodes/SmartRouterNode'
 import OutputNode from '@/components/nodes/OutputNode'
 import ReadFileNode from '@/components/nodes/ReadFileNode'
 import WriteFileNode from '@/components/nodes/WriteFileNode'
@@ -33,171 +34,13 @@ import ReactAgentNode from '@/components/nodes/ReactAgentNode'
 
 import AnimatedEdge from '@/components/workflow/edges/AnimatedEdge'
 
-function DebugClickDetector() {
-  useEffect(() => {
-    const handleGlobalClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      const isControls = target.closest('.react-flow__controls')
-      const isControlsButton = target.closest('.react-flow__controls-button')
-      console.log('[Debug] Click detected:', {
-        target: target.tagName,
-        className: target.className,
-        isControls: !!isControls,
-        isControlsButton: !!isControlsButton,
-        clientX: e.clientX,
-        clientY: e.clientY,
-        composedPath: e.composedPath().slice(0, 5).map((el) => (el as HTMLElement).tagName)
-      })
-    }
-    
-    const handlePointerDown = (e: PointerEvent) => {
-      const target = e.target as HTMLElement
-      const isControls = target.closest('.react-flow__controls')
-      if (isControls) {
-        console.log('[Debug] PointerDown on Controls:', {
-          target: target.tagName,
-          className: target.className,
-          pointerType: e.pointerType,
-          isPrimary: e.isPrimary,
-          buttons: e.buttons
-        })
-      }
-    }
-
-    const checkControlsStyle = () => {
-      const controls = document.querySelector('.react-flow__controls')
-      if (controls) {
-        const style = window.getComputedStyle(controls)
-        console.log('[Debug] Controls computed style:', {
-          pointerEvents: style.pointerEvents,
-          webkitAppRegion: (style as any).webkitAppRegion || (style as any).getPropertyValue('-webkit-app-region'),
-          zIndex: style.zIndex,
-          position: style.position,
-          display: style.display
-        })
-      } else {
-        console.log('[Debug] Controls element not found')
-      }
-      
-      const viewport = document.querySelector('.react-flow__viewport')
-      if (viewport) {
-        const style = window.getComputedStyle(viewport)
-        console.log('[Debug] Viewport style:', {
-          transform: style.transform,
-          pointerEvents: style.pointerEvents
-        })
-      }
-      
-      const pane = document.querySelector('.react-flow__pane')
-      if (pane) {
-        const style = window.getComputedStyle(pane)
-        console.log('[Debug] Pane style:', {
-          pointerEvents: style.pointerEvents
-        })
-      }
-    }
-
-    window.addEventListener('click', handleGlobalClick, true)
-    window.addEventListener('pointerdown', handlePointerDown, true)
-    
-    setTimeout(checkControlsStyle, 1000)
-    
-    return () => {
-      window.removeEventListener('click', handleGlobalClick, true)
-      window.removeEventListener('pointerdown', handlePointerDown, true)
-    }
-  }, [])
-  
-  return null
-}
-
-function DebugZoomButtons() {
-  useEffect(() => {
-    const patchZoomButtons = () => {
-      const zoomInBtn = document.querySelector('.react-flow__controls-zoomin')
-      const zoomOutBtn = document.querySelector('.react-flow__controls-zoomout')
-      const fitViewBtn = document.querySelector('.react-flow__controls-fitview')
-      
-      console.log('[Debug] Found buttons:', {
-        zoomIn: !!zoomInBtn,
-        zoomOut: !!zoomOutBtn,
-        fitView: !!fitViewBtn
-      })
-      
-      const handleZoomIn = () => {
-        const rfInstance = (window as any).__REACT_FLOW_INSTANCE__
-        console.log('[Debug] ZoomIn - ReactFlow instance:', !!rfInstance)
-        if (rfInstance) {
-          try {
-            console.log('[Debug] Current zoom:', rfInstance.getZoom())
-            console.log('[Debug] zoomIn method exists:', typeof rfInstance.zoomIn)
-            const result = rfInstance.zoomIn({ duration: 300 })
-            console.log('[Debug] zoomIn result:', result)
-            setTimeout(() => console.log('[Debug] After zoomIn:', rfInstance.getZoom()), 350)
-          } catch (e) {
-            console.error('[Debug] zoomIn error:', e)
-          }
-        }
-      }
-      
-      const handleZoomOut = () => {
-        const rfInstance = (window as any).__REACT_FLOW_INSTANCE__
-        console.log('[Debug] ZoomOut - ReactFlow instance:', !!rfInstance)
-        if (rfInstance) {
-          try {
-            console.log('[Debug] Current zoom:', rfInstance.getZoom())
-            console.log('[Debug] zoomOut method exists:', typeof rfInstance.zoomOut)
-            const result = rfInstance.zoomOut({ duration: 300 })
-            console.log('[Debug] zoomOut result:', result)
-            setTimeout(() => console.log('[Debug] After zoomOut:', rfInstance.getZoom()), 350)
-          } catch (e) {
-            console.error('[Debug] zoomOut error:', e)
-          }
-        }
-      }
-      
-      const handleFitView = () => {
-        const rfInstance = (window as any).__REACT_FLOW_INSTANCE__
-        console.log('[Debug] FitView - ReactFlow instance:', !!rfInstance)
-        if (rfInstance) {
-          try {
-            const result = rfInstance.fitView({ duration: 300 })
-            console.log('[Debug] fitView result:', result)
-          } catch (e) {
-            console.error('[Debug] fitView error:', e)
-          }
-        }
-      }
-      
-      if (zoomInBtn) {
-        zoomInBtn.addEventListener('click', handleZoomIn, true)
-      }
-      if (zoomOutBtn) {
-        zoomOutBtn.addEventListener('click', handleZoomOut, true)
-      }
-      if (fitViewBtn) {
-        fitViewBtn.addEventListener('click', handleFitView, true)
-      }
-      
-      return () => {
-        if (zoomInBtn) zoomInBtn.removeEventListener('click', handleZoomIn, true)
-        if (zoomOutBtn) zoomOutBtn.removeEventListener('click', handleZoomOut, true)
-        if (fitViewBtn) fitViewBtn.removeEventListener('click', handleFitView, true)
-      }
-    }
-    
-    setTimeout(patchZoomButtons, 1000)
-  }, [])
-  
-  return null
-}
-
 const nodeTypes: Record<string, unknown> = {
   input: InputNode,
   ollamaChat: OllamaChatNode,
   set: SetNode,
   if: IfNode,
   loop: LoopNode,
+  smartRouter: SmartRouterNode,
   output: OutputNode,
   image: ImageNode,
   readFile: ReadFileNode,
@@ -207,6 +50,7 @@ const nodeTypes: Record<string, unknown> = {
 }
 
 const edgeTypes = {
+  default: AnimatedEdge,
   animated: AnimatedEdge,
 }
 
@@ -284,8 +128,6 @@ export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeCl
     useWorkflowStore()
 
   const onInit = useCallback((instance: ReactFlowInstance<Node<WorkflowNodeData>, Edge>) => {
-    console.log('[Debug] ReactFlow onInit called, instance:', !!instance)
-    ;(window as any).__REACT_FLOW_INSTANCE__ = instance
     setReactFlowInstance(instance)
   }, [])
 
@@ -368,15 +210,13 @@ export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeCl
     selectNode(null)
   }, [selectNode])
 
-  const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
-    console.log('Edge clicked:', edge.id)
+  const onEdgeClick = useCallback((_event: React.MouseEvent, _edge: Edge) => {
+    // 边点击处理（可用于未来扩展）
   }, [])
 
   const onSelectionChange = useCallback(
-    (params: OnSelectionChangeParams) => {
-      if (params.edges.length > 0) {
-        console.log('Edges selected:', params.edges.map(e => e.id))
-      }
+    (_params: OnSelectionChangeParams) => {
+      // 选择变化处理（可用于未来扩展）
     },
     []
   )
@@ -446,8 +286,6 @@ export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeCl
           maskColor="rgba(0, 0, 0, 0.6)"
         />
       </ReactFlow>
-      <DebugClickDetector />
-      <DebugZoomButtons />
       {nodes.length === 0 && <EmptyCanvasState />}
     </div>
   )

@@ -10,9 +10,10 @@ import FlowCanvas from '@/components/workflow/FlowCanvas'
 import { FloatingToolbar } from '@/components/workflow/FloatingToolbar'
 import NodePalette from '@/components/workflow/NodePalette'
 import PropertiesPanel from '@/components/workflow/PropertiesPanel'
-import WorkspaceFiles from '@/components/workflow/WorkspaceFiles'
+import WorkspaceFiles, { type FileItem } from '@/components/workflow/WorkspaceFiles'
 import ExecutionPanel from '@/components/workflow/ExecutionPanel'
 import InputDialog from '@/components/workflow/InputDialog'
+import FilePreviewDialog from '@/components/workflow/FilePreviewDialog'
 import { CollapsibleDrawer } from '@/components/ui/CollapsibleDrawer'
 import { WorkflowExecutor, initializeExecutors } from '@/engine/executor'
 
@@ -43,6 +44,7 @@ export default function EditorPage() {
   const [showPalette, setShowPalette] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
   const [showInputDialog, setShowInputDialog] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<FileItem | null>(null)
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null)
   const [saveActive, setSaveActive] = useState(false)
   const executorRef = useRef<WorkflowExecutor | null>(null)
@@ -256,7 +258,10 @@ export default function EditorPage() {
                   <div className="flex h-full">
                     {showFiles && (
                       <div className="w-56 shrink-0 pr-2 border-r border-[var(--color-border-subtle)]">
-                        <WorkspaceFiles onClose={() => setShowFiles(false)} />
+                        <WorkspaceFiles 
+                          onClose={() => setShowFiles(false)} 
+                          onFileClick={(file) => setSelectedFile(file)}
+                        />
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
@@ -307,6 +312,13 @@ export default function EditorPage() {
           nodes={useWorkflowStore.getState().nodes}
           onSubmit={handleInputSubmit}
           onCancel={handleInputCancel}
+        />
+      )}
+
+      {selectedFile && (
+        <FilePreviewDialog
+          file={selectedFile}
+          onClose={() => setSelectedFile(null)}
         />
       )}
 

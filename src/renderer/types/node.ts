@@ -20,6 +20,7 @@ export type NodeType =
   | 'set'
   | 'if'
   | 'loop'
+  | 'smartRouter'
   | 'output'
   | 'image'
   | 'readFile'
@@ -288,6 +289,24 @@ export interface LoopNodeData extends BaseNodeData {
   collectResults: boolean
 }
 
+// Smart Router Branch
+export interface SmartRouterBranch {
+  id: string
+  name: string
+  description: string
+  isDefault: boolean
+}
+
+// Smart Router Node
+export interface SmartRouterNodeData extends BaseNodeData {
+  nodeType: 'smartRouter'
+  branches: SmartRouterBranch[]
+  model: string
+  routingPrompt: string
+  temperature: number
+  debugMode?: DebugModeConfig
+}
+
 // Output Node
 export interface OutputNodeData extends BaseNodeData {
   nodeType: 'output'
@@ -353,6 +372,7 @@ export type WorkflowNodeData =
   | SetNodeData
   | IfNodeData
   | LoopNodeData
+  | SmartRouterNodeData
   | OutputNodeData
   | ImageNodeData
   | ReadFileNodeData
@@ -481,6 +501,48 @@ export const nodeTemplates: NodeTemplate[] = [
         { id: 'index', name: 'index', label: '索引', dataType: 'number' },
         { id: 'results', name: 'results', label: '结果列表', dataType: 'array' },
         { id: 'completed', name: 'completed', label: '完成', dataType: 'any' },
+      ],
+    },
+  },
+  {
+    type: 'smartRouter',
+    label: '智能路由',
+    icon: 'smartRouter',
+    category: 'Logic',
+    colorScheme: 'blue',
+    description: '使用 AI 智能路由到不同分支',
+    defaultData: {
+      nodeType: 'smartRouter',
+      label: '智能路由',
+      category: 'Logic',
+      branches: [
+        {
+          id: 'branch-1',
+          name: '技术问题',
+          description: '处理技术相关的询问、bug 报告、功能需求等',
+          isDefault: false,
+        },
+        {
+          id: 'branch-2',
+          name: '商务咨询',
+          description: '处理商务合作、价格咨询、合同洽谈等',
+          isDefault: false,
+        },
+        {
+          id: 'branch-3',
+          name: '其他',
+          description: '无法分类到上述分支的其他问题',
+          isDefault: true,
+        },
+      ],
+      model: 'glm-4.7-flash:latest',
+      routingPrompt: '根据输入内容，选择最合适的分支。',
+      temperature: 0.3,
+      inputs: [{ id: 'input', name: 'input', label: '输入', dataType: 'any' }],
+      outputs: [
+        { id: 'branch-1', name: 'branch-1', label: '技术问题', dataType: 'any' },
+        { id: 'branch-2', name: 'branch-2', label: '商务咨询', dataType: 'any' },
+        { id: 'branch-3', name: 'branch-3', label: '其他', dataType: 'any' },
       ],
     },
   },

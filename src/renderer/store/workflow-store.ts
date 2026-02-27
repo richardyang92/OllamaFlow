@@ -21,6 +21,7 @@ export function getEdgeColorByNodeType(nodeType: NodeType): string {
     set: 'rgba(250, 204, 21, 0.6)', // yellow
     if: 'rgba(96, 165, 250, 0.6)', // blue
     loop: 'rgba(96, 165, 250, 0.6)', // blue
+    smartRouter: 'rgba(96, 165, 250, 0.6)', // blue
     output: 'rgba(45, 212, 191, 0.6)', // teal
     image: 'rgba(255, 255, 255, 0.6)', // white
     readFile: 'rgba(251, 146, 60, 0.6)', // orange
@@ -38,6 +39,7 @@ export function getEdgeHoverColorByNodeType(nodeType: NodeType): string {
     set: 'rgba(250, 204, 21, 0.9)', // yellow
     if: 'rgba(96, 165, 250, 0.9)', // blue
     loop: 'rgba(96, 165, 250, 0.9)', // blue
+    smartRouter: 'rgba(96, 165, 250, 0.9)', // blue
     output: 'rgba(45, 212, 191, 0.9)', // teal
     image: 'rgba(255, 255, 255, 0.9)', // white
     readFile: 'rgba(251, 146, 60, 0.9)', // orange

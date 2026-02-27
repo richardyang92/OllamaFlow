@@ -7,6 +7,7 @@ import OllamaChatProperties from './properties/OllamaChatProperties'
 import SetProperties from './properties/SetProperties'
 import IfProperties from './properties/IfProperties'
 import LoopProperties from './properties/LoopProperties'
+import SmartRouterProperties from './properties/SmartRouterProperties'
 import OutputProperties from './properties/OutputProperties'
 import ReadFileProperties from './properties/ReadFileProperties'
 import WriteFileProperties from './properties/WriteFileProperties'
@@ -74,6 +75,8 @@ function PropertiesPanelContent({
         return <IfProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'loop':
         return <LoopProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
+      case 'smartRouter':
+        return <SmartRouterProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'output':
         return <OutputProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'image':

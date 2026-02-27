@@ -240,7 +240,6 @@ ipcMain.handle('file:readImage', async (_, workspacePath: string, relativePath: 
     const buffer = await fs.readFile(fullPath)
     const base64 = buffer.toString('base64')
     
-    // Determine MIME type based on file extension
     const ext = path.extname(fullPath).toLowerCase()
     let mimeType = 'application/octet-stream'
     
@@ -259,6 +258,24 @@ ipcMain.handle('file:readImage', async (_, workspacePath: string, relativePath: 
     return {
       success: true,
       dataUrl: `data:${mimeType};base64,${base64}`
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: (error as Error).message
+    }
+  }
+})
+
+ipcMain.handle('file:readPdf', async (_, workspacePath: string, relativePath: string) => {
+  const fullPath = path.join(workspacePath, relativePath)
+  try {
+    const buffer = await fs.readFile(fullPath)
+    const base64 = buffer.toString('base64')
+    
+    return {
+      success: true,
+      dataUrl: `data:application/pdf;base64,${base64}`
     }
   } catch (error) {
     return {

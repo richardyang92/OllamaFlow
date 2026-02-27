@@ -176,6 +176,7 @@ import { createOllamaChatExecutor } from './nodes/ollama-chat'
 import { createSetExecutor } from './nodes/set'
 import { createIfExecutor } from './nodes/if'
 import { createLoopExecutor } from './nodes/loop'
+import { createSmartRouterExecutor } from './nodes/smart-router'
 import { createOutputExecutor } from './nodes/output'
 import { createReadFileExecutor } from './nodes/read-file'
 import { createWriteFileExecutor } from './nodes/write-file'
@@ -203,6 +204,7 @@ export function initializeExecutors() {
   registerNodeExecutor('set', createSetExecutor())
   registerNodeExecutor('if', createIfExecutor())
   registerNodeExecutor('loop', createLoopExecutor())
+  registerNodeExecutor('smartRouter', createSmartRouterExecutor())
   registerNodeExecutor('output', createOutputExecutor())
   registerNodeExecutor('image', createImageExecutor())
   registerNodeExecutor('readFile', createReadFileExecutor())
@@ -219,6 +221,7 @@ export class WorkflowExecutor {
   private ollamaHost: string
   private abortController: AbortController | null = null
   private userInputValues: Map<string, string> = new Map()
+  private activeBranches: Map<string, string[]> = new Map()  // routerNodeId -> [activeBranchIds]
 
   constructor(
     nodes: Node<WorkflowNodeData>[],
@@ -250,6 +253,9 @@ export class WorkflowExecutor {
 
     this.abortController = new AbortController()
     const variables: Record<string, unknown> = {}
+    
+    // Clear active branches tracking
+    this.activeBranches.clear()
 
     const context: ExecutionContext = {
       workspacePath: this.workspacePath,
@@ -295,6 +301,17 @@ export class WorkflowExecutor {
 
       const node = this.nodes.find((n) => n.id === nodeId)
       if (!node) continue
+
+      // Check if this node should be executed (conditional execution)
+      if (!this.shouldExecuteNode(nodeId)) {
+        executionStore.addLog({
+          nodeId,
+          nodeName: node.data.label,
+          level: 'info',
+          message: `跳过节点（来自未激活的分支）`,
+        })
+        continue
+      }
 
       const startTime = Date.now()
 
@@ -361,6 +378,20 @@ export class WorkflowExecutor {
         // Update variables from output
         if (typeof output === 'object' && output !== null) {
           Object.assign(variables, output)
+        }
+
+        // Track active branches for smart router nodes
+        if (node.data.nodeType === 'smartRouter') {
+          const routerData = node.data as any
+          const selectedBranchId = this.getSelectedBranchId(output, routerData.branches)
+          this.activeBranches.set(node.id, [selectedBranchId])
+          
+          context.onLog?.({
+            nodeId,
+            nodeName: node.data.label,
+            level: 'info',
+            message: `激活分支: ${routerData.branches?.find((b: any) => b.id === selectedBranchId)?.name || selectedBranchId}`,
+          })
         }
 
         // Check if node still exists before recording result
@@ -450,6 +481,55 @@ export class WorkflowExecutor {
     if (this.abortController) {
       this.abortController.abort()
     }
+  }
+
+  // Check if a node should be executed (conditional execution logic)
+  private shouldExecuteNode(nodeId: string): boolean {
+    // Find all incoming edges to this node
+    const incomingEdges = this.edges.filter((edge) => edge.target === nodeId)
+    
+    for (const edge of incomingEdges) {
+      const sourceNode = this.nodes.find((n) => n.id === edge.source)
+      
+      // If source node is a smart router
+      if (sourceNode?.data.nodeType === 'smartRouter') {
+        const activeBranchIds = this.activeBranches.get(sourceNode.id)
+        
+        // If source handle is not in active branches, this node should not execute
+        if (activeBranchIds && edge.sourceHandle && !activeBranchIds.includes(edge.sourceHandle)) {
+          return false
+        }
+      }
+    }
+    
+    return true
+  }
+
+  // Get selected branch ID from smart router output
+  private getSelectedBranchId(
+    output: unknown,
+    branches: Array<{ id: string; name: string; isDefault?: boolean }>
+  ): string {
+    if (typeof output !== 'object' || output === null) {
+      throw new Error('智能路由节点必须返回对象')
+    }
+    
+    const outputObj = output as Record<string, unknown>
+    
+    // Find the first branch with non-undefined value
+    for (const branch of branches) {
+      if (outputObj[branch.id] !== undefined) {
+        return branch.id
+      }
+    }
+    
+    // If none found, return default branch
+    const defaultBranch = branches.find(b => b.isDefault)
+    if (defaultBranch) {
+      return defaultBranch.id
+    }
+    
+    throw new Error('智能路由节点未能选择分支，且没有默认分支')
   }
 }
 

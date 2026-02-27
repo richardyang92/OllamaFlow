@@ -210,6 +210,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     readImage: (workspacePath: string, relativePath: string): Promise<{ success: boolean; dataUrl?: string; error?: string }> =>
       ipcRenderer.invoke('file:readImage', workspacePath, relativePath),
+
+    readPdf: (workspacePath: string, relativePath: string): Promise<{ success: boolean; dataUrl?: string; error?: string }> =>
+      ipcRenderer.invoke('file:readPdf', workspacePath, relativePath),
   },
 
   // Command execution
@@ -323,6 +326,7 @@ declare global {
         list: (workspacePath: string, relativePath?: string) => Promise<{ success: boolean; files?: FileInfo[]; error?: string }>
         exists: (workspacePath: string, relativePath: string) => Promise<boolean>
         readImage: (workspacePath: string, relativePath: string) => Promise<{ success: boolean; dataUrl?: string; error?: string }>
+        readPdf: (workspacePath: string, relativePath: string) => Promise<{ success: boolean; dataUrl?: string; error?: string }>
       }
       command: {
         execute: (workspacePath: string, options: CommandOptions) => Promise<CommandResult>

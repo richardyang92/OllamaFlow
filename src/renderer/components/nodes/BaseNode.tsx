@@ -98,7 +98,7 @@ function BaseNode({ data, selected, children, icon, className }: BaseNodeProps) 
 
       {nodeData.inputs.map((input, index) => (
         <Handle
-          key={`input-${input.id}`}
+          key={`input-${input.id}-${inputCount}`}
           type="target"
           position={Position.Left}
           id={input.id}
@@ -122,7 +122,7 @@ function BaseNode({ data, selected, children, icon, className }: BaseNodeProps) 
         const handleHoverColor = getEdgeHoverColorByNodeType(nodeData.nodeType)
         return (
           <Handle
-            key={`output-${output.id}`}
+            key={`output-${output.id}-${outputCount}`}
             type="source"
             position={Position.Right}
             id={output.id}

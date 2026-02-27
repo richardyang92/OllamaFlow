@@ -1,13 +1,19 @@
 import { useState, useEffect } from 'react'
 import { useWorkspaceStore } from '@/store/workspace-store'
 
-interface FileItem {
+export interface FileItem {
   name: string
   isDirectory: boolean
   path: string
 }
 
-export default function WorkspaceFiles({ onClose }: { onClose: () => void }) {
+export default function WorkspaceFiles({ 
+  onClose, 
+  onFileClick 
+}: { 
+  onClose: () => void
+  onFileClick?: (file: FileItem) => void
+}) {
   const { currentWorkspace } = useWorkspaceStore()
   const [files, setFiles] = useState<FileItem[]>([])
   const [currentPath, setCurrentPath] = useState('')
@@ -30,6 +36,8 @@ export default function WorkspaceFiles({ onClose }: { onClose: () => void }) {
   const handleFileClick = (file: FileItem) => {
     if (file.isDirectory) {
       setCurrentPath(file.path)
+    } else if (onFileClick) {
+      onFileClick(file)
     }
   }
 
