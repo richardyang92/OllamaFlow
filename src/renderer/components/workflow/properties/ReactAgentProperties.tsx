@@ -70,10 +70,21 @@ export default function ReactAgentProperties({ node, updateNodeData }: Props) {
   const loadModels = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch(`${workspaceHost}/api/tags`)
-      if (response.ok) {
-        const json = await response.json()
-        setModels(json.models || [])
+      if (isOpenAICompatible) {
+        const apiKey = await window.electronAPI.openai.getApiKey('workspace-default')
+        const response = await fetch(`${workspaceHost}/v1/models`, {
+          headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+        })
+        if (response.ok) {
+          const json = await response.json()
+          setModels((json.data || []).map((m: { id: string }) => ({ name: m.id })))
+        }
+      } else {
+        const response = await fetch(`${workspaceHost}/api/tags`)
+        if (response.ok) {
+          const json = await response.json()
+          setModels(json.models || [])
+        }
       }
     } catch (error) {
       console.error('加载模型失败:', error)

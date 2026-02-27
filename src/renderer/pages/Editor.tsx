@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef, useEffect } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check } from 'lucide-react'
@@ -34,7 +34,7 @@ initializeExecutors()
 
 export default function EditorPage() {
   const { currentWorkspace, clearCurrentWorkspace } = useWorkspaceStore()
-  const { workflow, isDirty, markClean, selectedNodeId } = useWorkflowStore()
+  const { workflow, isDirty, markClean } = useWorkflowStore()
   const { status: executionStatus, cancelExecution } = useExecutionStore()
   const resolvedTheme = useResolvedTheme()
   
@@ -46,14 +46,17 @@ export default function EditorPage() {
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null)
   const [saveActive, setSaveActive] = useState(false)
   const executorRef = useRef<WorkflowExecutor | null>(null)
-  const previousSelectedNodeId = useRef<string | null>(null)
+  const userClosedPropertiesRef = useRef(false)
 
-  useEffect(() => {
-    if (selectedNodeId && selectedNodeId !== previousSelectedNodeId.current && !showProperties) {
-      setShowProperties(true)
-    }
-    previousSelectedNodeId.current = selectedNodeId
-  }, [selectedNodeId, showProperties])
+  const handlePropertiesClose = useCallback(() => {
+    userClosedPropertiesRef.current = true
+    setShowProperties(false)
+  }, [])
+
+  const handleNodeClick = useCallback(() => {
+    userClosedPropertiesRef.current = false
+    setShowProperties(true)
+  }, [])
 
   const handleSave = useCallback(async () => {
     if (!currentWorkspace || !workflow || saveActive) return
@@ -239,6 +242,7 @@ export default function EditorPage() {
             <FlowCanvas 
               colorMode={resolvedTheme}
               onDragStart={handleDragStart}
+              onNodeClick={handleNodeClick}
             />
             
             <AnimatePresence>
@@ -286,13 +290,13 @@ export default function EditorPage() {
         <CollapsibleDrawer
           side="right"
           isOpen={showProperties}
-          onClose={() => setShowProperties(false)}
+          onClose={handlePropertiesClose}
           width={320}
           minWidth={280}
           maxWidth={480}
         >
           <PropertiesPanel 
-            onClose={() => setShowProperties(false)} 
+            onClose={handlePropertiesClose} 
             isDrawer
           />
         </CollapsibleDrawer>

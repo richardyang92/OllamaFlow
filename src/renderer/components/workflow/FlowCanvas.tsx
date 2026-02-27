@@ -213,6 +213,7 @@ const edgeTypes = {
 interface FlowCanvasProps {
   colorMode?: ColorMode
   onDragStart?: () => void
+  onNodeClick?: () => void
 }
 
 function EmptyCanvasState() {
@@ -275,7 +276,7 @@ function EmptyCanvasState() {
   )
 }
 
-export default function FlowCanvas({ colorMode = 'system', onDragStart }: FlowCanvasProps) {
+export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeClick: onNodeClickProp }: FlowCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<Node<WorkflowNodeData>, Edge> | null>(null)
 
@@ -358,8 +359,9 @@ export default function FlowCanvas({ colorMode = 'system', onDragStart }: FlowCa
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node<WorkflowNodeData>) => {
       selectNode(node.id)
+      onNodeClickProp?.()
     },
-    [selectNode]
+    [selectNode, onNodeClickProp]
   )
 
   const onPaneClick = useCallback(() => {
