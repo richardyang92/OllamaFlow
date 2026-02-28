@@ -624,3 +624,102 @@ ipcMain.handle('fileWatcher:stop', (_, workspacePath: string) => {
   }
   return { success: true, message: 'Was not watching' }
 })
+
+// ==================== Execution Status Storage ====================
+
+export interface WorkspaceExecutionStatus {
+  workspacePath: string
+  status: 'idle' | 'running' | 'completed' | 'failed' | 'cancelled'
+  startTime?: string
+  endTime?: string
+  progress: number
+  totalNodes: number
+  completedNodes: number
+  currentNode?: string
+  error?: string
+}
+
+// Execution: Get all execution statuses
+ipcMain.handle('execution:getAllStatuses', async () => {
+  const s = await getStore()
+  return s.get('execution-statuses', {}) as Record<string, WorkspaceExecutionStatus>
+})
+
+// Execution: Get status for a specific workspace
+ipcMain.handle('execution:getStatus', async (_, workspacePath: string) => {
+  const s = await getStore()
+  const statuses = s.get('execution-statuses', {}) as Record<string, WorkspaceExecutionStatus>
+  return statuses[workspacePath] || null
+})
+
+// Execution: Update status
+ipcMain.handle('execution:updateStatus', async (_, status: WorkspaceExecutionStatus) => {
+  const s = await getStore()
+  const statuses = s.get('execution-statuses', {}) as Record<string, WorkspaceExecutionStatus>
+  statuses[status.workspacePath] = status
+  s.set('execution-statuses', statuses)
+  return status
+})
+
+// Execution: Clear status for a workspace
+ipcMain.handle('execution:clearStatus', async (_, workspacePath: string) => {
+  const s = await getStore()
+  const statuses = s.get('execution-statuses', {}) as Record<string, WorkspaceExecutionStatus>
+  delete statuses[workspacePath]
+  s.set('execution-statuses', statuses)
+  return true
+})
+
+// Execution: Start workflow for a workspace
+ipcMain.handle('execution:start', async (_, workspacePath: string) => {
+  const status: WorkspaceExecutionStatus = {
+    workspacePath,
+    status: 'running',
+    startTime: new Date().toISOString(),
+    progress: 0,
+    totalNodes: 0,
+    completedNodes: 0,
+  }
+  const s = await getStore()
+  const statuses = s.get('execution-statuses', {}) as Record<string, WorkspaceExecutionStatus>
+  statuses[workspacePath] = status
+  s.set('execution-statuses', statuses)
+  return status
+})
+
+// Execution: Pause workflow for a workspace
+ipcMain.handle('execution:pause', async (_, workspacePath: string) => {
+  const s = await getStore()
+  const statuses = s.get('execution-statuses', {}) as Record<string, WorkspaceExecutionStatus>
+  const status = statuses[workspacePath]
+  if (status) {
+    status.status = 'running' // Keep as running since we don't have 'paused' in the union
+    s.set('execution-statuses', statuses)
+  }
+  return status || null
+})
+
+// Execution: Resume workflow for a workspace
+ipcMain.handle('execution:resume', async (_, workspacePath: string) => {
+  const s = await getStore()
+  const statuses = s.get('execution-statuses', {}) as Record<string, WorkspaceExecutionStatus>
+  const status = statuses[workspacePath]
+  if (status) {
+    status.status = 'running'
+    s.set('execution-statuses', statuses)
+  }
+  return status || null
+})
+
+// Execution: Cancel workflow for a workspace
+ipcMain.handle('execution:cancel', async (_, workspacePath: string) => {
+  const s = await getStore()
+  const statuses = s.get('execution-statuses', {}) as Record<string, WorkspaceExecutionStatus>
+  const status = statuses[workspacePath]
+  if (status) {
+    status.status = 'cancelled'
+    status.endTime = new Date().toISOString()
+    s.set('execution-statuses', statuses)
+  }
+  return status || null
+})

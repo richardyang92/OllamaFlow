@@ -5,6 +5,18 @@ import { useExecutionStore } from '@/store/execution-store'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { useWorkflowStore } from '@/store/workflow-store'
 
+interface GlobalExecutionStatus {
+  workspacePath: string
+  status: 'idle' | 'running' | 'completed' | 'failed' | 'cancelled'
+  startTime?: string
+  endTime?: string
+  progress: number
+  totalNodes: number
+  completedNodes: number
+  currentNode?: string
+  error?: string
+}
+
 // Expression evaluation - replaces {{variable}} patterns
 export function interpolateVariables(
   template: string,
@@ -243,18 +255,23 @@ export class WorkflowExecutor {
   private abortController: AbortController | null = null
   private userInputValues: Map<string, string> = new Map()
   private activeBranches: Map<string, string[]> = new Map()  // routerNodeId -> [activeBranchIds]
+  private isPaused: boolean = false
+  private isCancelled: boolean = false
+  private isolatedMode: boolean = false
 
   constructor(
     nodes: Node<WorkflowNodeData>[],
     edges: Edge[],
     workspacePath: string,
     ollamaHost: string = 'http://127.0.0.1:11434',
-    userInputValues?: Record<string, string>
+    userInputValues?: Record<string, string>,
+    isolatedMode: boolean = false
   ) {
     this.nodes = nodes
     this.edges = edges
     this.workspacePath = workspacePath
     this.ollamaHost = ollamaHost
+    this.isolatedMode = isolatedMode
     if (userInputValues) {
       this.userInputValues = new Map(Object.entries(userInputValues))
     }
@@ -266,11 +283,38 @@ export class WorkflowExecutor {
       initializeExecutors()
     }
 
-    // Start execution
-    useExecutionStore.getState().startExecution('workflow')
+    // Start execution - use workspace-specific method in isolated mode
+    const executionStore = useExecutionStore.getState()
+    if (this.isolatedMode) {
+      executionStore.startExecutionForWorkspace(this.workspacePath, 'workflow')
+    } else {
+      executionStore.startExecution(this.workspacePath, 'workflow')
+    }
 
     // Get execution order
     const initialOrder = getExecutionOrder(this.nodes, this.edges)
+    const totalNodes = initialOrder.length
+    let completedNodes = 0
+
+    // Update global execution status - running
+    const updateGlobalStatus = (status: Partial<GlobalExecutionStatus>) => {
+      const fullStatus: GlobalExecutionStatus = {
+        workspacePath: this.workspacePath,
+        status: 'running',
+        progress: 0,
+        totalNodes,
+        completedNodes,
+        ...status,
+      }
+      window.electronAPI.execution.updateStatus(fullStatus).catch(console.error)
+    }
+
+    // Initialize global status
+    updateGlobalStatus({
+      status: 'running',
+      startTime: new Date().toISOString(),
+      progress: 0,
+    })
     
     // Debug: log execution order and edges
     console.log('[WorkflowExecutor] Nodes:', this.nodes.map(n => ({ id: n.id, type: n.data.nodeType, label: n.data.label })))
@@ -336,18 +380,18 @@ export class WorkflowExecutor {
       const executionStore = useExecutionStore.getState()
       
       // Check for abort
-      if (this.abortController!.signal.aborted) {
+      if (this.abortController!.signal.aborted || this.isCancelled) {
         executionStore.cancelExecution()
         return false
       }
 
       // Check for paused state
-      while (executionStore.status === 'paused') {
+      while (this.isPaused) {
         await new Promise((resolve) => setTimeout(resolve, 100))
       }
 
       // Check for cancelled
-      if (executionStore.status === 'cancelled') {
+      if (executionStore.status === 'cancelled' || this.isCancelled) {
         return false
       }
 
@@ -377,16 +421,15 @@ export class WorkflowExecutor {
       // Find incoming edges to this node
       const incomingEdges = this.edges.filter((edge) => edge.target === nodeId)
       
-      // Update incoming edges to be animated
+      // Update incoming edges to be animated (only if workflow is still loaded)
       const workflowStore = useWorkflowStore.getState()
       
-      // Batch update all incoming edges at once
-      if (incomingEdges.length > 0) {
+      if (incomingEdges.length > 0 && workflowStore.workflow) {
         const edgeIds = new Set(incomingEdges.map(e => e.id))
         const updatedEdges = workflowStore.edges.map(e => 
           edgeIds.has(e.id) ? { ...e, animated: true } : e
         )
-        workflowStore.setWorkflow({ ...workflowStore.workflow!, edges: updatedEdges })
+        workflowStore.setWorkflow({ ...workflowStore.workflow, edges: updatedEdges })
       }
 
       // Update node status to running
@@ -462,13 +505,15 @@ export class WorkflowExecutor {
 
         executionStore.updateNodeStatus(nodeId, result)
 
-        // Restore edges to non-animated
+        // Restore edges to non-animated (only if workflow is still loaded)
         const restoreWorkflowStore = useWorkflowStore.getState()
-        const edgeIds = new Set(incomingEdges.map(e => e.id))
-        const updatedEdges = restoreWorkflowStore.edges.map(e => 
-          edgeIds.has(e.id) ? { ...e, animated: false } : e
-        )
-        restoreWorkflowStore.setWorkflow({ ...restoreWorkflowStore.workflow!, edges: updatedEdges })
+        if (restoreWorkflowStore.workflow) {
+          const edgeIds = new Set(incomingEdges.map(e => e.id))
+          const updatedEdges = restoreWorkflowStore.edges.map(e => 
+            edgeIds.has(e.id) ? { ...e, animated: false } : e
+          )
+          restoreWorkflowStore.setWorkflow({ ...restoreWorkflowStore.workflow, edges: updatedEdges })
+        }
 
         executionStore.addLog({
           nodeId,
@@ -523,13 +568,15 @@ export class WorkflowExecutor {
 
         executionStore.updateNodeStatus(nodeId, result)
 
-        // Restore edges to non-animated
+        // Restore edges to non-animated (only if workflow is still loaded)
         const restoreWorkflowStore = useWorkflowStore.getState()
-        const edgeIds = new Set(incomingEdges.map(e => e.id))
-        const updatedEdges = restoreWorkflowStore.edges.map(e => 
-          edgeIds.has(e.id) ? { ...e, animated: false } : e
-        )
-        restoreWorkflowStore.setWorkflow({ ...restoreWorkflowStore.workflow!, edges: updatedEdges })
+        if (restoreWorkflowStore.workflow) {
+          const edgeIds = new Set(incomingEdges.map(e => e.id))
+          const updatedEdges = restoreWorkflowStore.edges.map(e => 
+            edgeIds.has(e.id) ? { ...e, animated: false } : e
+          )
+          restoreWorkflowStore.setWorkflow({ ...restoreWorkflowStore.workflow, edges: updatedEdges })
+        }
 
         executionStore.addLog({
           nodeId,
@@ -571,6 +618,14 @@ export class WorkflowExecutor {
       }
       
       executedInCurrentRound.add(nodeId)
+      completedNodes++
+      
+      // Update global progress
+      updateGlobalStatus({
+        progress: Math.round((completedNodes / totalNodes) * 100),
+        completedNodes,
+        currentNode: node?.data.label,
+      })
       
       // After executing a node, check if any queue nodes need re-execution
       const executionStore = useExecutionStore.getState()
@@ -590,11 +645,45 @@ export class WorkflowExecutor {
       }
     }
 
-    useExecutionStore.getState().completeExecution(success)
+    if (this.isolatedMode) {
+      executionStore.completeExecutionForWorkspace(this.workspacePath, success)
+    } else {
+      executionStore.completeExecution(success)
+    }
+    
+    // Update global execution status - completed/failed
+    updateGlobalStatus({
+      status: success ? 'completed' : 'failed',
+      endTime: new Date().toISOString(),
+      progress: 100,
+      completedNodes,
+    })
+    
     return success
   }
 
+  pause() {
+    this.isPaused = true
+    const executionStore = useExecutionStore.getState()
+    if (this.isolatedMode) {
+      executionStore.pauseExecution()
+    } else {
+      executionStore.pauseExecution()
+    }
+  }
+
+  resume() {
+    this.isPaused = false
+    const executionStore = useExecutionStore.getState()
+    if (this.isolatedMode) {
+      executionStore.resumeExecution()
+    } else {
+      executionStore.resumeExecution()
+    }
+  }
+
   abort() {
+    this.isCancelled = true
     if (this.abortController) {
       this.abortController.abort()
     }

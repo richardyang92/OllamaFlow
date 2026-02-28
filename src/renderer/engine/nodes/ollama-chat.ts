@@ -63,6 +63,17 @@ async function executeWithOpenAI(
         temperature: data.temperature,
         max_tokens: data.maxTokens,
       })) {
+        // Check if execution was cancelled
+        if (context.signal?.aborted) {
+          context.onLog?.({
+            nodeId: node.id,
+            nodeName: data.label,
+            level: 'info',
+            message: 'OpenAI response cancelled',
+          })
+          break
+        }
+
         chunkCount++
         fullResponse += chunk
         context.onStream?.(node.id, chunk)
@@ -143,26 +154,37 @@ async function executeWithOllama(
     num_predict: data.maxTokens,
   }
 
-  if (data.stream) {
-    // Handle streaming response
-    let fullResponse = ''
-    const stream = await ollamaInstance.chat({
-      model: data.model,
-      messages,
-      options,
-      stream: true,
-    })
+    if (data.stream) {
+      // Handle streaming response
+      let fullResponse = ''
+      const stream = await ollamaInstance.chat({
+        model: data.model,
+        messages,
+        options,
+        stream: true,
+      })
 
-    let chunkCount = 0
-    for await (const chunk of stream) {
-      chunkCount++
+      let chunkCount = 0
+      for await (const chunk of stream) {
+        // Check if execution was cancelled
+        if (context.signal?.aborted) {
+          context.onLog?.({
+            nodeId: node.id,
+            nodeName: data.label,
+            level: 'info',
+            message: 'Ollama response cancelled',
+          })
+          break
+        }
 
-      if (chunk.message?.content) {
-        const content = chunk.message.content
-        fullResponse += content
-        context.onStream?.(node.id, content)
+        chunkCount++
+
+        if (chunk.message?.content) {
+          const content = chunk.message.content
+          fullResponse += content
+          context.onStream?.(node.id, content)
+        }
       }
-    }
 
     context.onLog?.({
       nodeId: node.id,

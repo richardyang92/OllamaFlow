@@ -1,5 +1,9 @@
 import { create } from 'zustand'
 import type { WorkspaceConfig, RecentWorkspace } from '@/types/workspace'
+import { useExecutionStore } from './execution-store'
+
+const DEBUG = true
+const log = (...args: unknown[]) => DEBUG && console.log('[WorkspaceStore]', ...args)
 
 type AppPage = 'welcome' | 'wizard' | 'editor'
 
@@ -32,12 +36,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   currentPage: 'welcome',
 
   setCurrentWorkspace: (path, config) => {
+    log('setCurrentWorkspace', { path, name: config.name })
     set({
       currentWorkspace: { path, config },
       error: null,
     })
-    // Add to recent workspaces
-    window.electronAPI.recent.add(path, config.name)
+    log('setCurrentWorkspace - calling switchWorkspaceContext')
+    useExecutionStore.getState().switchWorkspaceContext(path)
   },
 
   clearCurrentWorkspace: () => {

@@ -485,6 +485,17 @@ CSS选择器示例: "button.primary", "a[href*=login]", ".submit-btn"
       ]
 
       while (iteration < maxIterations && !finalAnswer) {
+        // Check if execution was cancelled
+        if (context.signal?.aborted) {
+          context.onLog?.({
+            nodeId: node.id,
+            nodeName: data.label,
+            level: 'info',
+            message: 'ReAct Agent 执行已取消',
+          })
+          break
+        }
+
         iteration++
 
         // Detect loop behavior
@@ -1098,6 +1109,17 @@ CSS选择器示例: "button.primary", "a[href*=login]", ".submit-btn"
   ]
 
   while (iteration < maxIterations && !finalAnswer) {
+    // Check if execution was cancelled
+    if (context.signal?.aborted) {
+      context.onLog?.({
+        nodeId: node.id,
+        nodeName: data.label,
+        level: 'info',
+        message: 'ReAct Agent 执行已取消',
+      })
+      break
+    }
+
     iteration++
 
     // Create new step in ReAct state

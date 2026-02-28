@@ -1,9 +1,9 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useState } from 'react'
 import { NodeProps } from '@xyflow/react'
 import BaseNode from './BaseNode'
 import { ReactAgentNodeData, NodeStatus, AVAILABLE_TOOLS } from '@/types/node'
 import { useReActState } from '@/hooks/useReActState'
-import { useExecutionStore } from '@/store/execution-store'
+import { useNodeStatus } from '@/hooks/useNodeStatus'
 import { motion } from 'framer-motion'
 import ReActStepsPanel from './react-agent/ReActStepsPanel'
 
@@ -12,31 +12,14 @@ function ReactAgentNode(props: NodeProps) {
   const id = props.id as string
   const reactState = useReActState(id)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
-  const [nodeStatus, setNodeStatus] = useState<NodeStatus>('idle')
+  const nodeResult = useNodeStatus(id)
 
-  // Update status from execution store
-  useEffect(() => {
-    const updateStatus = () => {
-      const nodeResult = useExecutionStore.getState().getNodeStatus(id)
-      const executionStatus = nodeResult?.status || 'idle'
+  const executionStatus = nodeResult?.status || 'idle'
+  const nodeStatus: NodeStatus =
+    executionStatus === 'pending' || executionStatus === 'skipped'
+      ? 'idle'
+      : (executionStatus as NodeStatus)
 
-      // Map execution status to NodeStatus
-      const status: NodeStatus =
-        executionStatus === 'pending' || executionStatus === 'skipped'
-          ? 'idle'
-          : (executionStatus as NodeStatus)
-
-      if (status !== nodeStatus) {
-        setNodeStatus(status)
-      }
-    }
-
-    updateStatus()
-    const interval = setInterval(updateStatus, 100)
-    return () => clearInterval(interval)
-  }, [id, nodeStatus])
-
-  // Get status style
   const getStatusStyle = () => {
     switch (nodeStatus) {
       case 'running':
@@ -76,7 +59,6 @@ function ReactAgentNode(props: NodeProps) {
 
   const statusStyle = getStatusStyle()
 
-  // Get enabled tool info
   const enabledToolIds = data.enabledTools || []
   const enabledTools = AVAILABLE_TOOLS.filter(
     (t) => t.builtIn || enabledToolIds.includes(t.id as typeof enabledToolIds[number])
@@ -86,7 +68,6 @@ function ReactAgentNode(props: NodeProps) {
   return (
     <BaseNode {...props} icon={data.debugMode?.enabled ? "🔬" : "🧠"}>
       <div className="space-y-3 w-full">
-        {/* Primary Badge - Model Name */}
         <div className="node-primary-badge ai">
           <span className="text-lg">{data.debugMode?.enabled ? "🔬" : "🧠"}</span>
           <span className="font-semibold truncate">
@@ -94,20 +75,17 @@ function ReactAgentNode(props: NodeProps) {
           </span>
         </div>
 
-        {/* Debug Mode Indicator */}
         {data.debugMode?.enabled && (
           <div className="text-[10px] px-2 py-1 bg-amber-500/20 text-amber-400 rounded flex items-center gap-1">
             <span>🔬</span> Debug Mode (OpenAI)
           </div>
         )}
 
-        {/* Secondary Info - Tools and Max Iterations */}
         <div className="node-secondary-info flex justify-between items-center">
           <span className="text-[var(--color-text-muted)]">工具: {totalToolsCount}</span>
           <span className="text-[var(--color-text-muted)]">最大迭代: {data.maxIterations}</span>
         </div>
 
-        {/* Status Indicator */}
         <motion.div
           className={`${statusStyle.bg} ${statusStyle.border} rounded-lg p-2 flex items-center justify-between cursor-pointer`}
           onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
@@ -129,7 +107,6 @@ function ReactAgentNode(props: NodeProps) {
             <span className={`text-xs font-medium ${statusStyle.color}`}>
               {statusStyle.label}
             </span>
-            {/* Show current iteration */}
             {reactState?.isRunning && (
               <span className="text-[10px] text-[var(--color-text-subtle)] ml-1">
                 ({reactState.currentIteration}/{reactState.maxIterations})
@@ -145,7 +122,6 @@ function ReactAgentNode(props: NodeProps) {
           </motion.span>
         </motion.div>
 
-        {/* Details Panel */}
         <motion.div
           initial={{ height: 0, opacity: 0 }}
           animate={{
@@ -167,7 +143,6 @@ function ReactAgentNode(props: NodeProps) {
           </div>
         </motion.div>
 
-        {/* Structured Reasoning Steps */}
         {(reactState?.steps?.length || nodeStatus === 'running') && (
           <div className="mt-3 pt-3 border-t border-[var(--color-border-subtle)]">
             <div className="text-xs text-[var(--color-text-muted)] mb-2 flex items-center gap-2">

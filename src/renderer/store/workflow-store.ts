@@ -85,6 +85,9 @@ interface WorkflowState {
   // Selection
   selectNode: (nodeId: string | null) => void
   getSelectedNode: () => WorkflowNode | null
+
+  // Edge animation sync
+  syncEdgeAnimation: (runningNodeIds: string[]) => void
 }
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
@@ -118,12 +121,24 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   onNodesChange: (changes) => {
     const newNodes = applyNodeChanges(changes, get().nodes)
-    set({ nodes: newNodes as Node<WorkflowNodeData>[], isDirty: true })
+    const hasSignificantChanges = changes.some((change) => {
+      if (change.type === 'add' || change.type === 'remove') return true
+      if (change.type === 'position' && change.dragging === false) return true
+      return false
+    })
+    set({ 
+      nodes: newNodes as Node<WorkflowNodeData>[], 
+      isDirty: hasSignificantChanges ? true : get().isDirty 
+    })
   },
 
   onEdgesChange: (changes) => {
     const newEdges = applyEdgeChanges(changes, get().edges)
-    set({ edges: newEdges, isDirty: true })
+    const hasSignificantChanges = changes.some((change) => {
+      if (change.type === 'add' || change.type === 'remove') return true
+      return false
+    })
+    set({ edges: newEdges, isDirty: hasSignificantChanges ? true : get().isDirty })
   },
 
   onConnect: (connection: Connection) => {
@@ -196,5 +211,27 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     const { nodes, selectedNodeId } = get()
     if (!selectedNodeId) return null
     return nodes.find((n) => n.id === selectedNodeId) as WorkflowNode | null
+  },
+
+  syncEdgeAnimation: (runningNodeIds: string[]) => {
+    const { edges, workflow } = get()
+    if (!workflow || edges.length === 0) return
+
+    const runningNodeIdsSet = new Set(runningNodeIds)
+    const updatedEdges = edges.map((edge) => {
+      const shouldBeAnimated = runningNodeIdsSet.has(edge.target)
+      if (edge.animated !== shouldBeAnimated) {
+        return { ...edge, animated: shouldBeAnimated }
+      }
+      return edge
+    })
+
+    const hasChanges = updatedEdges.some((e, i) => e.animated !== edges[i].animated)
+    if (hasChanges) {
+      set({
+        edges: updatedEdges,
+        workflow: { ...workflow, edges: updatedEdges }
+      })
+    }
   },
 }))

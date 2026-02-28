@@ -33,7 +33,7 @@ const steps = [
 ]
 
 export default function NewProjectWizard() {
-  const { setCurrentWorkspace, setCurrentPage } = useWorkspaceStore()
+  const { setCurrentWorkspace, setCurrentPage, setRecentWorkspaces } = useWorkspaceStore()
   const { setWorkflow } = useWorkflowStore()
   const { themeMode, setThemeMode, resolvedTheme } = useTheme()
 
@@ -120,8 +120,12 @@ export default function NewProjectWizard() {
         await window.electronAPI.openai.setApiKey('workspace-default', state.apiKey)
       }
 
+      await window.electronAPI.recent.add(state.projectPath, result.config.name)
       setCurrentWorkspace(state.projectPath, result.config)
       setWorkflow(workflow)
+      
+      const updatedRecentWorkspaces = await window.electronAPI.recent.get()
+      setRecentWorkspaces(updatedRecentWorkspaces)
     } catch (err) {
       setError(`创建失败: ${(err as Error).message}`)
     } finally {

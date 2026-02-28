@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef } from 'react'
+import { useCallback, useState, useRef, useMemo } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check } from 'lucide-react'
@@ -15,7 +15,8 @@ import ExecutionPanel from '@/components/workflow/ExecutionPanel'
 import InputDialog from '@/components/workflow/InputDialog'
 import FilePreviewDialog from '@/components/workflow/FilePreviewDialog'
 import { CollapsibleDrawer } from '@/components/ui/CollapsibleDrawer'
-import { WorkflowExecutor, initializeExecutors } from '@/engine/executor'
+import { initializeExecutors } from '@/engine/executor'
+import { executionManager } from '@/engine/execution-manager'
 
 function EditFeedback({ message }: { message: string }) {
   return (
@@ -36,8 +37,20 @@ initializeExecutors()
 export default function EditorPage() {
   const { currentWorkspace, clearCurrentWorkspace } = useWorkspaceStore()
   const { workflow, isDirty, markClean } = useWorkflowStore()
-  const { status: executionStatus, cancelExecution } = useExecutionStore()
   const resolvedTheme = useResolvedTheme()
+  
+  // Subscribe to execution store changes - use workspace-specific status
+  const workspacePath = currentWorkspace?.path
+  const workspaces = useExecutionStore((state) => state.workspaces)
+  const globalStatus = useExecutionStore((state) => state.status)
+  const cancelExecution = useExecutionStore((state) => state.cancelExecution)
+  
+  // Get current workspace execution status
+  const executionStatus = useMemo(() => {
+    if (!workspacePath) return globalStatus
+    const workspaceState = workspaces.get(workspacePath)
+    return workspaceState?.status || globalStatus
+  }, [workspacePath, workspaces, globalStatus])
   
   const [showFiles, setShowFiles] = useState(false)
   const [showProperties, setShowProperties] = useState(false)
@@ -47,7 +60,6 @@ export default function EditorPage() {
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null)
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null)
   const [saveActive, setSaveActive] = useState(false)
-  const executorRef = useRef<WorkflowExecutor | null>(null)
   const userClosedPropertiesRef = useRef(false)
 
   const handlePropertiesClose = useCallback(() => {
@@ -137,21 +149,25 @@ export default function EditorPage() {
   }, [currentWorkspace, workflow, markClean, saveActive])
 
   const handleClose = useCallback(() => {
+    console.log('[Editor] handleClose', { isDirty, executionStatus })
     if (isDirty) {
       const confirm = window.confirm('您有未保存的更改。确定要关闭吗？')
       if (!confirm) return
     }
+    if (executionStatus !== 'running') {
+      console.log('[Editor] handleClose - calling resetExecution')
+      useExecutionStore.getState().resetExecution()
+    }
     clearCurrentWorkspace()
     useWorkflowStore.getState().clearWorkflow()
-  }, [isDirty, clearCurrentWorkspace])
+  }, [isDirty, clearCurrentWorkspace, executionStatus])
 
   const handleExecute = useCallback(async () => {
     if (executionStatus === 'running') {
-      if (executorRef.current) {
-        executorRef.current.abort()
+      if (currentWorkspace) {
+        executionManager.cancelExecution(currentWorkspace.path)
       }
       cancelExecution()
-      executorRef.current = null
     } else {
       if (!currentWorkspace) return
 
@@ -184,20 +200,16 @@ export default function EditorPage() {
   const executeWorkflow = useCallback((nodes: any[], edges: any[], inputValues?: Record<string, string>) => {
     if (!currentWorkspace) return
 
-    const executor = new WorkflowExecutor(
+    executionManager.startExecution(
+      currentWorkspace.path,
       nodes,
       edges,
-      currentWorkspace.path,
       currentWorkspace.config.ollamaHost,
       inputValues || undefined
-    )
-
-    executorRef.current = executor
-
-    executor.execute().catch((error) => {
+    ).catch((error: Error) => {
       useExecutionStore.getState().addLog({
         level: 'error',
-        message: `执行错误: ${error instanceof Error ? error.message : String(error)}`,
+        message: `执行错误: ${error.message}`,
       })
     })
   }, [currentWorkspace])

@@ -58,6 +58,18 @@ export interface RecentWorkspace {
   lastOpened: string
 }
 
+export interface WorkspaceExecutionStatus {
+  workspacePath: string
+  status: 'idle' | 'running' | 'completed' | 'failed' | 'cancelled'
+  startTime?: string
+  endTime?: string
+  progress: number
+  totalNodes: number
+  completedNodes: number
+  currentNode?: string
+  error?: string
+}
+
 export interface HttpFetchOptions {
   url: string
   method?: string
@@ -232,6 +244,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('recent:remove', path),
   },
 
+  // Execution status
+  execution: {
+    getAllStatuses: (): Promise<Record<string, WorkspaceExecutionStatus>> =>
+      ipcRenderer.invoke('execution:getAllStatuses'),
+
+    getStatus: (workspacePath: string): Promise<WorkspaceExecutionStatus | null> =>
+      ipcRenderer.invoke('execution:getStatus', workspacePath),
+
+    updateStatus: (status: WorkspaceExecutionStatus): Promise<WorkspaceExecutionStatus> =>
+      ipcRenderer.invoke('execution:updateStatus', status),
+
+    clearStatus: (workspacePath: string): Promise<boolean> =>
+      ipcRenderer.invoke('execution:clearStatus', workspacePath),
+
+    start: (workspacePath: string): Promise<WorkspaceExecutionStatus> =>
+      ipcRenderer.invoke('execution:start', workspacePath),
+
+    pause: (workspacePath: string): Promise<WorkspaceExecutionStatus | null> =>
+      ipcRenderer.invoke('execution:pause', workspacePath),
+
+    resume: (workspacePath: string): Promise<WorkspaceExecutionStatus | null> =>
+      ipcRenderer.invoke('execution:resume', workspacePath),
+
+    cancel: (workspacePath: string): Promise<WorkspaceExecutionStatus | null> =>
+      ipcRenderer.invoke('execution:cancel', workspacePath),
+  },
+
   // HTTP fetch
   http: {
     fetch: (options: HttpFetchOptions): Promise<HttpFetchResult> =>
@@ -350,6 +389,16 @@ declare global {
         get: () => Promise<RecentWorkspace[]>
         add: (path: string, name: string) => Promise<RecentWorkspace[]>
         remove: (path: string) => Promise<RecentWorkspace[]>
+      }
+      execution: {
+        getAllStatuses: () => Promise<Record<string, WorkspaceExecutionStatus>>
+        getStatus: (workspacePath: string) => Promise<WorkspaceExecutionStatus | null>
+        updateStatus: (status: WorkspaceExecutionStatus) => Promise<WorkspaceExecutionStatus>
+        clearStatus: (workspacePath: string) => Promise<boolean>
+        start: (workspacePath: string) => Promise<WorkspaceExecutionStatus>
+        pause: (workspacePath: string) => Promise<WorkspaceExecutionStatus | null>
+        resume: (workspacePath: string) => Promise<WorkspaceExecutionStatus | null>
+        cancel: (workspacePath: string) => Promise<WorkspaceExecutionStatus | null>
       }
       http: {
         fetch: (options: HttpFetchOptions) => Promise<HttpFetchResult>
