@@ -20,6 +20,8 @@ import {
   Microscope,
   Folder,
   Sparkles,
+  ListOrdered,
+  Split,
 } from 'lucide-react'
 
 export const NodeIconMap = {
@@ -36,6 +38,8 @@ export const NodeIconMap = {
   writeFile: Save,
   executeCommand: Terminal,
   reactAgent: Brain,
+  queue: ListOrdered,
+  splitter: Split,
 } as const
 
 export const UIIconMap = {

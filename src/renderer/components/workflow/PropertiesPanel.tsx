@@ -1,3 +1,4 @@
+import type { WorkflowNode } from '@/types/node'
 import { useState } from 'react'
 import { useWorkflowStore } from '@/store/workflow-store'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -14,6 +15,8 @@ import WriteFileProperties from './properties/WriteFileProperties'
 import ExecuteCommandProperties from './properties/ExecuteCommandProperties'
 import ReactAgentProperties from './properties/ReactAgentProperties'
 import ImageProperties from './properties/ImageProperties'
+import QueueProperties from './properties/QueueProperties'
+import SplitterProperties from './properties/SplitterProperties'
 import { cn } from '@/lib/utils'
 
 function EditFeedback({ message }: { message: string }) {
@@ -89,6 +92,10 @@ function PropertiesPanelContent({
         return <ExecuteCommandProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'reactAgent':
         return <ReactAgentProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
+      case 'queue':
+        return <QueueProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
+      case 'splitter':
+        return <SplitterProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       default:
         return (
           <div className="text-[var(--color-text-muted)] text-sm">此节点类型没有可配置的属性.</div>
@@ -214,8 +221,8 @@ function PropertiesPanelContent({
 }
 
 export default function 属性Panel({ onClose, isDrawer = false }: { onClose: () => void; isDrawer?: boolean }) {
-  const { selectedNodeId, getSelectedNode, updateNodeData, deleteNode } = useWorkflowStore()
-  const selectedNode = getSelectedNode()
+  const { selectedNodeId, nodes, updateNodeData, deleteNode } = useWorkflowStore()
+  const selectedNode = nodes.find(n => n.id === selectedNodeId) as WorkflowNode | undefined
 
   if (!selectedNode) {
     if (isDrawer) {

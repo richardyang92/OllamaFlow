@@ -110,6 +110,12 @@
   
   --shadow-glass: 0 4px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   --shadow-handle-hover: 0 0 6px rgba(255, 255, 255, 0.3);
+  
+  --xy-minimap-background-color-default: var(--glass-bg);
+  --xy-minimap-mask-background-color-default: rgba(0, 0, 0, 0.5);
+  --xy-minimap-mask-stroke-color-default: var(--glass-border);
+  --xy-minimap-node-background-color-default: var(--color-border-subtle);
+  --xy-minimap-node-stroke-color-default: transparent;
 }
 
 /* ============================================
@@ -166,6 +172,12 @@
   
   --shadow-glass: 0 4px 24px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
   --shadow-handle-hover: 0 0 6px rgba(0, 0, 0, 0.3);
+  
+  --xy-minimap-background-color-default: var(--glass-bg);
+  --xy-minimap-mask-background-color-default: rgba(0, 0, 0, 0.3);
+  --xy-minimap-mask-stroke-color-default: var(--glass-border);
+  --xy-minimap-node-background-color-default: var(--color-border-subtle);
+  --xy-minimap-node-stroke-color-default: transparent;
 }
 
 /* ============================================

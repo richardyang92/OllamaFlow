@@ -27,6 +27,8 @@ export type NodeType =
   | 'writeFile'
   | 'executeCommand'
   | 'reactAgent'
+  | 'queue'
+  | 'splitter'
 
 // ReAct Agent Tool Definition
 // Browser tool types
@@ -364,6 +366,17 @@ export interface ReactAgentNodeData extends BaseNodeData {
   debugMode?: DebugModeConfig
 }
 
+// Queue Node - collects multiple inputs into an array
+export interface QueueNodeData extends BaseNodeData {
+  nodeType: 'queue'
+  inputCount: number
+}
+
+// Splitter Node - distributes one input to multiple outputs
+export interface SplitterNodeData extends BaseNodeData {
+  nodeType: 'splitter'
+  outputCount: number
+}
 
 // Union type for all node data
 export type WorkflowNodeData =
@@ -379,6 +392,8 @@ export type WorkflowNodeData =
   | WriteFileNodeData
   | ExecuteCommandNodeData
   | ReactAgentNodeData
+  | QueueNodeData
+  | SplitterNodeData
 
 // Workflow node type
 export type WorkflowNode = Node<WorkflowNodeData>
@@ -666,6 +681,44 @@ export const nodeTemplates: NodeTemplate[] = [
       stream: true,
       inputs: [{ id: 'input', name: 'input', label: '输入', dataType: 'string' }],
       outputs: [{ id: 'response', name: 'response', label: '最终回答', dataType: 'string' }],
+    },
+  },
+  {
+    type: 'queue',
+    label: '队列',
+    icon: 'queue',
+    category: 'Logic',
+    colorScheme: 'blue',
+    description: '接收多路输入入队，有元素时立即出队透传',
+    defaultData: {
+      nodeType: 'queue',
+      label: '队列',
+      category: 'Logic',
+      inputCount: 2,
+      inputs: [
+        { id: 'input1', name: 'input1', label: '输入1', dataType: 'any' },
+        { id: 'input2', name: 'input2', label: '输入2', dataType: 'any' },
+      ],
+      outputs: [{ id: 'output', name: 'output', label: '输出', dataType: 'any' }],
+    },
+  },
+  {
+    type: 'splitter',
+    label: '分发',
+    icon: 'splitter',
+    category: 'Logic',
+    colorScheme: 'blue',
+    description: '将一路输入同时分发给多个输出',
+    defaultData: {
+      nodeType: 'splitter',
+      label: '分发',
+      category: 'Logic',
+      outputCount: 2,
+      inputs: [{ id: 'input', name: 'input', label: '输入', dataType: 'any' }],
+      outputs: [
+        { id: 'output1', name: 'output1', label: '输出1', dataType: 'any' },
+        { id: 'output2', name: 'output2', label: '输出2', dataType: 'any' },
+      ],
     },
   },
 ]

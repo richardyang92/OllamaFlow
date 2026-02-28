@@ -1,7 +1,6 @@
 import type { Node } from '@xyflow/react'
 import type { WorkflowNodeData, OutputNodeData } from '@/types/node'
 import type { NodeExecutor, ExecutionContext } from '../executor'
-import { useWorkflowStore } from '@/store/workflow-store'
 
 export function createOutputExecutor(): NodeExecutor {
   return {
@@ -12,10 +11,8 @@ export function createOutputExecutor(): NodeExecutor {
     ): Promise<unknown> {
       const data = node.data as OutputNodeData
 
-      // 根据数据来源获取输出数据
       let outputData: unknown
       if (data.sourceType === 'variable' && data.variableName) {
-        // 从上下文变量中获取值
         outputData = context.variables[data.variableName]
         if (outputData === undefined) {
           context.onLog?.({
@@ -26,12 +23,10 @@ export function createOutputExecutor(): NodeExecutor {
           })
         }
       } else {
-        // 使用输入值（默认行为）
         outputData = input.data ?? input
       }
 
-      // Convert outputData to string for display
-      const outputString = typeof outputData === 'object' ? JSON.stringify(outputData) : String(outputData)
+      const outputString = typeof outputData === 'object' ? JSON.stringify(outputData, null, 2) : String(outputData)
 
       context.onLog?.({
         nodeId: node.id,
@@ -40,10 +35,6 @@ export function createOutputExecutor(): NodeExecutor {
         message: `Output (${data.outputType}): ${outputString}`,
         data: outputData,
       })
-
-      // Update node data to display output in the UI
-      const workflowStore = useWorkflowStore.getState()
-      workflowStore.updateNodeData(node.id, { output: outputString })
 
       switch (data.outputType) {
         case 'display':

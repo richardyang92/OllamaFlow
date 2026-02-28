@@ -62,6 +62,7 @@ Node type definitions are in [src/renderer/types/node.ts](src/renderer/types/nod
 - `buildInputContext()` - Maps outputs from connected nodes to inputs via handles
 - `interpolateVariables()` - Replaces `{{variable}}` patterns in node properties
 - Node executor registry - Maps `NodeType` to `NodeExecutor` instances
+- `shouldExecuteNode()` - Checks if a node should execute based on smart router branch activation
 
 Node executors receive an `ExecutionContext` with:
 - `workspacePath`, `ollamaHost` - Configuration
@@ -194,14 +195,30 @@ The agent maintains state via `ReActExecutionState` in the execution store, trac
 
 **Browser Automation Tools**: The agent can use Playwright-based browser tools (navigate, click, type, scroll, screenshot, getContent, evaluate, wait). Browser sessions are managed per-workspace via `BrowserManager` singleton in [src/main/browser/index.ts](src/main/browser/index.ts). Sessions are lazy-initialized and persist until explicitly closed or app termination.
 
-**Multi-Backend Support**: The ReAct agent supports multiple AI backends:
-- **Ollama** (default): Uses the Ollama JavaScript SDK
-- **OpenAI-compatible APIs**: Via `debugMode.enabled` with the `OpenAIClient` ([openai-client.ts](src/renderer/engine/openai-client.ts))
+**LLM Abstraction Layer**: The ReAct agent uses a provider abstraction layer in [src/renderer/engine/react-agent/llm/](src/renderer/engine/react-agent/llm/):
+- `ILLMClient` interface - Standard contract for all LLM providers with `chat()`, `createToolResponse()`, `handleRetry()` methods
+- `StandardMessage`, `StandardToolCall`, `StandardLLMResponse` - Unified types that abstract provider differences
+- Supports `ollama` and `openai` providers via `LLMProvider` type
+- Factory pattern for creating provider-specific client instances
 
 When using OpenAI-compatible APIs, the agent stores API keys via electron-store with IPC handlers:
 - `openai:getApiKey` - Retrieve stored API key
 - `openai:setApiKey` - Store API key
 - `openai:deleteApiKey` - Delete stored API key
+
+### Smart Router Node
+The `smartRouter` node type uses AI to dynamically route execution to different branches:
+- **Executor**: [smart-router.ts](src/renderer/engine/nodes/smart-router.ts) - AI-powered branch selection
+- **Branches**: Each branch has `id`, `name`, `description`, and optional `isDefault` flag
+- **Output**: Only the selected branch's output port has a value; others are undefined
+
+**Conditional Execution**: The workflow executor tracks active branches via `activeBranches` map. When a smart router selects a branch, only downstream nodes connected to that branch execute; nodes on other branches are skipped with log message "跳过节点（来自未激活的分支）".
+
+**API Key Hierarchy**: For OpenAI-compatible mode, API keys are resolved in order:
+1. Node-specific key (`router-{nodeId}`)
+2. Workspace default key (`workspace-default`)
+
+**Value Passthrough**: Uses `extractActualValue()` to unwrap single-field inputs. If input is `{ value: "text" }`, downstream nodes receive `"text"` directly instead of the wrapper object.
 
 ## UI Localization
 The application UI uses Chinese localization throughout:

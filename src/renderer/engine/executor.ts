@@ -114,7 +114,18 @@ export function getExecutionOrder(
     const targets = adjacency.get(edge.source) || []
     targets.push(edge.target)
     adjacency.set(edge.source, targets)
-    inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1)
+    
+    // For queue nodes, only count one in-degree (they can execute with any input)
+    const targetNode = nodes.find(n => n.id === edge.target)
+    if (targetNode?.data.nodeType === 'queue') {
+      // Only increment if this is the first incoming edge for queue
+      const currentDegree = inDegree.get(edge.target) || 0
+      if (currentDegree === 0) {
+        inDegree.set(edge.target, 1)
+      }
+    } else {
+      inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1)
+    }
   }
 
   // Find start nodes (nodes with no incoming edges)
@@ -137,9 +148,15 @@ export function getExecutionOrder(
 
     const neighbors = adjacency.get(nodeId) || []
     for (const neighbor of neighbors) {
-      const newDegree = (inDegree.get(neighbor) || 0) - 1
+      const neighborNode = nodes.find(n => n.id === neighbor)
+      const currentDegree = inDegree.get(neighbor) || 0
+      const newDegree = currentDegree - 1
       inDegree.set(neighbor, newDegree)
-      if (newDegree === 0 && !visited.has(neighbor)) {
+      
+      // For queue nodes, they become ready when any predecessor is done
+      if (neighborNode?.data.nodeType === 'queue' && !visited.has(neighbor)) {
+        queue.push(neighbor)
+      } else if (newDegree === 0 && !visited.has(neighbor)) {
         queue.push(neighbor)
       }
     }
@@ -183,6 +200,8 @@ import { createWriteFileExecutor } from './nodes/write-file'
 import { createExecuteCommandExecutor } from './nodes/execute-command'
 import { createImageExecutor } from './nodes/image'
 import { createReactAgentExecutor } from './nodes/react-agent'
+import { createQueueExecutor } from './nodes/queue'
+import { createSplitterExecutor } from './nodes/splitter'
 
 // Node executor registry
 const nodeExecutors: Partial<Record<NodeType, NodeExecutor>> = {}
@@ -211,6 +230,8 @@ export function initializeExecutors() {
   registerNodeExecutor('writeFile', createWriteFileExecutor())
   registerNodeExecutor('executeCommand', createExecuteCommandExecutor())
   registerNodeExecutor('reactAgent', createReactAgentExecutor())
+  registerNodeExecutor('queue', createQueueExecutor())
+  registerNodeExecutor('splitter', createSplitterExecutor())
 }
 
 // Main workflow executor
@@ -249,7 +270,12 @@ export class WorkflowExecutor {
     useExecutionStore.getState().startExecution('workflow')
 
     // Get execution order
-    const executionOrder = getExecutionOrder(this.nodes, this.edges)
+    const initialOrder = getExecutionOrder(this.nodes, this.edges)
+    
+    // Debug: log execution order and edges
+    console.log('[WorkflowExecutor] Nodes:', this.nodes.map(n => ({ id: n.id, type: n.data.nodeType, label: n.data.label })))
+    console.log('[WorkflowExecutor] Edges:', this.edges.map(e => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle })))
+    console.log('[WorkflowExecutor] Initial execution order:', initialOrder)
 
     this.abortController = new AbortController()
     const variables: Record<string, unknown> = {}
@@ -266,7 +292,6 @@ export class WorkflowExecutor {
       edges: this.edges,
       signal: this.abortController.signal,
       onStream: (nodeId, chunk) => {
-        // Check if node still exists before appending stream output
         const currentWorkflowStore = useWorkflowStore.getState();
         const workflowNodes = currentWorkflowStore.nodes;
         if (workflowNodes.some(n => n.id === nodeId)) {
@@ -279,12 +304,39 @@ export class WorkflowExecutor {
     }
 
     let success = true
+    
+    // Track execution counts for each node (for cycle detection)
+    const executionCounts = new Map<string, number>()
+    const MAX_QUEUE_EXECUTIONS = 100 // Maximum times a queue node can execute
 
-    for (const nodeId of executionOrder) {
+    // Build downstream map for triggering re-execution
+    const downstreamMap = new Map<string, string[]>()
+    for (const edge of this.edges) {
+      const downstream = downstreamMap.get(edge.source) || []
+      downstream.push(edge.target)
+      downstreamMap.set(edge.source, downstream)
+    }
+
+    // Helper function to get downstream chain from a node
+    const getDownstreamChain = (nodeId: string, visited: Set<string>): string[] => {
+      const chain: string[] = []
+      const downstream = downstreamMap.get(nodeId) || []
+      for (const targetId of downstream) {
+        if (!visited.has(targetId)) {
+          visited.add(targetId)
+          chain.push(targetId)
+          chain.push(...getDownstreamChain(targetId, visited))
+        }
+      }
+      return chain
+    }
+
+    // Execute a single node
+    const executeNode = async (nodeId: string): Promise<boolean> => {
       const executionStore = useExecutionStore.getState()
       
       // Check for abort
-      if (this.abortController.signal.aborted) {
+      if (this.abortController!.signal.aborted) {
         executionStore.cancelExecution()
         return false
       }
@@ -300,7 +352,7 @@ export class WorkflowExecutor {
       }
 
       const node = this.nodes.find((n) => n.id === nodeId)
-      if (!node) continue
+      if (!node) return true
 
       // Check if this node should be executed (conditional execution)
       if (!this.shouldExecuteNode(nodeId)) {
@@ -310,7 +362,7 @@ export class WorkflowExecutor {
           level: 'info',
           message: `跳过节点（来自未激活的分支）`,
         })
-        continue
+        return true
       }
 
       const startTime = Date.now()
@@ -319,8 +371,7 @@ export class WorkflowExecutor {
       const currentWorkflowStore = useWorkflowStore.getState();
       const workflowNodes = currentWorkflowStore.nodes;
       if (!workflowNodes.some(n => n.id === nodeId)) {
-        // Node has been deleted, skip execution
-        continue;
+        return true
       }
       
       // Find incoming edges to this node
@@ -328,16 +379,15 @@ export class WorkflowExecutor {
       
       // Update incoming edges to be animated
       const workflowStore = useWorkflowStore.getState()
-      const originalEdgeTypes = new Map<string, string>()
       
-      incomingEdges.forEach(edge => {
-        originalEdgeTypes.set(edge.id, edge.type || 'smoothstep')
-        // Update edge type to animated
+      // Batch update all incoming edges at once
+      if (incomingEdges.length > 0) {
+        const edgeIds = new Set(incomingEdges.map(e => e.id))
         const updatedEdges = workflowStore.edges.map(e => 
-          e.id === edge.id ? { ...e, type: 'animated' } : e
+          edgeIds.has(e.id) ? { ...e, animated: true } : e
         )
         workflowStore.setWorkflow({ ...workflowStore.workflow!, edges: updatedEdges })
-      })
+      }
 
       // Update node status to running
       executionStore.updateNodeStatus(nodeId, {
@@ -358,7 +408,6 @@ export class WorkflowExecutor {
         // Build input from connected nodes
         const input = buildInputContext(nodeId, this.edges, executionStore.context?.nodeResults || new Map())
 
-        // Debug: Log input context
         context.onLog?.({
           nodeId,
           nodeName: node.data.label,
@@ -395,11 +444,10 @@ export class WorkflowExecutor {
         }
 
         // Check if node still exists before recording result
-        const currentWorkflowStore = useWorkflowStore.getState();
-        const workflowNodes = currentWorkflowStore.nodes;
-        if (!workflowNodes.some(n => n.id === nodeId)) {
-          // Node has been deleted, skip result recording
-          continue;
+        const checkWorkflowStore = useWorkflowStore.getState();
+        const checkWorkflowNodes = checkWorkflowStore.nodes;
+        if (!checkWorkflowNodes.some(n => n.id === nodeId)) {
+          return true
         }
 
         // Record successful result
@@ -414,13 +462,13 @@ export class WorkflowExecutor {
 
         executionStore.updateNodeStatus(nodeId, result)
 
-        // Restore original edge types
-        const workflowStore = useWorkflowStore.getState()
-        const updatedEdges = workflowStore.edges.map(e => {
-          const originalType = originalEdgeTypes.get(e.id)
-          return originalType ? { ...e, type: originalType } : e
-        })
-        workflowStore.setWorkflow({ ...workflowStore.workflow!, edges: updatedEdges })
+        // Restore edges to non-animated
+        const restoreWorkflowStore = useWorkflowStore.getState()
+        const edgeIds = new Set(incomingEdges.map(e => e.id))
+        const updatedEdges = restoreWorkflowStore.edges.map(e => 
+          edgeIds.has(e.id) ? { ...e, animated: false } : e
+        )
+        restoreWorkflowStore.setWorkflow({ ...restoreWorkflowStore.workflow!, edges: updatedEdges })
 
         executionStore.addLog({
           nodeId,
@@ -429,20 +477,42 @@ export class WorkflowExecutor {
           message: `完成节点: ${node.data.label}`,
           data: output,
         })
+
+        // Check for queue nodes downstream that need re-execution
+        if (output !== undefined) {
+          const downstream = downstreamMap.get(nodeId) || []
+          for (const targetId of downstream) {
+            const targetNode = this.nodes.find(n => n.id === targetId)
+            if (targetNode?.data.nodeType === 'queue') {
+              const count = executionCounts.get(targetId) || 0
+              if (count < MAX_QUEUE_EXECUTIONS) {
+                // Queue node needs to be re-executed
+                const shouldReExecute = true
+                if (shouldReExecute) {
+                  context.onLog?.({
+                    nodeId: targetId,
+                    nodeName: targetNode.data.label,
+                    level: 'info',
+                    message: `队列节点将被重新触发`,
+                  })
+                }
+              }
+            }
+          }
+        }
+
+        return true
       } catch (error) {
         success = false
 
-        // Check if node still exists before recording error
-        const currentWorkflowStore = useWorkflowStore.getState();
-        const workflowNodes = currentWorkflowStore.nodes;
-        if (!workflowNodes.some(n => n.id === nodeId)) {
-          // Node has been deleted, skip error recording
-          continue;
+        const checkWorkflowStore = useWorkflowStore.getState();
+        const checkWorkflowNodes = checkWorkflowStore.nodes;
+        if (!checkWorkflowNodes.some(n => n.id === nodeId)) {
+          return false
         }
 
         const errorMessage = error instanceof Error ? error.message : String(error)
 
-        // Record error result
         const result: NodeExecutionResult = {
           nodeId,
           status: 'error',
@@ -453,13 +523,13 @@ export class WorkflowExecutor {
 
         executionStore.updateNodeStatus(nodeId, result)
 
-        // Restore original edge types
-        const workflowStore = useWorkflowStore.getState()
-        const updatedEdges = workflowStore.edges.map(e => {
-          const originalType = originalEdgeTypes.get(e.id)
-          return originalType ? { ...e, type: originalType } : e
-        })
-        workflowStore.setWorkflow({ ...workflowStore.workflow!, edges: updatedEdges })
+        // Restore edges to non-animated
+        const restoreWorkflowStore = useWorkflowStore.getState()
+        const edgeIds = new Set(incomingEdges.map(e => e.id))
+        const updatedEdges = restoreWorkflowStore.edges.map(e => 
+          edgeIds.has(e.id) ? { ...e, animated: false } : e
+        )
+        restoreWorkflowStore.setWorkflow({ ...restoreWorkflowStore.workflow!, edges: updatedEdges })
 
         executionStore.addLog({
           nodeId,
@@ -468,8 +538,55 @@ export class WorkflowExecutor {
           message: `节点 ${node.data.label} 出错: ${errorMessage}`,
         })
 
-        // Stop execution on error
+        return false
+      }
+    }
+
+    // Main execution loop with cycle support
+    const executionQueue: string[] = [...initialOrder]
+    const executedInCurrentRound = new Set<string>()
+    
+    while (executionQueue.length > 0) {
+      const nodeId = executionQueue.shift()!
+      
+      // Track execution count
+      const currentCount = executionCounts.get(nodeId) || 0
+      executionCounts.set(nodeId, currentCount + 1)
+      
+      // Check max executions for queue nodes
+      const node = this.nodes.find(n => n.id === nodeId)
+      if (node?.data.nodeType === 'queue' && currentCount >= MAX_QUEUE_EXECUTIONS) {
+        context.onLog?.({
+          nodeId,
+          nodeName: node.data.label,
+          level: 'warn',
+          message: `队列节点达到最大执行次数 (${MAX_QUEUE_EXECUTIONS})`,
+        })
+        continue
+      }
+      
+      const nodeSuccess = await executeNode(nodeId)
+      if (!nodeSuccess) {
         break
+      }
+      
+      executedInCurrentRound.add(nodeId)
+      
+      // After executing a node, check if any queue nodes need re-execution
+      const executionStore = useExecutionStore.getState()
+      const lastResult = executionStore.context?.nodeResults?.get(nodeId)
+      
+      if (lastResult?.output !== undefined) {
+        const downstream = downstreamMap.get(nodeId) || []
+        for (const targetId of downstream) {
+          const targetNode = this.nodes.find(n => n.id === targetId)
+          if (targetNode?.data.nodeType === 'queue') {
+            // Add queue node and its downstream to execution queue
+            const visited = new Set<string>([nodeId])
+            const chain = getDownstreamChain(targetId, visited)
+            executionQueue.push(targetId, ...chain)
+          }
+        }
       }
     }
 

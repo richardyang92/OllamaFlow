@@ -1,4 +1,5 @@
 import type { WorkflowNode, OutputNodeData } from '@/types/node'
+import { useExecutionStore } from '@/store/execution-store'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -8,6 +9,9 @@ interface Props {
 
 export default function OutputProperties({ node, updateNodeData }: Props) {
   const data = node.data as OutputNodeData
+  const nodeResult = useExecutionStore((state) => state.getNodeStatus(node.id))
+  const output = nodeResult?.output
+  const displayOutput = output && typeof output === 'object' && output !== null && 'data' in output ? output.data : output
 
   return (
     <div className="space-y-4">
@@ -94,6 +98,26 @@ export default function OutputProperties({ node, updateNodeData }: Props) {
           )}
         </div>
       </div>
+
+      {displayOutput != null && (
+        <div>
+          <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">输出内容</label>
+          <div
+            className={cn(
+              'w-full px-3 py-2 rounded-lg',
+              'bg-[var(--color-bg-input)]',
+              'border border-[var(--color-border-subtle)]',
+              'text-[var(--color-text)] text-sm',
+              'max-h-64 overflow-auto',
+              'whitespace-pre-wrap break-words font-mono'
+            )}
+          >
+            {typeof displayOutput === 'object' && displayOutput !== null
+              ? JSON.stringify(displayOutput, null, 2)
+              : String(displayOutput)}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

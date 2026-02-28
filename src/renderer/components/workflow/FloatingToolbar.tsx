@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Play, Square, Save, ArrowLeft, FileText, Sun, Moon, Monitor, Blocks } from 'lucide-react'
 import { useTheme, type ThemeMode } from '@/contexts/ThemeContext'
@@ -88,6 +89,7 @@ export function FloatingToolbar({
   onTogglePalette,
 }: FloatingToolbarProps) {
   const { themeMode, setThemeMode, resolvedTheme } = useTheme()
+  const [isHovered, setIsHovered] = useState(false)
 
   const handleThemeToggle = () => {
     const modes: ThemeMode[] = ['light', 'dark', 'system']
@@ -97,53 +99,74 @@ export function FloatingToolbar({
   }
 
   const ThemeIcon = themeMode === 'system' ? Monitor : resolvedTheme === 'dark' ? Moon : Sun
+  const isDark = resolvedTheme === 'dark'
+  const glowColor = isDark ? '255,255,255' : '0,0,0'
+  const shadowValue = isHovered 
+    ? `0 0 30px rgba(${glowColor},0.1), 0 0 60px rgba(${glowColor},0.05)` 
+    : `0 0 20px rgba(${glowColor},0.05)`
 
   return (
     <motion.div
       initial={{ opacity: 0, y: -20, x: '-50%' }}
       animate={{ opacity: 1, y: 0, x: '-50%' }}
       transition={{ duration: 0.3 }}
+      style={{
+        boxShadow: shadowValue,
+      }}
       className={cn(
         'fixed top-4 left-1/2 z-50',
         'flex items-center gap-1',
         'px-2 py-1.5',
-        'glass-floating',
-        'rounded-full'
+        'rounded-full',
+        isHovered ? 'bg-[var(--color-bg-elevated)]/80 backdrop-blur-xl' : 'bg-[var(--color-bg-elevated)]/5 backdrop-blur-sm',
+        'transition-all duration-300'
       )}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Close button */}
       <ToolbarButton
         icon={ArrowLeft}
         onClick={onClose}
         tooltip="关闭工作区"
+        isHovered={isHovered}
       />
 
-      {/* Divider */}
-      <div className="w-px h-5 bg-[var(--color-border)] mx-1" />
+      <div className={cn(
+        'w-px h-5 mx-1 transition-colors duration-300',
+        isHovered ? 'bg-[var(--color-border)]' : 'bg-[var(--color-border)]/30'
+      )} />
 
-      {/* Workspace name */}
       <div className="flex items-center gap-2 px-2">
-        <span className="text-sm font-medium text-[var(--color-text)] max-w-32 truncate">
+        <span 
+          className="text-sm font-medium max-w-32 truncate transition-opacity duration-300"
+          style={{ 
+            color: 'var(--color-text)',
+            opacity: isHovered ? 1 : 0.5
+          }}
+        >
           {workspaceName}
         </span>
         <StatusIndicator isDirty={isDirty} executionStatus={executionStatus} />
       </div>
 
-      {/* Divider */}
-      <div className="w-px h-5 bg-[var(--color-border)] mx-1" />
+      <div className={cn(
+        'w-px h-5 mx-1 transition-colors duration-300',
+        isHovered ? 'bg-[var(--color-border)]' : 'bg-[var(--color-border)]/30'
+      )} />
 
-      {/* Action buttons */}
       <ToolbarButton
         icon={Blocks}
         onClick={onTogglePalette}
         tooltip="节点面板"
         active={showPalette}
+        isHovered={isHovered}
       />
       <ToolbarButton
         icon={FileText}
         onClick={onToggleLogs}
         tooltip="执行日志"
         active={showLogs}
+        isHovered={isHovered}
       />
       <ToolbarButton
         icon={Save}
@@ -151,6 +174,7 @@ export function FloatingToolbar({
         disabled={!isDirty && !saveActive}
         tooltip="保存 (⌘S)"
         active={saveActive}
+        isHovered={isHovered}
       />
       <ToolbarButton
         icon={executionStatus === 'running' ? Square : Play}
@@ -158,16 +182,19 @@ export function FloatingToolbar({
         tooltip={executionStatus === 'running' ? '停止' : '执行 (⌘Enter)'}
         primary
         active={executionStatus === 'running'}
+        isHovered={isHovered}
       />
 
-      {/* Divider */}
-      <div className="w-px h-5 bg-[var(--color-border)] mx-1" />
+      <div className={cn(
+        'w-px h-5 mx-1 transition-colors duration-300',
+        isHovered ? 'bg-[var(--color-border)]' : 'bg-[var(--color-border)]/30'
+      )} />
 
-      {/* Theme toggle */}
       <ToolbarButton
         icon={ThemeIcon}
         onClick={handleThemeToggle}
         tooltip={`主题: ${themeMode === 'system' ? '跟随系统' : themeMode === 'dark' ? '深色' : '浅色'}`}
+        isHovered={isHovered}
       />
     </motion.div>
   )
@@ -181,6 +208,7 @@ interface ToolbarButtonProps {
   primary?: boolean
   highlight?: boolean
   active?: boolean
+  isHovered?: boolean
 }
 
 function ToolbarButton({
@@ -191,6 +219,7 @@ function ToolbarButton({
   primary = false,
   highlight = false,
   active = false,
+  isHovered = false,
 }: ToolbarButtonProps) {
   return (
     <motion.button
@@ -202,23 +231,23 @@ function ToolbarButton({
       className={cn(
         'relative flex items-center justify-center',
         'w-8 h-8 rounded-full',
-        'transition-all duration-200',
-        disabled && 'opacity-40 cursor-not-allowed',
+        'transition-all duration-300',
+        isHovered ? 'opacity-100' : 'opacity-50',
+        disabled && 'opacity-30! cursor-not-allowed',
         primary && !active && [
-          'bg-gradient-to-r from-blue-500/80 to-purple-500/80',
+          'bg-gradient-to-r from-blue-500/60 to-purple-500/60',
           'text-white',
-          'shadow-lg shadow-blue-500/25',
-          'hover:shadow-xl hover:shadow-blue-500/30',
+          isHovered && 'from-blue-500/80 to-purple-500/80 shadow-lg shadow-blue-500/25',
         ],
         active && [
-          'bg-red-500/80',
+          'bg-red-500/60',
           'text-white',
-          'shadow-lg shadow-red-500/25',
+          isHovered && 'bg-red-500/80 shadow-lg shadow-red-500/25',
         ],
         !primary && !active && [
           'text-[var(--color-text-muted)]',
           'hover:text-[var(--color-text)]',
-          'hover:bg-[var(--color-bg-input)]',
+          'hover:bg-[var(--color-bg-input)]/50',
         ],
         highlight && !primary && [
           'ring-2 ring-yellow-400/50',

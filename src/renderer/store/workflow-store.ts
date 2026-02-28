@@ -23,13 +23,15 @@ export function getEdgeColorByNodeType(nodeType: NodeType): string {
     loop: 'rgba(96, 165, 250, 0.6)', // blue
     smartRouter: 'rgba(96, 165, 250, 0.6)', // blue
     output: 'rgba(45, 212, 191, 0.6)', // teal
-    image: 'rgba(255, 255, 255, 0.6)', // white
+    image: 'rgba(244, 114, 182, 0.6)', // pink
     readFile: 'rgba(251, 146, 60, 0.6)', // orange
     writeFile: 'rgba(251, 146, 60, 0.6)', // orange
     executeCommand: 'rgba(248, 113, 113, 0.6)', // red
     reactAgent: 'rgba(167, 139, 250, 0.6)', // purple - same as ollamaChat
+    queue: 'rgba(52, 211, 153, 0.6)', // emerald
+    splitter: 'rgba(251, 191, 36, 0.6)', // amber
   }
-  return colorMap[nodeType] || 'rgba(255, 255, 255, 0.15)'
+  return colorMap[nodeType] || 'rgba(148, 163, 184, 0.5)' // slate
 }
 
 export function getEdgeHoverColorByNodeType(nodeType: NodeType): string {
@@ -41,13 +43,15 @@ export function getEdgeHoverColorByNodeType(nodeType: NodeType): string {
     loop: 'rgba(96, 165, 250, 0.9)', // blue
     smartRouter: 'rgba(96, 165, 250, 0.9)', // blue
     output: 'rgba(45, 212, 191, 0.9)', // teal
-    image: 'rgba(255, 255, 255, 0.9)', // white
+    image: 'rgba(244, 114, 182, 0.9)', // pink
     readFile: 'rgba(251, 146, 60, 0.9)', // orange
     writeFile: 'rgba(251, 146, 60, 0.9)', // orange
     executeCommand: 'rgba(248, 113, 113, 0.9)', // red
     reactAgent: 'rgba(167, 139, 250, 0.9)', // purple - same as ollamaChat
+    queue: 'rgba(52, 211, 153, 0.9)', // emerald
+    splitter: 'rgba(251, 191, 36, 0.9)', // amber
   }
-  return colorMap[nodeType] || 'rgba(255, 255, 255, 0.4)'
+  return colorMap[nodeType] || 'rgba(148, 163, 184, 0.8)' // slate
 }
 
 interface WorkflowState {

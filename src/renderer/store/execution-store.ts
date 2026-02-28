@@ -13,6 +13,7 @@ interface ExecutionState {
   logs: ExecutionLog[]
   streamingOutput: Map<string, string>
   reactAgentStates: Map<string, ReActExecutionState>
+  queueStates: Map<string, unknown[]>
 
   // Actions
   startExecution: (workflowId: string) => void
@@ -48,6 +49,12 @@ interface ExecutionState {
   getReActState: (nodeId: string) => ReActExecutionState | undefined
   clearReActState: (nodeId: string) => void
   updateReActTodos: (nodeId: string, todos: TodoItem[]) => void
+
+  // Queue state management
+  getQueue: (nodeId: string) => unknown[]
+  enqueue: (nodeId: string, item: unknown) => void
+  dequeue: (nodeId: string) => unknown | undefined
+  clearQueue: (nodeId: string) => void
 }
 
 export const useExecutionStore = create<ExecutionState>((set, get) => ({
@@ -56,6 +63,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
   logs: [],
   streamingOutput: new Map(),
   reactAgentStates: new Map(),
+  queueStates: new Map(),
 
   startExecution: (workflowId) => {
     const context: ExecutionContext = {
@@ -71,6 +79,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       context,
       logs: [],
       streamingOutput: new Map(),
+      queueStates: new Map(),
     })
 
     get().addLog({
@@ -295,5 +304,36 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     const newMap = new Map(reactAgentStates)
     newMap.set(nodeId, { ...state, todos })
     set({ reactAgentStates: newMap })
+  },
+
+  // Queue state management
+  getQueue: (nodeId) => {
+    return get().queueStates.get(nodeId) || []
+  },
+
+  enqueue: (nodeId, item) => {
+    const { queueStates } = get()
+    const newMap = new Map(queueStates)
+    const queue = newMap.get(nodeId) || []
+    newMap.set(nodeId, [...queue, item])
+    set({ queueStates: newMap })
+  },
+
+  dequeue: (nodeId) => {
+    const { queueStates } = get()
+    const queue = queueStates.get(nodeId) || []
+    if (queue.length === 0) return undefined
+    const [first, ...rest] = queue
+    const newMap = new Map(queueStates)
+    newMap.set(nodeId, rest)
+    set({ queueStates: newMap })
+    return first
+  },
+
+  clearQueue: (nodeId) => {
+    const { queueStates } = get()
+    const newMap = new Map(queueStates)
+    newMap.delete(nodeId)
+    set({ queueStates: newMap })
   },
 }))

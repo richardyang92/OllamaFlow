@@ -3,7 +3,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   BackgroundVariant,
   ConnectionMode,
   ReactFlowInstance,
@@ -31,8 +30,11 @@ import WriteFileNode from '@/components/nodes/WriteFileNode'
 import ExecuteCommandNode from '@/components/nodes/ExecuteCommandNode'
 import ImageNode from '@/components/nodes/ImageNode'
 import ReactAgentNode from '@/components/nodes/ReactAgentNode'
+import QueueNode from '@/components/nodes/QueueNode'
+import SplitterNode from '@/components/nodes/SplitterNode'
 
 import AnimatedEdge from '@/components/workflow/edges/AnimatedEdge'
+import { MiniMap } from '@/components/workflow/MiniMap'
 
 const nodeTypes: Record<string, unknown> = {
   input: InputNode,
@@ -47,6 +49,8 @@ const nodeTypes: Record<string, unknown> = {
   writeFile: WriteFileNode,
   executeCommand: ExecuteCommandNode,
   reactAgent: ReactAgentNode,
+  queue: QueueNode,
+  splitter: SplitterNode,
 }
 
 const edgeTypes = {
@@ -271,19 +275,10 @@ export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeCl
         />
         <MiniMap
           className="!bg-[var(--glass-bg)] !backdrop-blur-md !border-[var(--glass-border)] !rounded-lg"
-          nodeColor={(node) => {
-            switch (node.data?.status) {
-              case 'running':
-                return '#eab308'
-              case 'success':
-                return '#22c55e'
-              case 'error':
-                return '#ef4444'
-              default:
-                return '#3f3f46'
-            }
-          }}
-          maskColor="rgba(0, 0, 0, 0.6)"
+          viewportBorderRadius={8}
+          maskStrokeWidth={2}
+          pannable
+          zoomable
         />
       </ReactFlow>
       {nodes.length === 0 && <EmptyCanvasState />}

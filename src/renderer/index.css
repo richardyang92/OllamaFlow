@@ -45,6 +45,14 @@ body {
   -webkit-app-region: no-drag;
 }
 
+.react-flow__minimap {
+  overflow: hidden !important;
+}
+
+.react-flow__minimap-svg {
+  border-radius: inherit;
+}
+
 .react-flow__node {
   cursor: grab;
   --xy-node-boxshadow-selected: none;
