@@ -23,6 +23,11 @@ OllamaFlow 是一个基于 Electron 的桌面应用程序，允许用户通过�
   - 🔀 **条件判断** - 基于条件的分支逻辑
   - ✏️ **设置变量** - 定义和使用变量
   - 📤 **输出** - 显示、复制或下载输出内容
+  - 📋 **队列** - 接收多路输入入队，有元素时立即出队透传
+  - 🔀 **分发** - 将一路输入同时分发给多个输出
+- **界面增强**：
+  - 🎨 **主题支持** - 亮色/暗色主题自动切换
+  - 🗺️ **小地图** - 画布缩略图导航，快速定位节点
 - **ReAct 智能体工具**：
   - ✅ **待办事项** - 任务规划与管理（内置）
   - 📅 **获取日期** - 获取当前日期和时间（内置）
@@ -48,15 +53,18 @@ OllamaFlow 是一个基于 Electron 的桌面应用程序，允许用户通过�
 
 ### 欢迎界面
 
-![OllamaFlow Welcome](screenshot/OllamaFlow%20Welcome.png)
+![OllamaFlow Welcome](screenshot/OllamaFlow-Welcome.png#gh-light-mode-only)
+![OllamaFlow Welcome Dark](screenshot/OllamaFlow-Welcome-Dark.png#gh-dark-mode-only)
 
 ### 工作流编辑器
 
-![OllamaFlow Editor](screenshot/OllamaFlow%20Editor.png)
+![OllamaFlow Editor](screenshot/OllamaFlow-Editor.png#gh-light-mode-only)
+![OllamaFlow Editor Dark](screenshot/OllamaFlow-Editor-Dark.png#gh-dark-mode-only)
 
 ### ReAct 智能体
 
-![OllamaFlow Agent](screenshot/OllamaFlow%20Agent.png)
+![OllamaFlow Agent](screenshot/OllamaFlow-Agent.png#gh-light-mode-only)
+![OllamaFlow Agent Dark](screenshot/OllamaFlow-Agent-Dark.png#gh-dark-mode-only)
 
 ReAct 智能体节点支持自主推理和工具调用，能够自动分解复杂任务、规划执行步骤，并使用多种工具完成任务。
 

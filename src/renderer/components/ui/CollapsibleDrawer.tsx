@@ -93,7 +93,7 @@ export function CollapsibleDrawer({
               side === 'right' ? 'right-4 rounded-l-glass-lg' : 'left-4 rounded-r-glass-lg',
               className
             )}
-            style={{ top: '16px', bottom: '16px' }}
+            style={{ top: '52px', bottom: '16px' }}
           >
             {/* Resize handle */}
             <div
