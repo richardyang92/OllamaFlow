@@ -1,8 +1,11 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs/promises'
+import * as fsWatch from 'fs'
 import { spawn } from 'child_process'
 import { getBrowserManager, closeBrowserManager } from './browser'
+
+const fileWatchers = new Map<string, fsWatch.FSWatcher>()
 import type {
   BrowserInitOptions,
   NavigateResult,
@@ -584,4 +587,40 @@ ipcMain.handle('browser:goBack', async (_, workspacePath: string): Promise<Actio
 ipcMain.handle('browser:goForward', async (_, workspacePath: string): Promise<ActionResult> => {
   const manager = getBrowserManager(workspacePath)
   return manager.goForward()
+})
+
+// File Watcher: Start watching workspace directory
+ipcMain.handle('fileWatcher:start', (event, workspacePath: string) => {
+  if (fileWatchers.has(workspacePath)) {
+    return { success: true, message: 'Already watching' }
+  }
+
+  try {
+    const watcher = fsWatch.watch(workspacePath, { recursive: true }, (eventType, filename) => {
+      if (filename && !filename.startsWith('.ollamaflow') && !filename.startsWith('.')) {
+        mainWindow?.webContents.send('fileWatcher:changed', { workspacePath, eventType, filename })
+      }
+    })
+
+    watcher.on('error', (error) => {
+      console.error('File watcher error:', error)
+      fileWatchers.delete(workspacePath)
+    })
+
+    fileWatchers.set(workspacePath, watcher)
+    return { success: true, message: 'Started watching' }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// File Watcher: Stop watching workspace directory
+ipcMain.handle('fileWatcher:stop', (_, workspacePath: string) => {
+  const watcher = fileWatchers.get(workspacePath)
+  if (watcher) {
+    watcher.close()
+    fileWatchers.delete(workspacePath)
+    return { success: true, message: 'Stopped watching' }
+  }
+  return { success: true, message: 'Was not watching' }
 })

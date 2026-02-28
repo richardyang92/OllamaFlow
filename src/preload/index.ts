@@ -306,6 +306,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteApiKey: (keyId: string): Promise<boolean> =>
       ipcRenderer.invoke('openai:deleteApiKey', keyId),
   },
+
+  // File Watcher
+  fileWatcher: {
+    start: (workspacePath: string): Promise<{ success: boolean; message?: string; error?: string }> =>
+      ipcRenderer.invoke('fileWatcher:start', workspacePath),
+
+    stop: (workspacePath: string): Promise<{ success: boolean; message?: string }> =>
+      ipcRenderer.invoke('fileWatcher:stop', workspacePath),
+
+    onChanged: (callback: (data: { workspacePath: string; eventType: string; filename: string }) => void) => {
+      const handler = (_: unknown, data: { workspacePath: string; eventType: string; filename: string }) => callback(data)
+      ipcRenderer.on('fileWatcher:changed', handler)
+      return () => ipcRenderer.removeListener('fileWatcher:changed', handler)
+    },
+  },
 })
 
 // Type declaration for window.electronAPI
@@ -363,6 +378,11 @@ declare global {
         getApiKey: (keyId: string) => Promise<string | null>
         setApiKey: (keyId: string, apiKey: string) => Promise<boolean>
         deleteApiKey: (keyId: string) => Promise<boolean>
+      }
+      fileWatcher: {
+        start: (workspacePath: string) => Promise<{ success: boolean; message?: string; error?: string }>
+        stop: (workspacePath: string) => Promise<{ success: boolean; message?: string }>
+        onChanged: (callback: (data: { workspacePath: string; eventType: string; filename: string }) => void) => () => void
       }
     }
   }

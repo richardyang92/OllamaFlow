@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useWorkspaceStore } from '@/store/workspace-store'
 
 export interface FileItem {
@@ -18,20 +18,34 @@ export default function WorkspaceFiles({
   const [files, setFiles] = useState<FileItem[]>([])
   const [currentPath, setCurrentPath] = useState('')
 
+  const loadFiles = useCallback(async (path: string) => {
+    if (!currentWorkspace) return
+    const result = await window.electronAPI.file.list(currentWorkspace.path, path)
+    if (result.success && result.files) {
+      setFiles(result.files.filter((f) => !f.name.startsWith('.')))
+    }
+  }, [currentWorkspace])
+
   useEffect(() => {
     if (currentWorkspace) {
       loadFiles(currentPath)
     }
-  }, [currentWorkspace, currentPath])
+  }, [currentWorkspace, currentPath, loadFiles])
 
-  const loadFiles = async (path: string) => {
+  useEffect(() => {
     if (!currentWorkspace) return
-    const result = await window.electronAPI.file.list(currentWorkspace.path, path)
-    if (result.success && result.files) {
-      // Filter out .ollamaflow directory
-      setFiles(result.files.filter((f) => !f.name.startsWith('.')))
+
+    window.electronAPI.fileWatcher.start(currentWorkspace.path)
+    
+    const unsubscribe = window.electronAPI.fileWatcher.onChanged(() => {
+      loadFiles(currentPath)
+    })
+
+    return () => {
+      unsubscribe()
+      window.electronAPI.fileWatcher.stop(currentWorkspace.path)
     }
-  }
+  }, [currentWorkspace, currentPath, loadFiles])
 
   const handleFileClick = (file: FileItem) => {
     if (file.isDirectory) {
