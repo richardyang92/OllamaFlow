@@ -29,6 +29,7 @@ export type NodeType =
   | 'reactAgent'
   | 'queue'
   | 'splitter'
+  | 'join'
 
 // ReAct Agent Tool Definition
 // Browser tool types
@@ -376,6 +377,13 @@ export interface QueueNodeData extends BaseNodeData {
 export interface SplitterNodeData extends BaseNodeData {
   nodeType: 'splitter'
   outputCount: number
+  failureStrategy: 'continueOthers' | 'failAll'
+}
+
+// Join Node - collects multiple parallel branch outputs
+export interface JoinNodeData extends BaseNodeData {
+  nodeType: 'join'
+  inputCount: number
 }
 
 // Union type for all node data
@@ -394,6 +402,7 @@ export type WorkflowNodeData =
   | ReactAgentNodeData
   | QueueNodeData
   | SplitterNodeData
+  | JoinNodeData
 
 // Workflow node type
 export type WorkflowNode = Node<WorkflowNodeData>
@@ -708,17 +717,37 @@ export const nodeTemplates: NodeTemplate[] = [
     icon: 'splitter',
     category: 'Logic',
     colorScheme: 'blue',
-    description: '将一路输入同时分发给多个输出',
+    description: '将一路输入同时分发给多个输出（并行执行）',
     defaultData: {
       nodeType: 'splitter',
       label: '分发',
       category: 'Logic',
       outputCount: 2,
+      failureStrategy: 'continueOthers',
       inputs: [{ id: 'input', name: 'input', label: '输入', dataType: 'any' }],
       outputs: [
         { id: 'output1', name: 'output1', label: '输出1', dataType: 'any' },
         { id: 'output2', name: 'output2', label: '输出2', dataType: 'any' },
       ],
+    },
+  },
+  {
+    type: 'join',
+    label: '汇聚',
+    icon: 'join',
+    category: 'Logic',
+    colorScheme: 'blue',
+    description: '收集多个并行分支的输出，等待所有分支完成后继续',
+    defaultData: {
+      nodeType: 'join',
+      label: '汇聚',
+      category: 'Logic',
+      inputCount: 2,
+      inputs: [
+        { id: 'input1', name: 'input1', label: '输入1', dataType: 'any' },
+        { id: 'input2', name: 'input2', label: '输入2', dataType: 'any' },
+      ],
+      outputs: [{ id: 'output', name: 'output', label: '输出', dataType: 'object' }],
     },
   },
 ]

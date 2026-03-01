@@ -10,6 +10,7 @@ import {
   NewWorkspaceCard,
   WorkspaceGrid,
 } from '@/components/dashboard'
+import { ConfirmDialog } from '@/components/common'
 
 function AnimatedBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -169,6 +170,8 @@ export default function WelcomePage() {
     useWorkspaceStore()
   const { setWorkflow, syncEdgeAnimation } = useWorkflowStore()
   const [isLoading, setIsLoading] = useState(false)
+  const [deleteConfirmWorkspace, setDeleteConfirmWorkspace] = useState<{ path: string; name: string } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [executionStatuses, setExecutionStatuses] = useState<Record<string, {
     status: 'idle' | 'running' | 'completed' | 'failed' | 'cancelled'
     progress: number
@@ -206,7 +209,7 @@ export default function WelcomePage() {
     try {
       const config = await window.electronAPI.workspace.readConfig(path)
       if (config) {
-        await window.electronAPI.recent.add(path, config.name)
+        await window.electronAPI.recent.add(path, config.name, config.description)
         setCurrentWorkspace(path, config)
         
         useExecutionStore.getState().switchWorkspaceContext(path)
@@ -251,10 +254,37 @@ export default function WelcomePage() {
     }
   }
 
-  const handleRemoveRecent = async (path: string) => {
-    await window.electronAPI.recent.remove(path)
-    const updatedRecentWorkspaces = await window.electronAPI.recent.get()
-    setRecentWorkspaces(updatedRecentWorkspaces)
+  const handleRemoveRecent = (path: string) => {
+    const workspace = recentWorkspaces.find(w => w.path === path)
+    if (workspace) {
+      setDeleteConfirmWorkspace({ path: workspace.path, name: workspace.name })
+    }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmWorkspace) return
+
+    setIsDeleting(true)
+    try {
+      const result = await window.electronAPI.workspace.delete(deleteConfirmWorkspace.path)
+      if (result.success) {
+        await window.electronAPI.recent.remove(deleteConfirmWorkspace.path)
+        const updatedRecentWorkspaces = await window.electronAPI.recent.get()
+        setRecentWorkspaces(updatedRecentWorkspaces)
+      } else {
+        alert(`删除工作区失败: ${result.error || '未知错误'}`)
+      }
+    } catch (error) {
+      console.error('删除工作区失败:', error)
+      alert('删除工作区失败')
+    } finally {
+      setIsDeleting(false)
+      setDeleteConfirmWorkspace(null)
+    }
+  }
+
+  const handleCancelDelete = () => {
+    setDeleteConfirmWorkspace(null)
   }
 
   return (
@@ -279,6 +309,17 @@ export default function WelcomePage() {
       <div className="fixed bottom-6 left-0 right-0 text-center text-[var(--color-text-muted)] text-sm">
         v0.1.0 • 由 Ollama 驱动
       </div>
+
+      <ConfirmDialog
+        isOpen={deleteConfirmWorkspace !== null}
+        title="删除工作区"
+        message={`确定要删除工作区「${deleteConfirmWorkspace?.name || ''}」吗？\n\n此操作将彻底删除文件夹及其所有内容，且无法恢复。`}
+        confirmText={isDeleting ? '删除中...' : '删除'}
+        cancelText="取消"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
     </div>
   )
 }

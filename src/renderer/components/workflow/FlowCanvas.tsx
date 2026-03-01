@@ -10,10 +10,11 @@ import {
   Edge,
   OnSelectionChangeParams,
   type ColorMode,
+  type NodeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { motion } from 'framer-motion'
-import { Target, ArrowDownToLine, Bot, GitBranch, ArrowUpFromLine } from 'lucide-react'
+import { Target, ArrowDownToLine, Bot, GitBranch, ArrowUpFromLine, Blocks } from 'lucide-react'
 
 import { useWorkflowStore } from '@/store/workflow-store'
 import { WorkflowNodeData, WorkflowNode } from '@/types/node'
@@ -32,11 +33,12 @@ import ImageNode from '@/components/nodes/ImageNode'
 import ReactAgentNode from '@/components/nodes/ReactAgentNode'
 import QueueNode from '@/components/nodes/QueueNode'
 import SplitterNode from '@/components/nodes/SplitterNode'
+import JoinNode from '@/components/nodes/JoinNode'
 
 import AnimatedEdge from '@/components/workflow/edges/AnimatedEdge'
 import { MiniMap } from '@/components/workflow/MiniMap'
 
-const nodeTypes: Record<string, unknown> = {
+const nodeTypes = {
   input: InputNode,
   ollamaChat: OllamaChatNode,
   set: SetNode,
@@ -51,7 +53,8 @@ const nodeTypes: Record<string, unknown> = {
   reactAgent: ReactAgentNode,
   queue: QueueNode,
   splitter: SplitterNode,
-}
+  join: JoinNode,
+} as NodeTypes
 
 const edgeTypes = {
   default: AnimatedEdge,
@@ -74,9 +77,10 @@ function EmptyCanvasState() {
       <div className="max-w-md text-center p-8 rounded-2xl glass-panel">
         <Target className="w-12 h-12 mx-auto mb-4 text-[var(--color-text-muted)]" />
         <h2 className="text-xl font-bold text-[var(--color-text)] mb-3">开始构建工作流</h2>
-        <p className="text-[var(--color-text-muted)] mb-6">
-          从左侧面板拖拽节点到画布，连接它们创建自动化流程
-        </p>
+        <div className="text-[var(--color-text-muted)] mb-6 space-y-1">
+          <p>点击工具栏的<span className="text-[var(--color-text)] inline-flex items-center gap-1"><Blocks className="w-[16px] h-[16px] mx-[4px]" /></span>按钮打开节点面板</p>
+          <p>拖拽节点到画布，连接它们创建自动化流程</p>
+        </div>
         <div className="grid grid-cols-2 gap-4 text-left">
           <div className="p-3 rounded-lg bg-[var(--color-bg-input)]">
             <ArrowDownToLine className="w-5 h-5 mb-2 text-cyan-400" />
@@ -100,21 +104,21 @@ function EmptyCanvasState() {
           </div>
         </div>
         <div className="mt-6 pt-6 border-t border-[var(--color-border-subtle)]">
-          <div className="flex items-center justify-center gap-6 text-xs text-[var(--color-text-muted)]">
-            <span className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded bg-[var(--color-bg-input)] flex items-center justify-center">1</span>
+          <div className="flex items-center justify-center gap-3 text-xs text-[var(--color-text-muted)]">
+            <span className="flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded bg-[var(--color-bg-input)] flex items-center justify-center text-[10px]">1</span>
+              打开面板
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded bg-[var(--color-bg-input)] flex items-center justify-center text-[10px]">2</span>
               拖拽节点
             </span>
-            <span className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded bg-[var(--color-bg-input)] flex items-center justify-center">2</span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded bg-[var(--color-bg-input)] flex items-center justify-center text-[10px]">3</span>
               连接端口
             </span>
-            <span className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded bg-[var(--color-bg-input)] flex items-center justify-center">3</span>
-              配置属性
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded bg-[var(--color-bg-input)] flex items-center justify-center">4</span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded bg-[var(--color-bg-input)] flex items-center justify-center text-[10px]">4</span>
               执行工作流
             </span>
           </div>

@@ -146,7 +146,7 @@ export function WorkspaceCard({
       <div className="flex items-start justify-between mb-4 gap-2">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className={cn(
-            'w-10 h-10 rounded-lg flex items-center justify-center',
+            'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
             'bg-gradient-to-br from-purple-500/20 to-blue-500/20',
             'group-hover:from-purple-500/30 group-hover:to-blue-500/30',
             'transition-all duration-200'
@@ -160,6 +160,11 @@ export function WorkspaceCard({
             <p className="text-xs text-[var(--color-text-muted)] truncate" title={workspace.path}>
               {truncatedPath}
             </p>
+            {workspace.description && (
+              <p className="text-xs text-[var(--color-text-muted)] truncate mt-0.5" title={workspace.description}>
+                {workspace.description}
+              </p>
+            )}
           </div>
         </div>
 
@@ -190,7 +195,7 @@ export function WorkspaceCard({
               'transition-all duration-200',
               'opacity-0 group-hover:opacity-100'
             )}
-            title="从列表移除"
+            title="删除工作区"
           >
             <Trash2 className="w-4 h-4" />
           </motion.button>

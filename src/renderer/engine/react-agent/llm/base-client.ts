@@ -8,7 +8,6 @@ import type {
   LLMClientConfig,
   StandardMessage,
   StandardLLMResponse,
-  StandardTool,
 } from './types'
 
 /**

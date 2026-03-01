@@ -1,9 +1,11 @@
 import { motion } from 'framer-motion'
 import { useState } from 'react'
+import { Folder } from 'lucide-react'
 
 interface BasicInfoStepProps {
   projectName: string
   description: string
+  defaultProjectsPath: string
   onNameChange: (name: string) => void
   onDescriptionChange: (description: string) => void
 }
@@ -11,6 +13,7 @@ interface BasicInfoStepProps {
 export default function BasicInfoStep({
   projectName,
   description,
+  defaultProjectsPath,
   onNameChange,
   onDescriptionChange,
 }: BasicInfoStepProps) {
@@ -29,6 +32,11 @@ export default function BasicInfoStep({
       setError(null)
     }
   }
+
+  // Generate the full project path
+  const projectPath = projectName.trim()
+    ? `${defaultProjectsPath}/${projectName.trim()}`
+    : defaultProjectsPath
 
   return (
     <motion.div
@@ -70,6 +78,23 @@ export default function BasicInfoStep({
             </p>
           )}
         </div>
+
+        {/* Path preview */}
+        <motion.div
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-3 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg"
+        >
+          <div className="flex items-start gap-2">
+            <Folder className="w-4 h-4 text-[var(--color-text-muted)] shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-[var(--color-text-muted)] mb-1">将创建于</p>
+              <p className="text-xs text-[var(--color-text-muted)] break-all opacity-80">
+                {projectPath}
+              </p>
+            </div>
+          </div>
+        </motion.div>
 
         <div className="space-y-2">
           <label className="block text-sm font-medium text-[var(--color-text)]">

@@ -17,6 +17,7 @@ import ReactAgentProperties from './properties/ReactAgentProperties'
 import ImageProperties from './properties/ImageProperties'
 import QueueProperties from './properties/QueueProperties'
 import SplitterProperties from './properties/SplitterProperties'
+import JoinProperties from './properties/JoinProperties'
 import { cn } from '@/lib/utils'
 
 function EditFeedback({ message }: { message: string }) {
@@ -96,6 +97,8 @@ function PropertiesPanelContent({
         return <QueueProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'splitter':
         return <SplitterProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
+      case 'join':
+        return <JoinProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       default:
         return (
           <div className="text-[var(--color-text-muted)] text-sm">此节点类型没有可配置的属性.</div>

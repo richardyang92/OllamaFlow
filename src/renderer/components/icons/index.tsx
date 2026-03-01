@@ -3,6 +3,7 @@ import {
   Bot,
   Pencil,
   GitBranch,
+  GitMerge,
   Repeat,
   Route,
   ArrowUpFromLine,
@@ -40,6 +41,7 @@ export const NodeIconMap = {
   reactAgent: Brain,
   queue: ListOrdered,
   splitter: Split,
+  join: GitMerge,
 } as const
 
 export const UIIconMap = {

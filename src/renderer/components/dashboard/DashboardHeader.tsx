@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Bot, Sun, Moon, Monitor, Wifi, WifiOff, Loader2, FolderOpen } from 'lucide-react'
+import { Bot, Sun, Moon, Monitor, Wifi, WifiOff, Loader2, FolderOpen, Settings } from 'lucide-react'
 import { useTheme, type ThemeMode } from '@/contexts/ThemeContext'
 import { cn } from '@/lib/utils'
 import { useWorkspaceStore } from '@/store/workspace-store'
@@ -26,10 +26,20 @@ export function DashboardHeader() {
   const { setWorkflow, syncEdgeAnimation } = useWorkflowStore()
   const [aiStatus, setAiStatus] = useState<'online' | 'offline' | 'checking'>('checking')
   const [isOpeningProject, setIsOpeningProject] = useState(false)
+  const [defaultProjectsPath, setDefaultProjectsPath] = useState<string>('')
+  const [isChangingPath, setIsChangingPath] = useState(false)
 
-  useEffect(() => {
+  const checkStatus = () => {
     setAiStatus('checking')
     checkOllamaStatus('http://localhost:11434').then(setAiStatus)
+  }
+
+  useEffect(() => {
+    checkStatus()
+  }, [])
+
+  useEffect(() => {
+    window.electronAPI.workspace.getDefaultProjectsPath().then(setDefaultProjectsPath)
   }, [])
 
   const handleThemeToggle = () => {
@@ -41,32 +51,32 @@ export function DashboardHeader() {
 
   const handleOpenProject = async () => {
     if (isOpeningProject) return
-    
+
     setIsOpeningProject(true)
     try {
       const selectedPath = await window.electronAPI.workspace.open()
-      
+
       if (!selectedPath) {
         setIsOpeningProject(false)
         return
       }
 
       const config = await window.electronAPI.workspace.readConfig(selectedPath)
-      
+
       if (!config) {
         alert('所选文件夹不是有效的 OllamaFlow 工作区')
         setIsOpeningProject(false)
         return
       }
 
-      await window.electronAPI.recent.add(selectedPath, config.name)
+      await window.electronAPI.recent.add(selectedPath, config.name, config.description)
       setCurrentWorkspace(selectedPath, config)
       useExecutionStore.getState().switchWorkspaceContext(selectedPath)
-      
+
       const workflow = await window.electronAPI.workspace.readWorkflow(selectedPath)
       if (workflow) {
         setWorkflow(workflow as any)
-        
+
         const executionStore = useExecutionStore.getState()
         const workspaceState = executionStore.workspaces.get(selectedPath)
         if (workspaceState?.status === 'running' && workspaceState.context?.nodeResults) {
@@ -91,6 +101,25 @@ export function DashboardHeader() {
       alert('打开项目失败')
     } finally {
       setIsOpeningProject(false)
+    }
+  }
+
+  const handleChangeDefaultPath = async () => {
+    if (isChangingPath) return
+
+    setIsChangingPath(true)
+    try {
+      const selectedPath = await window.electronAPI.workspace.selectCustomProjectsPath()
+
+      if (selectedPath) {
+        await window.electronAPI.workspace.setCustomProjectsPath(selectedPath)
+        setDefaultProjectsPath(selectedPath)
+      }
+    } catch (error) {
+      console.error('更改默认路径失败:', error)
+      alert('更改默认路径失败')
+    } finally {
+      setIsChangingPath(false)
     }
   }
 
@@ -139,11 +168,41 @@ export function DashboardHeader() {
             <span>打开项目</span>
           </motion.button>
 
-          <div
+          <motion.button
+            onClick={handleChangeDefaultPath}
+            disabled={isChangingPath}
+            className={cn(
+              'flex items-center gap-2 px-3 py-2 rounded-full text-sm',
+              'glass-floating',
+              'text-[var(--color-text-muted)]',
+              'hover:text-[var(--color-text)]',
+              'transition-all duration-200',
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
+            whileHover={{ scale: isChangingPath ? 1 : 1.05 }}
+            whileTap={{ scale: isChangingPath ? 1 : 0.95 }}
+            title={`默认保存位置: ${defaultProjectsPath}`}
+          >
+            {isChangingPath ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Settings className="w-4 h-4" />
+            )}
+            <span className="hidden sm:inline">保存位置</span>
+          </motion.button>
+
+          <motion.button
+            onClick={checkStatus}
             className={cn(
               'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm',
-              'glass-floating'
+              'glass-floating',
+              'text-[var(--color-text-muted)]',
+              'hover:text-[var(--color-text)]',
+              'transition-all duration-200'
             )}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            title="点击刷新 Ollama 状态"
           >
             {aiStatus === 'checking' ? (
               <Loader2 className="w-4 h-4 animate-spin text-[var(--color-text-muted)]" />
@@ -152,10 +211,10 @@ export function DashboardHeader() {
             ) : (
               <WifiOff className="w-4 h-4 text-red-400" />
             )}
-            <span className="text-[var(--color-text-muted)]">
+            <span>
               Ollama {aiStatus === 'online' ? '在线' : aiStatus === 'offline' ? '离线' : '检测中'}
             </span>
-          </div>
+          </motion.button>
 
           <motion.button
             onClick={handleThemeToggle}

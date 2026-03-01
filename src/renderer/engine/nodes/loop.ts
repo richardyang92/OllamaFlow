@@ -181,7 +181,7 @@ export function createLoopExecutor(): NodeExecutor {
       const vars = { ...context.variables, ...input }
       const maxIterations = Math.min(data.maxIterations || 1000, 10000)
 
-      let iterations: Array<{ index: number; item: unknown }> = []
+      const iterations: Array<{ index: number; item: unknown }> = []
       let loopCount = 0
       const allResults: unknown[] = []
 

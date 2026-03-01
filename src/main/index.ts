@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs/promises'
+import * as fsSync from 'fs'
 import * as fsWatch from 'fs'
 import { spawn } from 'child_process'
 import { getBrowserManager, closeBrowserManager } from './browser'
@@ -74,6 +75,62 @@ ipcMain.handle('workspace:open', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
     properties: ['openDirectory', 'createDirectory'],
     title: 'Select Workspace Folder',
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null
+  }
+
+  return result.filePaths[0]
+})
+
+// Workspace: Get default projects path (cross-platform)
+// Returns custom path if set, otherwise default path
+// Windows: C:\Users\{user}\Documents\OllamaFlow\projects
+// macOS: /Users/{user}/Documents/OllamaFlow/projects
+// Linux: /home/{user}/Documents/OllamaFlow/projects (if exists) or /home/{user}/OllamaFlow/projects
+ipcMain.handle('workspace:getDefaultProjectsPath', async () => {
+  const s = await getStore()
+  const customPath = s.get('custom-projects-path', null) as string | null
+
+  if (customPath) {
+    return customPath
+  }
+
+  const documentsPath = app.getPath('documents')
+  const homePath = app.getPath('home')
+
+  // On Linux, Documents folder may not exist, use home directory
+  const basePath =
+    process.platform === 'linux' && !fsSync.existsSync(documentsPath)
+      ? homePath
+      : documentsPath
+
+  return path.join(basePath, 'OllamaFlow', 'projects')
+})
+
+// Workspace: Get custom projects path (returns null if not set)
+ipcMain.handle('workspace:getCustomProjectsPath', async () => {
+  const s = await getStore()
+  return s.get('custom-projects-path', null) as string | null
+})
+
+// Workspace: Set custom projects path
+ipcMain.handle('workspace:setCustomProjectsPath', async (_, customPath: string | null) => {
+  const s = await getStore()
+  if (customPath) {
+    s.set('custom-projects-path', customPath)
+  } else {
+    s.delete('custom-projects-path')
+  }
+  return true
+})
+
+// Workspace: Open folder dialog for selecting custom projects path
+ipcMain.handle('workspace:selectCustomProjectsPath', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: '选择默认项目保存位置',
   })
 
   if (result.canceled || result.filePaths.length === 0) {
@@ -183,6 +240,17 @@ ipcMain.handle('workspace:saveWorkflow', async (_, workspacePath: string, workfl
   } catch (error) {
     console.error('保存工作流失败:', error)
     return false
+  }
+})
+
+// Workspace: Delete workspace folder
+ipcMain.handle('workspace:delete', async (_, workspacePath: string) => {
+  try {
+    await fs.rm(workspacePath, { recursive: true, force: true })
+    return { success: true }
+  } catch (error) {
+    console.error('删除工作区失败:', error)
+    return { success: false, error: (error as Error).message }
   }
 })
 
@@ -360,7 +428,6 @@ ipcMain.handle('command:execute', async (_, workspacePath: string, options: Comm
 })
 
 // Recent workspaces storage - using electron-store (dynamic import for ESM)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let store: any | null = null
 
 async function getStore() {
@@ -376,9 +443,9 @@ ipcMain.handle('recent:get', async () => {
   return s.get('recent-workspaces', [])
 })
 
-ipcMain.handle('recent:add', async (_, workspacePath: string, name: string) => {
+ipcMain.handle('recent:add', async (_, workspacePath: string, name: string, description?: string) => {
   const s = await getStore()
-  let recent = s.get('recent-workspaces', []) as Array<{ path: string; name: string; lastOpened: string }>
+  let recent = s.get('recent-workspaces', []) as Array<{ path: string; name: string; description?: string; lastOpened: string }>
 
   // Remove existing entry for this path
   recent = recent.filter((item) => item.path !== workspacePath)
@@ -387,6 +454,7 @@ ipcMain.handle('recent:add', async (_, workspacePath: string, name: string) => {
   recent.unshift({
     path: workspacePath,
     name,
+    description,
     lastOpened: new Date().toISOString(),
   })
 

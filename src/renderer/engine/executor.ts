@@ -1,9 +1,16 @@
 import type { Node, Edge } from '@xyflow/react'
-import type { WorkflowNodeData, NodeType } from '@/types/node'
+import type { WorkflowNodeData, NodeType, SplitterNodeData } from '@/types/node'
 import type { NodeExecutionResult, ExecutionLog } from '@/types/execution'
 import { useExecutionStore } from '@/store/execution-store'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { useWorkflowStore } from '@/store/workflow-store'
+
+interface ParallelBranch {
+  branchId: string
+  startNodeId: string
+  nodes: string[]
+  joinNodeId?: string
+}
 
 interface GlobalExecutionStatus {
   workspacePath: string
@@ -25,7 +32,9 @@ export function interpolateVariables(
   return template.replace(/\{\{([^}]+)\}\}/g, (_, key) => {
     const trimmedKey = key.trim()
     const value = getNestedValue(context, trimmedKey)
-    return value !== undefined ? String(value) : ''
+    if (value === undefined) return ''
+    if (typeof value === 'object') return JSON.stringify(value)
+    return String(value)
   })
 }
 
@@ -59,10 +68,11 @@ export function buildInputContext(
 
   console.log('[buildInputContext] Building context for node:', nodeId, 'incoming edges:', incomingEdges.length)
   console.log('[buildInputContext] Available node results:', Array.from(nodeResults.keys()))
+  console.log('[buildInputContext] Full nodeResults:', JSON.stringify(Array.from(nodeResults.entries()).map(([k, v]) => [k, v.output]), null, 2))
 
   for (const edge of incomingEdges) {
     const sourceResult = nodeResults.get(edge.source)
-    console.log('[buildInputContext] Processing edge from', edge.source, 'result found:', !!sourceResult)
+    console.log('[buildInputContext] Processing edge from', edge.source, 'result found:', !!sourceResult, 'sourceHandle:', edge.sourceHandle, 'targetHandle:', edge.targetHandle)
 
     if (sourceResult?.output) {
       // Map the output to the input port
@@ -214,6 +224,7 @@ import { createImageExecutor } from './nodes/image'
 import { createReactAgentExecutor } from './nodes/react-agent'
 import { createQueueExecutor } from './nodes/queue'
 import { createSplitterExecutor } from './nodes/splitter'
+import { createJoinExecutor } from './nodes/join'
 
 // Node executor registry
 const nodeExecutors: Partial<Record<NodeType, NodeExecutor>> = {}
@@ -244,6 +255,7 @@ export function initializeExecutors() {
   registerNodeExecutor('reactAgent', createReactAgentExecutor())
   registerNodeExecutor('queue', createQueueExecutor())
   registerNodeExecutor('splitter', createSplitterExecutor())
+  registerNodeExecutor('join', createJoinExecutor())
 }
 
 // Main workflow executor
@@ -448,8 +460,8 @@ export class WorkflowExecutor {
       })
 
       try {
-        // Build input from connected nodes
-        const input = buildInputContext(nodeId, this.edges, executionStore.context?.nodeResults || new Map())
+        // Build input from connected nodes - get fresh state each time for parallel execution
+        const input = buildInputContext(nodeId, this.edges, useExecutionStore.getState().context?.nodeResults || new Map())
 
         context.onLog?.({
           nodeId,
@@ -589,12 +601,22 @@ export class WorkflowExecutor {
       }
     }
 
-    // Main execution loop with cycle support
+    const executedNodes = new Set<string>()
+    const skipNodes = new Set<string>()
+
+    // Main execution loop with parallel support
     const executionQueue: string[] = [...initialOrder]
-    const executedInCurrentRound = new Set<string>()
     
     while (executionQueue.length > 0) {
       const nodeId = executionQueue.shift()!
+      
+      if (skipNodes.has(nodeId)) {
+        continue
+      }
+      
+      if (executedNodes.has(nodeId)) {
+        continue
+      }
       
       // Track execution count
       const currentCount = executionCounts.get(nodeId) || 0
@@ -617,7 +639,7 @@ export class WorkflowExecutor {
         break
       }
       
-      executedInCurrentRound.add(nodeId)
+      executedNodes.add(nodeId)
       completedNodes++
       
       // Update global progress
@@ -626,6 +648,117 @@ export class WorkflowExecutor {
         completedNodes,
         currentNode: node?.data.label,
       })
+      
+      // Handle parallel execution after splitter
+      if (node?.data.nodeType === 'splitter') {
+        const splitterData = node.data as SplitterNodeData
+        const failureStrategy = splitterData.failureStrategy || 'continueOthers'
+        const branches = this.identifyParallelBranches(nodeId)
+        
+        if (branches.length > 0) {
+          console.log('[Parallel] Splitter output before parallel execution:', useExecutionStore.getState().context?.nodeResults?.get(nodeId)?.output)
+          console.log('[Parallel] All nodeResults keys before parallel:', Array.from(useExecutionStore.getState().context?.nodeResults?.keys() || []))
+          
+          context.onLog?.({
+            nodeId,
+            nodeName: node.data.label,
+            level: 'info',
+            message: `开始并行执行 ${branches.length} 个分支`,
+          })
+          
+          console.log('[Parallel] Branch details:', branches.map(b => ({ branchId: b.branchId, startNodeId: b.startNodeId, nodes: b.nodes, joinNodeId: b.joinNodeId })))
+          
+          // Mark branch nodes as to be executed in parallel
+          for (const branch of branches) {
+            for (const branchNodeId of branch.nodes) {
+              skipNodes.add(branchNodeId)
+            }
+          }
+          
+          // Execute branches in parallel
+          console.log('[Parallel] Starting Promise.allSettled for branches')
+          const branchResults = await Promise.allSettled(
+            branches.map(branch => 
+              this.executeBranchChain(branch, context, executeNode, variables)
+            )
+          )
+          
+          console.log('[Parallel] All branches completed')
+          console.log('[Parallel] nodeResults after parallel:', Array.from(useExecutionStore.getState().context?.nodeResults?.keys() || []))
+          console.log('[Parallel] Full nodeResults after parallel:', JSON.stringify(Array.from(useExecutionStore.getState().context?.nodeResults?.entries() || []).map(([k, v]) => [k, v.output]), null, 2))
+          
+          // Process results based on failure strategy
+          let hasFailure = false
+          for (let i = 0; i < branchResults.length; i++) {
+            const result = branchResults[i]
+            const branch = branches[i]
+            
+            if (result.status === 'fulfilled') {
+              if (!result.value.success) {
+                hasFailure = true
+                context.onLog?.({
+                  nodeId,
+                  nodeName: node.data.label,
+                  level: 'warn',
+                  message: `分支 ${branch.branchId} 执行失败: ${result.value.error}`,
+                })
+              } else {
+                for (const branchNodeId of branch.nodes) {
+                  executedNodes.add(branchNodeId)
+                  completedNodes++
+                }
+              }
+            } else {
+              hasFailure = true
+              context.onLog?.({
+                nodeId,
+                nodeName: node.data.label,
+                level: 'error',
+                message: `分支 ${branch.branchId} 执行异常: ${result.reason}`,
+              })
+            }
+          }
+          
+          if (hasFailure && failureStrategy === 'failAll') {
+            context.onLog?.({
+              nodeId,
+              nodeName: node.data.label,
+              level: 'error',
+              message: `由于失败策略为"全部终止"，工作流已停止`,
+            })
+            success = false
+            break
+          }
+          
+          // Find join nodes and add them to queue
+          const joinNodes = new Set<string>()
+          for (const branch of branches) {
+            if (branch.joinNodeId) {
+              joinNodes.add(branch.joinNodeId)
+            }
+          }
+          
+          for (const joinNodeId of joinNodes) {
+            if (!skipNodes.has(joinNodeId)) {
+              executionQueue.push(joinNodeId)
+            }
+          }
+          
+          // Add nodes after join to the queue
+          for (const joinNodeId of joinNodes) {
+            const downstream = downstreamMap.get(joinNodeId) || []
+            executionQueue.push(...downstream.filter(id => !executedNodes.has(id) && !skipNodes.has(id)))
+          }
+          
+          updateGlobalStatus({
+            progress: Math.round((completedNodes / totalNodes) * 100),
+            completedNodes,
+            currentNode: node?.data.label,
+          })
+        }
+        
+        continue
+      }
       
       // After executing a node, check if any queue nodes need re-execution
       const executionStore = useExecutionStore.getState()
@@ -736,6 +869,87 @@ export class WorkflowExecutor {
     }
     
     throw new Error('智能路由节点未能选择分支，且没有默认分支')
+  }
+
+  private identifyParallelBranches(splitterNodeId: string): ParallelBranch[] {
+    const branches: ParallelBranch[] = []
+    const splitterOutgoingEdges = this.edges.filter(e => e.source === splitterNodeId)
+    
+    for (const edge of splitterOutgoingEdges) {
+      const branchId = edge.sourceHandle || 'output1'
+      const startNodeId = edge.target
+      const branchNodes: string[] = []
+      const visited = new Set<string>()
+      
+      const traverseBranch = (nodeId: string) => {
+        if (visited.has(nodeId)) return
+        visited.add(nodeId)
+        
+        const node = this.nodes.find(n => n.id === nodeId)
+        if (!node) return
+        
+        if (node.data.nodeType === 'join') {
+          return
+        }
+        
+        branchNodes.push(nodeId)
+        
+        const outgoingEdges = this.edges.filter(e => e.source === nodeId)
+        for (const outEdge of outgoingEdges) {
+          traverseBranch(outEdge.target)
+        }
+      }
+      
+      traverseBranch(startNodeId)
+      
+      let joinNodeId: string | undefined
+      for (const branchNodeId of branchNodes) {
+        const outgoingFromBranch = this.edges.filter(e => e.source === branchNodeId)
+        for (const outEdge of outgoingFromBranch) {
+          const targetNode = this.nodes.find(n => n.id === outEdge.target)
+          if (targetNode?.data.nodeType === 'join') {
+            joinNodeId = outEdge.target
+            break
+          }
+        }
+        if (joinNodeId) break
+      }
+      
+      branches.push({
+        branchId,
+        startNodeId,
+        nodes: branchNodes,
+        joinNodeId,
+      })
+    }
+    
+    return branches
+  }
+
+  private async executeBranchChain(
+    branch: ParallelBranch,
+    _context: ExecutionContext,
+    executeNode: (nodeId: string) => Promise<boolean>,
+    _variables: Record<string, unknown>
+  ): Promise<{ success: boolean; error?: string }> {
+    console.log(`[Branch ${branch.branchId}] Starting execution, nodes:`, branch.nodes)
+    console.log(`[Branch ${branch.branchId}] nodeResults at start:`, Array.from(useExecutionStore.getState().context?.nodeResults?.keys() || []))
+    
+    for (const nodeId of branch.nodes) {
+      console.log(`[Branch ${branch.branchId}] Executing node: ${nodeId}`)
+      if (this.isCancelled || this.abortController?.signal.aborted) {
+        return { success: false, error: 'Cancelled' }
+      }
+      
+      const nodeSuccess = await executeNode(nodeId)
+      console.log(`[Branch ${branch.branchId}] Node ${nodeId} result:`, nodeSuccess ? 'success' : 'failed')
+      
+      if (!nodeSuccess) {
+        return { success: false, error: `Node ${nodeId} failed` }
+      }
+    }
+    console.log(`[Branch ${branch.branchId}] Completed successfully`)
+    return { success: true }
   }
 }
 

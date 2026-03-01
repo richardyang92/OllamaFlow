@@ -1,11 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, ArrowRight, Loader2, FolderCog, FileText, Bot, Check, Sun, Moon, Monitor } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, FileText, Bot, Check, Sun, Moon, Monitor } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { useWorkflowStore } from '@/store/workflow-store'
 import { useTheme, type ThemeMode } from '@/contexts/ThemeContext'
 import { cn } from '@/lib/utils'
-import LocationStep from '@/components/wizard/steps/LocationStep'
 import BasicInfoStep from '@/components/wizard/steps/BasicInfoStep'
 import AIConfigStep from '@/components/wizard/steps/AIConfigStep'
 import ConfirmStep from '@/components/wizard/steps/ConfirmStep'
@@ -15,7 +14,6 @@ type AIBackend = 'ollama' | 'openai'
 
 interface WizardState {
   currentStep: number
-  projectPath: string | null
   projectName: string
   description: string
   aiBackend: AIBackend
@@ -26,7 +24,6 @@ interface WizardState {
 }
 
 const steps = [
-  { id: 'location', title: '选择位置', icon: FolderCog },
   { id: 'basic', title: '基本信息', icon: FileText },
   { id: 'ai', title: 'AI 配置', icon: Bot },
   { id: 'confirm', title: '确认创建', icon: Check },
@@ -39,7 +36,6 @@ export default function NewProjectWizard() {
 
   const [state, setState] = useState<WizardState>({
     currentStep: 0,
-    projectPath: null,
     projectName: '',
     description: '',
     aiBackend: 'ollama',
@@ -49,8 +45,14 @@ export default function NewProjectWizard() {
     selectedTemplate: 'empty',
   })
 
+  const [defaultProjectsPath, setDefaultProjectsPath] = useState<string>('')
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Get default projects path on mount
+  useEffect(() => {
+    window.electronAPI.workspace.getDefaultProjectsPath().then(setDefaultProjectsPath)
+  }, [])
 
   const handleThemeToggle = () => {
     const modes: ThemeMode[] = ['light', 'dark', 'system']
@@ -64,12 +66,10 @@ export default function NewProjectWizard() {
   const canGoNext = () => {
     switch (state.currentStep) {
       case 0:
-        return !!state.projectPath
-      case 1:
         return !!state.projectName.trim()
-      case 2:
+      case 1:
         return !!state.defaultModel.trim()
-      case 3:
+      case 2:
         return true
       default:
         return false
@@ -93,7 +93,7 @@ export default function NewProjectWizard() {
   }
 
   const handleCreate = async () => {
-    if (!state.projectPath || !state.projectName.trim() || !state.defaultModel.trim()) {
+    if (!state.projectName.trim() || !state.defaultModel.trim()) {
       setError('请填写所有必填项')
       return
     }
@@ -102,13 +102,16 @@ export default function NewProjectWizard() {
     setError(null)
 
     try {
+      // Auto-generate project path from project name
+      const projectPath = `${defaultProjectsPath}/${state.projectName.trim()}`
+
       const workflow = generateTemplateWorkflow(
         state.selectedTemplate,
         state.projectName,
         state.defaultModel
       )
 
-      const result = await window.electronAPI.workspace.init(state.projectPath, {
+      const result = await window.electronAPI.workspace.init(projectPath, {
         name: state.projectName,
         description: state.description,
         ollamaHost: state.apiEndpoint,
@@ -120,10 +123,10 @@ export default function NewProjectWizard() {
         await window.electronAPI.openai.setApiKey('workspace-default', state.apiKey)
       }
 
-      await window.electronAPI.recent.add(state.projectPath, result.config.name)
-      setCurrentWorkspace(state.projectPath, result.config)
+      await window.electronAPI.recent.add(projectPath, result.config.name, result.config.description)
+      setCurrentWorkspace(projectPath, result.config)
       setWorkflow(workflow)
-      
+
       const updatedRecentWorkspaces = await window.electronAPI.recent.get()
       setRecentWorkspaces(updatedRecentWorkspaces)
     } catch (err) {
@@ -134,24 +137,23 @@ export default function NewProjectWizard() {
   }
 
   const renderStep = () => {
+    // Calculate the full project path for ConfirmStep
+    const projectPath = state.projectName.trim()
+      ? `${defaultProjectsPath}/${state.projectName.trim()}`
+      : defaultProjectsPath
+
     switch (state.currentStep) {
       case 0:
-        return (
-          <LocationStep
-            value={state.projectPath}
-            onChange={(path) => setState((s) => ({ ...s, projectPath: path }))}
-          />
-        )
-      case 1:
         return (
           <BasicInfoStep
             projectName={state.projectName}
             description={state.description}
+            defaultProjectsPath={defaultProjectsPath}
             onNameChange={(name) => setState((s) => ({ ...s, projectName: name }))}
             onDescriptionChange={(desc) => setState((s) => ({ ...s, description: desc }))}
           />
         )
-      case 2:
+      case 1:
         return (
           <AIConfigStep
             aiBackend={state.aiBackend}
@@ -164,10 +166,10 @@ export default function NewProjectWizard() {
             onModelChange={(model) => setState((s) => ({ ...s, defaultModel: model }))}
           />
         )
-      case 3:
+      case 2:
         return (
           <ConfirmStep
-            projectPath={state.projectPath || ''}
+            projectPath={projectPath}
             projectName={state.projectName}
             description={state.description}
             aiBackend={state.aiBackend}

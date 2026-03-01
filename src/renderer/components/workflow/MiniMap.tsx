@@ -206,17 +206,17 @@ function MiniMapComponent({
       }
     : undefined
 
-  const onSvgNodeClick = onNodeClick
-    ? useCallback(
-        (event: MouseEvent, nodeId: string) => {
-          const node = store.getState().nodeLookup.get(nodeId)
-          if (node) {
-            onNodeClick(event, node.internals.userNode)
-          }
-        },
-        [onNodeClick]
-      )
-    : undefined
+  const handleNodeClick = useCallback(
+    (event: MouseEvent, nodeId: string) => {
+      const node = store.getState().nodeLookup.get(nodeId)
+      if (node) {
+        onNodeClick?.(event, node.internals.userNode)
+      }
+    },
+    [onNodeClick]
+  )
+
+  const onSvgNodeClick = onNodeClick ? handleNodeClick : undefined
 
   const _ariaLabel = ariaLabel ?? ariaLabelConfig?.['minimap.ariaLabel']
 

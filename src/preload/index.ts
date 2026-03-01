@@ -55,6 +55,7 @@ export interface CommandOptions {
 export interface RecentWorkspace {
   path: string
   name: string
+  description?: string
   lastOpened: string
 }
 
@@ -190,6 +191,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   workspace: {
     open: (): Promise<string | null> => ipcRenderer.invoke('workspace:open'),
 
+    getDefaultProjectsPath: (): Promise<string> => ipcRenderer.invoke('workspace:getDefaultProjectsPath'),
+
+    getCustomProjectsPath: (): Promise<string | null> => ipcRenderer.invoke('workspace:getCustomProjectsPath'),
+
+    setCustomProjectsPath: (customPath: string | null): Promise<boolean> =>
+      ipcRenderer.invoke('workspace:setCustomProjectsPath', customPath),
+
+    selectCustomProjectsPath: (): Promise<string | null> => ipcRenderer.invoke('workspace:selectCustomProjectsPath'),
+
     init: (path: string, options: WorkspaceInitOptions): Promise<{ config: WorkspaceConfig; workflow: WorkflowData }> =>
       ipcRenderer.invoke('workspace:init', path, options),
 
@@ -204,6 +214,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     saveWorkflow: (path: string, workflow: WorkflowData): Promise<boolean> =>
       ipcRenderer.invoke('workspace:saveWorkflow', path, workflow),
+
+    delete: (path: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('workspace:delete', path),
   },
 
   // File operations
@@ -237,8 +250,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   recent: {
     get: (): Promise<RecentWorkspace[]> => ipcRenderer.invoke('recent:get'),
 
-    add: (path: string, name: string): Promise<RecentWorkspace[]> =>
-      ipcRenderer.invoke('recent:add', path, name),
+    add: (path: string, name: string, description?: string): Promise<RecentWorkspace[]> =>
+      ipcRenderer.invoke('recent:add', path, name, description),
 
     remove: (path: string): Promise<RecentWorkspace[]> =>
       ipcRenderer.invoke('recent:remove', path),
@@ -368,11 +381,16 @@ declare global {
     electronAPI: {
       workspace: {
         open: () => Promise<string | null>
+        getDefaultProjectsPath: () => Promise<string>
+        getCustomProjectsPath: () => Promise<string | null>
+        setCustomProjectsPath: (customPath: string | null) => Promise<boolean>
+        selectCustomProjectsPath: () => Promise<string | null>
         init: (path: string, options: WorkspaceInitOptions) => Promise<{ config: WorkspaceConfig; workflow: WorkflowData }>
         readConfig: (path: string) => Promise<WorkspaceConfig | null>
         updateConfig: (path: string, config: Partial<WorkspaceConfig>) => Promise<WorkspaceConfig>
         readWorkflow: (path: string) => Promise<WorkflowData | null>
         saveWorkflow: (path: string, workflow: WorkflowData) => Promise<boolean>
+        delete: (path: string) => Promise<{ success: boolean; error?: string }>
       }
       file: {
         read: (workspacePath: string, relativePath: string) => Promise<{ success: boolean; content?: string; error?: string }>
@@ -387,7 +405,7 @@ declare global {
       }
       recent: {
         get: () => Promise<RecentWorkspace[]>
-        add: (path: string, name: string) => Promise<RecentWorkspace[]>
+        add: (path: string, name: string, description?: string) => Promise<RecentWorkspace[]>
         remove: (path: string) => Promise<RecentWorkspace[]>
       }
       execution: {

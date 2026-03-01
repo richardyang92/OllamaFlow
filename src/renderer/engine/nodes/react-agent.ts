@@ -740,7 +740,7 @@ CSS选择器示例: "button.primary", "a[href*=login]", ".submit-btn"
 
             // Add hints based on tool type
             if (tool.name.toLowerCase() === 'writefile' && result.success) {
-              const fileMatch = observation.match(/文件已写入:?\s*([^\n💡]+)/i)
+              const fileMatch = observation.match(/文件已写入:?\s*([^\n💡]+)/iu)
               const filePath = fileMatch ? fileMatch[1].trim() : ''
               const ext = filePath.split('.').pop()?.toLowerCase()
               const scriptExts = ['py', 'js', 'ts', 'sh', 'bat', 'ps1', 'rb', 'php']

@@ -1,38 +1,38 @@
 import { useRef } from 'react'
-import type { WorkflowNode, SplitterNodeData, PortDefinition } from '@/types/node'
+import type { WorkflowNode, JoinNodeData, PortDefinition } from '@/types/node'
 import { useUpdateNodeInternals } from '@xyflow/react'
 import { useWorkflowStore } from '@/store/workflow-store'
 
 interface Props {
   node: WorkflowNode
-  updateNodeData: (nodeId: string, data: Partial<SplitterNodeData>) => void
+  updateNodeData: (nodeId: string, data: Partial<JoinNodeData>) => void
 }
 
-function generateOutputPorts(count: number): PortDefinition[] {
+function generateInputPorts(count: number): PortDefinition[] {
   return Array.from({ length: count }, (_, i) => ({
-    id: `output${i + 1}`,
-    name: `output${i + 1}`,
-    label: `输出${i + 1}`,
+    id: `input${i + 1}`,
+    name: `input${i + 1}`,
+    label: `输入${i + 1}`,
     dataType: 'any' as const,
   }))
 }
 
-export default function SplitterProperties({ node, updateNodeData }: Props) {
-  const data = node.data as SplitterNodeData
+export default function JoinProperties({ node, updateNodeData }: Props) {
+  const data = node.data as JoinNodeData
   const updateNodeInternals = useUpdateNodeInternals()
   const { edges, onEdgesChange } = useWorkflowStore()
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const syncOutputsToPorts = (newCount: number) => {
-    const newOutputs = generateOutputPorts(newCount)
+  const syncInputsToPorts = (newCount: number) => {
+    const newInputs = generateInputPorts(newCount)
 
-    const currentOutputIds = data.outputs.map(p => p.id)
-    const newOutputIds = newOutputs.map(p => p.id)
-    const removedOutputIds = currentOutputIds.filter(id => !newOutputIds.includes(id))
+    const currentInputIds = data.inputs.map(p => p.id)
+    const newInputIds = newInputs.map(p => p.id)
+    const removedInputIds = currentInputIds.filter(id => !newInputIds.includes(id))
 
-    if (removedOutputIds.length > 0) {
+    if (removedInputIds.length > 0) {
       const edgesToRemove = edges.filter(
-        edge => edge.source === node.id && removedOutputIds.includes(edge.sourceHandle || '')
+        edge => edge.target === node.id && removedInputIds.includes(edge.targetHandle || 'input')
       )
       
       if (edgesToRemove.length > 0) {
@@ -44,15 +44,15 @@ export default function SplitterProperties({ node, updateNodeData }: Props) {
     }
 
     updateNodeData(node.id, {
-      outputCount: newCount,
-      outputs: newOutputs,
+      inputCount: newCount,
+      inputs: newInputs,
     })
 
-    const relatedEdges = edges.filter(e => e.source === node.id)
+    const relatedEdges = edges.filter(e => e.target === node.id)
 
     if (relatedEdges.length > 0) {
       const savedEdges = relatedEdges.map(edge => ({ ...edge }))
-      const remainingEdges = useWorkflowStore.getState().edges.filter(e => e.source !== node.id)
+      const remainingEdges = useWorkflowStore.getState().edges.filter(e => e.target !== node.id)
       useWorkflowStore.setState({ edges: remainingEdges })
 
       if (updateTimeoutRef.current) {
@@ -92,10 +92,10 @@ export default function SplitterProperties({ node, updateNodeData }: Props) {
     }
   }
 
-  const handleOutputCountChange = (value: number) => {
+  const handleInputCountChange = (value: number) => {
     const count = Math.max(2, Math.min(10, value))
-    if (count !== data.outputCount) {
-      syncOutputsToPorts(count)
+    if (count !== data.inputCount) {
+      syncInputsToPorts(count)
     }
   }
 
@@ -103,55 +103,38 @@ export default function SplitterProperties({ node, updateNodeData }: Props) {
     <div className="space-y-4">
       <div>
         <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">
-          输出端口数量
+          输入端口数量
         </label>
         <input
           type="number"
-          value={data.outputCount || 2}
-          onChange={(e) => handleOutputCountChange(parseInt(e.target.value) || 2)}
+          value={data.inputCount || 2}
+          onChange={(e) => handleInputCountChange(parseInt(e.target.value) || 2)}
           min={2}
           max={10}
           className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all"
         />
         <p className="text-xs text-[var(--color-text-muted)] mt-1">
-          范围: 2-10 个输出端口
+          范围: 2-10 个输入端口
         </p>
       </div>
 
       <div className="bg-[var(--color-bg-input)] rounded-lg p-3 text-xs text-[var(--color-text-muted)] border border-[var(--color-border-subtle)]">
         <div className="font-medium text-[var(--color-text)] mb-2">节点说明：</div>
         <div className="space-y-1">
-          <div>• 接收单路输入值</div>
-          <div>• 同时分发到所有输出端口</div>
-          <div>• 所有输出获得相同的值</div>
-          <div>• 下游分支并行执行</div>
+          <div>• 等待所有输入端口都有值</div>
+          <div>• 收集所有输入后输出对象</div>
+          <div>• 配合分发节点实现并行执行</div>
         </div>
-      </div>
-
-      <div>
-        <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">
-          分支失败策略
-        </label>
-        <select
-          value={data.failureStrategy || 'continueOthers'}
-          onChange={(e) => updateNodeData(node.id, { 
-            failureStrategy: e.target.value as 'continueOthers' | 'failAll' 
-          })}
-          className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all"
-        >
-          <option value="continueOthers">继续其他分支 - 某分支失败时继续执行其他分支</option>
-          <option value="failAll">全部终止 - 任一分支失败时终止所有分支</option>
-        </select>
       </div>
 
       <div className="bg-[var(--color-bg-input)] rounded-lg p-3 text-xs border border-[var(--color-border-subtle)]">
         <div className="font-medium text-[var(--color-text)] mb-1">输出格式：</div>
         <pre className="text-[var(--color-text-muted)] overflow-x-auto">
-{`输入: "hello"
-
-输出1: "hello"
-输出2: "hello"
-...`}
+{`{
+  "input1": <分支1结果>,
+  "input2": <分支2结果>,
+  ...
+}`}
         </pre>
       </div>
     </div>

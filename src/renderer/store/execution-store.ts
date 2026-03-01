@@ -837,17 +837,27 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     }
 
     const workspaces = new Map(get().workspaces)
+    const existingWorkspace = workspaces.get(workspacePath)
     
     workspaces.set(workspacePath, {
       status: 'running',
       context,
-      logs: [],
+      logs: existingWorkspace?.logs || [],
       streamingOutput: new Map(),
       reactAgentStates: new Map(),
       queueStates: new Map(),
     })
 
-    set({ workspaces })
+    set({
+      currentWorkspacePath: workspacePath,
+      workspaces,
+      status: 'running',
+      context,
+      logs: existingWorkspace?.logs || [],
+      streamingOutput: new Map(),
+      reactAgentStates: new Map(),
+      queueStates: new Map(),
+    })
   },
 
   pauseExecutionForWorkspace: (workspacePath) => {

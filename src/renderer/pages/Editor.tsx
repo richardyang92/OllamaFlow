@@ -35,7 +35,7 @@ function EditFeedback({ message }: { message: string }) {
 initializeExecutors()
 
 export default function EditorPage() {
-  const { currentWorkspace, clearCurrentWorkspace } = useWorkspaceStore()
+  const { currentWorkspace, clearCurrentWorkspace, setCurrentPage } = useWorkspaceStore()
   const { workflow, isDirty, markClean } = useWorkflowStore()
   const resolvedTheme = useResolvedTheme()
   
@@ -160,7 +160,8 @@ export default function EditorPage() {
     }
     clearCurrentWorkspace()
     useWorkflowStore.getState().clearWorkflow()
-  }, [isDirty, clearCurrentWorkspace, executionStatus])
+    setCurrentPage('welcome')
+  }, [isDirty, clearCurrentWorkspace, executionStatus, setCurrentPage])
 
   const handleExecute = useCallback(async () => {
     if (executionStatus === 'running') {
