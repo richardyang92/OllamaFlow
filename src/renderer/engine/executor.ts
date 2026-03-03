@@ -198,6 +198,7 @@ export interface NodeExecutor {
 
 // Execution context passed to node executors
 export interface ExecutionContext {
+  executionId: string
   workspacePath: string
   ollamaHost: string
   variables: Record<string, unknown>
@@ -271,10 +272,10 @@ export class WorkflowExecutor {
   private nodes: Node<WorkflowNodeData>[]
   private edges: Edge[]
   private workspacePath: string
+  private executionId: string
   private ollamaHost: string
   private abortController: AbortController | null = null
   private userInputValues: Map<string, string> = new Map()
-  private activeBranches: Map<string, string[]> = new Map()  // routerNodeId -> [activeBranchIds]
   private isPaused: boolean = false
   private isCancelled: boolean = false
   private isolatedMode: boolean = false
@@ -283,6 +284,7 @@ export class WorkflowExecutor {
     nodes: Node<WorkflowNodeData>[],
     edges: Edge[],
     workspacePath: string,
+    executionId: string,
     ollamaHost: string = 'http://127.0.0.1:11434',
     userInputValues?: Record<string, string>,
     isolatedMode: boolean = false
@@ -290,17 +292,12 @@ export class WorkflowExecutor {
     this.nodes = nodes
     this.edges = edges
     this.workspacePath = workspacePath
+    this.executionId = executionId
     this.ollamaHost = ollamaHost
     this.isolatedMode = isolatedMode
     if (userInputValues) {
       this.userInputValues = new Map(Object.entries(userInputValues))
     }
-  }
-
-  // Helper method to get workspace-specific state
-  private getWorkspaceState() {
-    const executionStore = useExecutionStore.getState()
-    return executionStore.workspaces.get(this.workspacePath)
   }
 
   async execute(): Promise<boolean> {
@@ -309,13 +306,8 @@ export class WorkflowExecutor {
       initializeExecutors()
     }
 
-    // Start execution - use workspace-specific method in isolated mode
+    // Execution is already created with executionId, no need to call startExecution
     const executionStore = useExecutionStore.getState()
-    if (this.isolatedMode) {
-      executionStore.startExecutionForWorkspace(this.workspacePath, 'workflow')
-    } else {
-      executionStore.startExecution(this.workspacePath, 'workflow')
-    }
 
     // Get execution order
     const initialOrder = getExecutionOrder(this.nodes, this.edges)
@@ -349,11 +341,9 @@ export class WorkflowExecutor {
 
     this.abortController = new AbortController()
     const variables: Record<string, unknown> = {}
-    
-    // Clear active branches tracking
-    this.activeBranches.clear()
 
     const context: ExecutionContext = {
+      executionId: this.executionId,
       workspacePath: this.workspacePath,
       ollamaHost: this.ollamaHost,
       variables,
@@ -365,11 +355,11 @@ export class WorkflowExecutor {
         const currentWorkflowStore = useWorkflowStore.getState();
         const workflowNodes = currentWorkflowStore.nodes;
         if (workflowNodes.some(n => n.id === nodeId)) {
-          useExecutionStore.getState().appendStreamOutput(nodeId, chunk)
+          executionStore.appendStreamOutput(this.executionId, nodeId, chunk)
         }
       },
       onLog: (log) => {
-        useExecutionStore.getState().addLog(log)
+        executionStore.addLog(this.executionId, log)
       },
     }
 
@@ -407,7 +397,7 @@ export class WorkflowExecutor {
       
       // Check for abort
       if (this.abortController!.signal.aborted || this.isCancelled) {
-        executionStore.cancelExecution()
+        executionStore.cancelExecutionForWorkspace(this.workspacePath)
         return false
       }
 
@@ -417,8 +407,8 @@ export class WorkflowExecutor {
       }
 
       // Check for cancelled
-      const workspaceState = this.getWorkspaceState()
-      if (workspaceState?.status === 'cancelled' || this.isCancelled) {
+      const execution = executionStore.getExecution(this.executionId)
+      if (execution?.status === 'cancelled' || this.isCancelled) {
         return false
       }
 
@@ -427,7 +417,7 @@ export class WorkflowExecutor {
 
       // Check if this node should be executed (conditional execution)
       if (!this.shouldExecuteNode(nodeId)) {
-        executionStore.addLog({
+        executionStore.addLog(this.executionId, {
           nodeId,
           nodeName: node.data.label,
           level: 'info',
@@ -438,36 +428,15 @@ export class WorkflowExecutor {
 
       const startTime = Date.now()
 
-      // Check if node still exists before updating status
-      const currentWorkflowStore = useWorkflowStore.getState();
-      const workflowNodes = currentWorkflowStore.nodes;
-      if (!workflowNodes.some(n => n.id === nodeId)) {
-        return true
-      }
-      
-      // Find incoming edges to this node
-      const incomingEdges = this.edges.filter((edge) => edge.target === nodeId)
-      
-      // Update incoming edges to be animated (only if workflow is still loaded)
-      const workflowStore = useWorkflowStore.getState()
-      
-      if (incomingEdges.length > 0 && workflowStore.workflow) {
-        const edgeIds = new Set(incomingEdges.map(e => e.id))
-        const updatedEdges = workflowStore.edges.map(e => 
-          edgeIds.has(e.id) ? { ...e, animated: true } : e
-        )
-        workflowStore.setWorkflow({ ...workflowStore.workflow, edges: updatedEdges })
-      }
-
       // Update node status to running
-      executionStore.updateNodeStatus(nodeId, {
+      executionStore.updateNodeStatus(this.executionId, nodeId, {
         nodeId,
         status: 'running',
         timestamp: new Date().toISOString(),
         duration: 0,
       })
 
-      executionStore.addLog({
+      executionStore.addLog(this.executionId, {
         nodeId,
         nodeName: node.data.label,
         level: 'info',
@@ -475,9 +444,9 @@ export class WorkflowExecutor {
       })
 
       try {
-        // Build input from connected nodes - get fresh state from workspace for parallel execution
-        const workspaceState = this.getWorkspaceState()
-        const input = buildInputContext(nodeId, this.edges, workspaceState?.context?.nodeResults || new Map())
+        // Build input from connected nodes - get fresh state from execution for parallel execution
+        const execution = executionStore.getExecution(this.executionId)
+        const input = buildInputContext(nodeId, this.edges, execution?.context?.nodeResults || new Map())
 
         context.onLog?.({
           nodeId,
@@ -499,7 +468,7 @@ export class WorkflowExecutor {
         if (node.data.nodeType === 'smartRouter') {
           const routerData = node.data as any
           const selectedBranchId = this.getSelectedBranchId(output, routerData.branches)
-          this.activeBranches.set(node.id, [selectedBranchId])
+          executionStore.setActiveBranches(this.executionId, node.id, [selectedBranchId])
           
           context.onLog?.({
             nodeId,
@@ -509,52 +478,45 @@ export class WorkflowExecutor {
           })
         }
 
-        // Check if node still exists before recording result
-        const checkWorkflowStore = useWorkflowStore.getState();
-        const checkWorkflowNodes = checkWorkflowStore.nodes;
-        if (!checkWorkflowNodes.some(n => n.id === nodeId)) {
-          return true
-        }
-
         // Check if node is waiting for user input
         if (typeof output === 'object' && output !== null && (output as any).status === 'waiting') {
           const waitingResult: NodeExecutionResult = {
             nodeId,
-            status: 'success',
+            status: 'running',  // Keep as 'running' so edge animation continues
             input,
             output,
             duration: Date.now() - startTime,
             timestamp: new Date().toISOString(),
           }
 
-          executionStore.updateNodeStatus(nodeId, waitingResult)
+          executionStore.updateNodeStatus(this.executionId, nodeId, waitingResult)
 
-          // Restore edges to non-animated
-          const restoreWorkflowStore = useWorkflowStore.getState()
-          if (restoreWorkflowStore.workflow) {
-            const edgeIds = new Set(incomingEdges.map(e => e.id))
-            const updatedEdges = restoreWorkflowStore.edges.map(e => 
-              edgeIds.has(e.id) ? { ...e, animated: false } : e
-            )
-            restoreWorkflowStore.setWorkflow({ ...restoreWorkflowStore.workflow, edges: updatedEdges })
-          }
-
-          executionStore.addLog({
+          executionStore.addLog(this.executionId, {
             nodeId,
             nodeName: node.data.label,
             level: 'info',
             message: `节点 ${node.data.label} 等待用户输入...`,
           })
 
+          console.log('[WorkflowExecutor] Node waiting for user input:', nodeId, 'executionId:', this.executionId)
+
           // Wait for node to complete (status changes from waiting to success/error)
           await new Promise<void>((resolve) => {
             const checkCompletion = () => {
-              const ws = this.getWorkspaceState()
-              const nodeResult = ws?.context?.nodeResults?.get(nodeId)
+              const execution = executionStore.getExecution(this.executionId)
+              const nodeResult = execution?.context?.nodeResults?.get(nodeId)
+
+              // If execution no longer exists, it was cancelled/stopped
+              if (!execution) {
+                console.log('[WorkflowExecutor] Execution no longer exists, stopping wait for node:', nodeId)
+                resolve()
+                return
+              }
 
               if (nodeResult?.status === 'success' || nodeResult?.status === 'error') {
                 const output = nodeResult.output as any
                 if (!output || output.status !== 'waiting') {
+                  console.log('[WorkflowExecutor] Node completed, resolving wait:', nodeId)
                   resolve()
                   return
                 }
@@ -568,8 +530,8 @@ export class WorkflowExecutor {
           })
 
           // Check if node completed with error (e.g., user cancelled)
-          const finalWorkspaceState = this.getWorkspaceState()
-          const finalResult = finalWorkspaceState?.context?.nodeResults?.get(nodeId)
+          const finalExecution = executionStore.getExecution(this.executionId)
+          const finalResult = finalExecution?.context?.nodeResults?.get(nodeId)
           if (finalResult?.status === 'error') {
             return false
           }
@@ -597,19 +559,9 @@ export class WorkflowExecutor {
           timestamp: new Date().toISOString(),
         }
 
-        executionStore.updateNodeStatus(nodeId, result)
+        executionStore.updateNodeStatus(this.executionId, nodeId, result)
 
-        // Restore edges to non-animated (only if workflow is still loaded)
-        const restoreWorkflowStore = useWorkflowStore.getState()
-        if (restoreWorkflowStore.workflow) {
-          const edgeIds = new Set(incomingEdges.map(e => e.id))
-          const updatedEdges = restoreWorkflowStore.edges.map(e => 
-            edgeIds.has(e.id) ? { ...e, animated: false } : e
-          )
-          restoreWorkflowStore.setWorkflow({ ...restoreWorkflowStore.workflow, edges: updatedEdges })
-        }
-
-        executionStore.addLog({
+        executionStore.addLog(this.executionId, {
           nodeId,
           nodeName: node.data.label,
           level: 'info',
@@ -644,12 +596,6 @@ export class WorkflowExecutor {
       } catch (error) {
         success = false
 
-        const checkWorkflowStore = useWorkflowStore.getState();
-        const checkWorkflowNodes = checkWorkflowStore.nodes;
-        if (!checkWorkflowNodes.some(n => n.id === nodeId)) {
-          return false
-        }
-
         const errorMessage = error instanceof Error ? error.message : String(error)
 
         const result: NodeExecutionResult = {
@@ -660,19 +606,9 @@ export class WorkflowExecutor {
           timestamp: new Date().toISOString(),
         }
 
-        executionStore.updateNodeStatus(nodeId, result)
+        executionStore.updateNodeStatus(this.executionId, nodeId, result)
 
-        // Restore edges to non-animated (only if workflow is still loaded)
-        const restoreWorkflowStore = useWorkflowStore.getState()
-        if (restoreWorkflowStore.workflow) {
-          const edgeIds = new Set(incomingEdges.map(e => e.id))
-          const updatedEdges = restoreWorkflowStore.edges.map(e => 
-            edgeIds.has(e.id) ? { ...e, animated: false } : e
-          )
-          restoreWorkflowStore.setWorkflow({ ...restoreWorkflowStore.workflow, edges: updatedEdges })
-        }
-
-        executionStore.addLog({
+        executionStore.addLog(this.executionId, {
           nodeId,
           nodeName: node.data.label,
           level: 'error',
@@ -738,9 +674,9 @@ export class WorkflowExecutor {
         const branches = this.identifyParallelBranches(nodeId)
         
         if (branches.length > 0) {
-          const ws = this.getWorkspaceState()
-          console.log('[Parallel] Splitter output before parallel execution:', ws?.context?.nodeResults?.get(nodeId)?.output)
-          console.log('[Parallel] All nodeResults keys before parallel:', Array.from(ws?.context?.nodeResults?.keys() || []))
+          const execution = executionStore.getExecution(this.executionId)
+          console.log('[Parallel] Splitter output before parallel execution:', execution?.context?.nodeResults?.get(nodeId)?.output)
+          console.log('[Parallel] All nodeResults keys before parallel:', Array.from(execution?.context?.nodeResults?.keys() || []))
           
           context.onLog?.({
             nodeId,
@@ -767,9 +703,9 @@ export class WorkflowExecutor {
           )
           
           console.log('[Parallel] All branches completed')
-          const wsAfter = this.getWorkspaceState()
-          console.log('[Parallel] nodeResults after parallel:', Array.from(wsAfter?.context?.nodeResults?.keys() || []))
-          console.log('[Parallel] Full nodeResults after parallel:', JSON.stringify(Array.from(wsAfter?.context?.nodeResults?.entries() || []).map(([k, v]) => [k, v.output]), null, 2))
+          const executionAfter = executionStore.getExecution(this.executionId)
+          console.log('[Parallel] nodeResults after parallel:', Array.from(executionAfter?.context?.nodeResults?.keys() || []))
+          console.log('[Parallel] Full nodeResults after parallel:', JSON.stringify(Array.from(executionAfter?.context?.nodeResults?.entries() || []).map(([k, v]) => [k, v.output]), null, 2))
           
           // Process results based on failure strategy
           let hasFailure = false
@@ -845,8 +781,8 @@ export class WorkflowExecutor {
       }
       
       // After executing a node, check if any queue nodes need re-execution
-      const workspaceState = this.getWorkspaceState()
-      const lastResult = workspaceState?.context?.nodeResults?.get(nodeId)
+      const execution = executionStore.getExecution(this.executionId)
+      const lastResult = execution?.context?.nodeResults?.get(nodeId)
       
       if (lastResult?.output !== undefined) {
         const downstream = downstreamMap.get(nodeId) || []
@@ -862,11 +798,21 @@ export class WorkflowExecutor {
       }
     }
 
-    if (this.isolatedMode) {
-      executionStore.completeExecutionForWorkspace(this.workspacePath, success)
-    } else {
-      executionStore.completeExecution(success)
+    // Complete execution
+    const finalExecutionStore = useExecutionStore.getState()
+    const execution = finalExecutionStore.getExecution(this.executionId)
+    if (execution) {
+      const executions = new Map(finalExecutionStore.executions)
+      executions.set(this.executionId, { 
+        ...execution, 
+        status: success ? 'completed' : 'failed' 
+      })
+      useExecutionStore.setState({ executions })
     }
+    
+    // Note: Execution cleanup can be done by calling executionStore.deleteExecution(this.executionId)
+    // For now, we keep completed executions for history viewing
+    // UI components or a cleanup service can delete old executions as needed
     
     // Update global execution status - completed/failed
     updateGlobalStatus({
@@ -882,20 +828,22 @@ export class WorkflowExecutor {
   pause() {
     this.isPaused = true
     const executionStore = useExecutionStore.getState()
-    if (this.isolatedMode) {
-      executionStore.pauseExecution()
-    } else {
-      executionStore.pauseExecution()
+    const execution = executionStore.getExecution(this.executionId)
+    if (execution) {
+      const executions = new Map(executionStore.executions)
+      executions.set(this.executionId, { ...execution, status: 'paused' })
+      useExecutionStore.setState({ executions })
     }
   }
 
   resume() {
     this.isPaused = false
     const executionStore = useExecutionStore.getState()
-    if (this.isolatedMode) {
-      executionStore.resumeExecution()
-    } else {
-      executionStore.resumeExecution()
+    const execution = executionStore.getExecution(this.executionId)
+    if (execution) {
+      const executions = new Map(executionStore.executions)
+      executions.set(this.executionId, { ...execution, status: 'running' })
+      useExecutionStore.setState({ executions })
     }
   }
 
@@ -911,12 +859,14 @@ export class WorkflowExecutor {
     // Find all incoming edges to this node
     const incomingEdges = this.edges.filter((edge) => edge.target === nodeId)
     
+    const executionStore = useExecutionStore.getState()
+    
     for (const edge of incomingEdges) {
       const sourceNode = this.nodes.find((n) => n.id === edge.source)
       
       // If source node is a smart router
       if (sourceNode?.data.nodeType === 'smartRouter') {
-        const activeBranchIds = this.activeBranches.get(sourceNode.id)
+        const activeBranchIds = executionStore.getActiveBranches(this.executionId, sourceNode.id)
         
         // If source handle is not in active branches, this node should not execute
         if (activeBranchIds && edge.sourceHandle && !activeBranchIds.includes(edge.sourceHandle)) {
@@ -1017,8 +967,9 @@ export class WorkflowExecutor {
     _variables: Record<string, unknown>
   ): Promise<{ success: boolean; error?: string }> {
     console.log(`[Branch ${branch.branchId}] Starting execution, nodes:`, branch.nodes)
-    const ws = this.getWorkspaceState()
-    console.log(`[Branch ${branch.branchId}] nodeResults at start:`, Array.from(ws?.context?.nodeResults?.keys() || []))
+    const executionStore = useExecutionStore.getState()
+    const execution = executionStore.getExecution(this.executionId)
+    console.log(`[Branch ${branch.branchId}] nodeResults at start:`, Array.from(execution?.context?.nodeResults?.keys() || []))
     
     for (const nodeId of branch.nodes) {
       console.log(`[Branch ${branch.branchId}] Executing node: ${nodeId}`)
@@ -1046,17 +997,19 @@ export async function executeWorkflow(): Promise<boolean> {
 
   const workspace = workspaceStore.currentWorkspace
   if (!workspace) {
-    executionStore.addLog({
-      level: 'error',
-      message: 'No workspace selected',
-    })
+    // Can't add log without executionId, just return false
+    console.error('No workspace selected')
     return false
   }
+
+  // Create execution instance
+  const executionId = executionStore.createExecution(workspace.path, 'workflow')
 
   const executor = new WorkflowExecutor(
     workflowStore.nodes,
     workflowStore.edges,
     workspace.path,
+    executionId,
     workspace.config.ollamaHost
   )
 

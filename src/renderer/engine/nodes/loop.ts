@@ -115,7 +115,7 @@ async function executeBodyNodes(
 
     const startTime = Date.now()
 
-    executionStore.updateNodeStatus(nodeId, {
+    executionStore.updateNodeStatus(context.executionId, nodeId, {
       nodeId,
       status: 'running',
       timestamp: new Date().toISOString(),
@@ -123,7 +123,9 @@ async function executeBodyNodes(
     })
 
     try {
-      const input = buildInputContext(nodeId, edges, executionStore.context?.nodeResults || new Map())
+      // Get fresh execution state for this executionId
+      const execution = executionStore.getExecution(context.executionId)
+      const input = buildInputContext(nodeId, edges, execution?.context?.nodeResults || new Map())
       
       const loopContext: ExecutionContext = {
         ...context,
@@ -148,7 +150,7 @@ async function executeBodyNodes(
         timestamp: new Date().toISOString(),
       }
 
-      executionStore.updateNodeStatus(nodeId, result)
+      executionStore.updateNodeStatus(context.executionId, nodeId, result)
       results.push(output)
 
     } catch (error) {
@@ -162,7 +164,7 @@ async function executeBodyNodes(
         timestamp: new Date().toISOString(),
       }
 
-      executionStore.updateNodeStatus(nodeId, result)
+      executionStore.updateNodeStatus(context.executionId, nodeId, result)
       throw error
     }
   }

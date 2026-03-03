@@ -123,9 +123,9 @@ export const planExecutor: NodeExecutor = {
       level: 'info',
       message: `开始分析任务: ${userTask.substring(0, 50)}...`,
     })
-    
-    executionStore.initPlanState(node.id)
-    executionStore.updatePlanPhase(node.id, 'analyzing')
+
+    executionStore.initPlanState(context.executionId, node.id)
+    executionStore.updatePlanPhase(context.executionId, node.id, 'analyzing')
     
     try {
       const systemPrompt = interpolateVariables(data.systemPrompt, { ...context.variables, ...input })
@@ -181,7 +181,7 @@ export const planExecutor: NodeExecutor = {
         throw new Error('无法解析AI分析结果')
       }
       
-      executionStore.updatePlanPhase(node.id, 'analyzing', {
+      executionStore.updatePlanPhase(context.executionId, node.id, 'analyzing', {
         analysisResult: analysisData.analysis
       })
       
@@ -193,7 +193,7 @@ export const planExecutor: NodeExecutor = {
       })
       
       if (analysisData.needsQuestions && analysisData.questions?.length > 0) {
-        executionStore.setPlanQuestions(node.id, analysisData.questions, analysisData.analysis)
+        executionStore.setPlanQuestions(context.executionId, node.id, analysisData.questions, analysisData.analysis)
         
         context.onLog?.({
           nodeId: node.id,
@@ -233,7 +233,7 @@ export const planExecutor: NodeExecutor = {
         data.debugMode
       )
       
-      executionStore.setPlanResult(node.id, plan)
+      executionStore.setPlanResult(context.executionId, node.id, plan)
       
       context.onLog?.({
         nodeId: node.id,
@@ -250,7 +250,7 @@ export const planExecutor: NodeExecutor = {
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '未知错误'
-      executionStore.setPlanError(node.id, errorMessage)
+      executionStore.setPlanError(context.executionId, node.id, errorMessage)
       
       context.onLog?.({
         nodeId: node.id,
@@ -268,6 +268,7 @@ export const planExecutor: NodeExecutor = {
  * Generate plan from answers (called when user submits answers)
  */
 export async function generatePlanFromAnswers(
+  executionId: string,
   nodeId: string,
   userTask: string,
   answers: Record<string, string>,
@@ -279,9 +280,9 @@ export async function generatePlanFromAnswers(
   debugMode?: PlanNodeData['debugMode']
 ): Promise<string> {
   const executionStore = useExecutionStore.getState()
-  
-  executionStore.updatePlanPhase(nodeId, 'generating')
-  executionStore.setPlanAnswers(nodeId, answers)
+
+  executionStore.updatePlanPhase(executionId, nodeId, 'generating')
+  executionStore.setPlanAnswers(executionId, nodeId, answers)
   
   const answersText = Object.entries(answers)
     .map(([id, value]) => `${id}: ${value}`)
@@ -307,13 +308,13 @@ ${answersText}
   
   try {
     const plan = await callAI(prompt, model, temperature, maxTokens, ollamaHost, debugMode)
-    
-    executionStore.setPlanResult(nodeId, plan)
-    
+
+    executionStore.setPlanResult(executionId, nodeId, plan)
+
     return plan
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : '未知错误'
-    executionStore.setPlanError(nodeId, errorMessage)
+    executionStore.setPlanError(executionId, nodeId, errorMessage)
     throw error
   }
 }

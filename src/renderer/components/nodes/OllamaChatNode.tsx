@@ -4,7 +4,7 @@ import { Bot, Microscope, ChevronDown, Loader2, CheckCircle, XCircle, Circle } f
 import BaseNode from './BaseNode'
 import { OllamaChatNodeData, NodeStatus } from '@/types/node'
 import { useStreamOutput } from '@/hooks/useStreamOutput'
-import { useExecutionStore } from '@/store/execution-store'
+import { useNodeStatus } from '@/hooks/useNodeStatus'
 import { motion } from 'framer-motion'
 
 // 推理状态信息接口
@@ -29,6 +29,9 @@ function OllamaChatNode(props: NodeProps) {
     tokensPerSecond: 0
   })
 
+  // Get node result using the hook
+  const nodeResult = useNodeStatus(id)
+
   // Auto scroll to bottom when stream output changes
   useEffect(() => {
     if (outputRef.current) {
@@ -36,63 +39,52 @@ function OllamaChatNode(props: NodeProps) {
     }
   }, [streamOutput])
 
-  // 从执行存储中获取实时状态
+  // Update status when nodeResult changes
   useEffect(() => {
-    const updateStatus = () => {
-      const nodeResult = useExecutionStore.getState().getNodeStatus(id)
-      const executionStatus = nodeResult?.status || 'idle'
-      
-      // 类型转换：将 NodeExecutionStatus 映射到 NodeStatus
-      const status: NodeStatus = executionStatus === 'pending' || executionStatus === 'skipped' ? 'idle' : executionStatus as NodeStatus
-      
-      // 只有当状态发生变化时才更新和记录日志
-      if (status !== nodeStatus) {
-        console.log(`[OllamaChatNode] Status updated for node ${id}: ${nodeStatus} → ${status} (execution status: ${executionStatus})`)
-        setNodeStatus(status)
-      }
-      
-      const isInferring = status === 'running'
-      
-      setInferenceStatus(prev => {
-        if (isInferring) {
-          // 第一次进入运行状态时初始化
-          if (!prev.isInferring) {
-            return {
-              isInferring: true,
-              currentStep: '生成响应中...',
-              tokensProcessed: 0,
-              tokensPerSecond: 2.5
-            }
-          }
-          // 正常运行时的状态更新
-          return {
-            ...prev,
-            isInferring: true,
-            currentStep: '生成响应中...',
-            tokensProcessed: prev.tokensProcessed + 1,
-            tokensPerSecond: 2.5
-          }
-        } else {
-          // 非运行状态时重置
-          return {
-            ...prev,
-            isInferring: false,
-            currentStep: status === 'success' ? '已完成' : status === 'error' ? '错误' : '空闲',
-            tokensProcessed: 0,
-            tokensPerSecond: 0
-          }
-        }
-      })
+    const executionStatus = nodeResult?.status || 'idle'
+
+    // 类型转换：将 NodeExecutionStatus 映射到 NodeStatus
+    const status: NodeStatus = executionStatus === 'pending' || executionStatus === 'skipped' ? 'idle' : executionStatus as NodeStatus
+
+    // 只有当状态发生变化时才更新和记录日志
+    if (status !== nodeStatus) {
+      console.log(`[OllamaChatNode] Status updated for node ${id}: ${nodeStatus} → ${status} (execution status: ${executionStatus})`)
+      setNodeStatus(status)
     }
 
-    // 初始更新
-    updateStatus()
+    const isInferring = status === 'running'
 
-    // 定期检查状态更新（模拟实时更新）
-    const interval = setInterval(updateStatus, 100)
-
-    return () => clearInterval(interval)
-  }, [id, nodeStatus])
+    setInferenceStatus(prev => {
+      if (isInferring) {
+        // 第一次进入运行状态时初始化
+        if (!prev.isInferring) {
+          return {
+            isInferring: true,
+            currentStep: '生成响应中...',
+            tokensProcessed: 0,
+            tokensPerSecond: 2.5
+          }
+        }
+        // 正常运行时的状态更新
+        return {
+          ...prev,
+          isInferring: true,
+          currentStep: '生成响应中...',
+          tokensProcessed: prev.tokensProcessed + 1,
+          tokensPerSecond: 2.5
+        }
+      } else {
+        // 非运行状态时重置
+        return {
+          ...prev,
+          isInferring: false,
+          currentStep: status === 'success' ? '已完成' : status === 'error' ? '错误' : '空闲',
+          tokensProcessed: 0,
+          tokensPerSecond: 0
+        }
+      }
+    })
+  }, [id, nodeResult, nodeStatus])
 
   // 切换详细信息展开/收起
   const toggleDetails = () => {

@@ -4,11 +4,11 @@ import { ArrowUpFromLine } from 'lucide-react'
 import BaseNode from './BaseNode'
 import { OutputNodeData } from '@/types/node'
 import { cn } from '@/lib/utils'
-import { useExecutionStore } from '@/store/execution-store'
+import { useNodeStatus } from '@/hooks/useNodeStatus'
 
 function OutputNode(props: NodeProps<OutputNodeData>) {
   const { data, id } = props
-  const nodeResult = useExecutionStore((state) => state.getNodeStatus(id))
+  const nodeResult = useNodeStatus(id)
   const output = nodeResult?.output
   const displayOutput = output && typeof output === 'object' && output !== null && 'data' in output ? output.data : output
 

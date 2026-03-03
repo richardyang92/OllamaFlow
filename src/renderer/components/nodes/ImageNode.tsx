@@ -3,13 +3,13 @@ import { NodeProps } from '@xyflow/react'
 import BaseNode from './BaseNode'
 import { ImageNodeData } from '@/types/node'
 import { cn } from '@/lib/utils'
-import { useExecutionStore } from '@/store/execution-store'
+import { useNodeStatus } from '@/hooks/useNodeStatus'
 import { useWorkspaceStore } from '@/store/workspace-store'
 
 function ImageNode(props: NodeProps) {
   const data = props.data as ImageNodeData
   const id = props.id as string
-  const nodeResult = useExecutionStore((state) => state.getNodeStatus(id))
+  const nodeResult = useNodeStatus(id)
   const currentWorkspace = useWorkspaceStore((state) => state.currentWorkspace)
 
   const sourceTypeLabels = {

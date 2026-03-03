@@ -1,40 +1,22 @@
-import { memo, useEffect, useState } from 'react'
+import { memo } from 'react'
 import { NodeProps } from '@xyflow/react'
-import { ClipboardList, Loader2, CheckCircle, XCircle, HelpCircle } from 'lucide-react'
+import { ClipboardList, Loader2, CheckCircle, XCircle, HelpCircle, Microscope } from 'lucide-react'
 import BaseNode from './BaseNode'
-import { PlanNodeData, PlanExecutionState, NodeStatus } from '@/types/node'
-import { useExecutionStore } from '@/store/execution-store'
+import { PlanNodeData } from '@/types/node'
+import { usePlanState } from '@/hooks/usePlanState'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
 function PlanNode(props: NodeProps) {
   const data = props.data as PlanNodeData
   const id = props.id as string
-  const [nodeStatus, setNodeStatus] = useState<NodeStatus>('idle')
-  const [planState, setPlanState] = useState<PlanExecutionState | undefined>()
-  
-  useEffect(() => {
-    const unsubscribe = useExecutionStore.subscribe((state) => {
-      const result = state.getNodeStatus(id)
-      const executionStatus = result?.status || 'idle'
-      const status: NodeStatus = executionStatus === 'pending' || executionStatus === 'skipped' 
-        ? 'idle' 
-        : executionStatus as NodeStatus
-      
-      if (status !== nodeStatus) {
-        setNodeStatus(status)
-      }
-      
-      const planExecState = state.getPlanState(id)
-      setPlanState(planExecState)
-    })
-    
-    return () => unsubscribe()
-  }, [id, nodeStatus])
-  
+
+  // Use hook to get plan state (workspace-aware)
+  const planState = usePlanState(id)
+
   const getPhaseIcon = () => {
     if (!planState) return <ClipboardList className="w-4 h-4" />
-    
+
     switch (planState.phase) {
       case 'analyzing':
         return <Loader2 className="w-4 h-4 animate-spin text-yellow-400" />
@@ -50,10 +32,10 @@ function PlanNode(props: NodeProps) {
         return <ClipboardList className="w-4 h-4" />
     }
   }
-  
+
   const getPhaseLabel = () => {
     if (!planState) return '就绪'
-    
+
     switch (planState.phase) {
       case 'analyzing': return '分析中'
       case 'questions': return '等待回答'
@@ -63,10 +45,10 @@ function PlanNode(props: NodeProps) {
       default: return '就绪'
     }
   }
-  
+
   const getStatusColor = () => {
     if (!planState) return 'text-[var(--color-text-muted)]'
-    
+
     switch (planState.phase) {
       case 'analyzing': return 'text-yellow-400'
       case 'questions': return 'text-blue-400'
@@ -76,29 +58,33 @@ function PlanNode(props: NodeProps) {
       default: return 'text-[var(--color-text-muted)]'
     }
   }
-  
+
   return (
-    <BaseNode {...props} icon={getPhaseIcon()}>
-      <div className="space-y-2">
+    <BaseNode {...props} icon={data.debugMode?.enabled ? <Microscope className="w-4 h-4" /> : getPhaseIcon()}>
+      <div className="space-y-3 w-full">
+        {/* Model badge - consistent with other AI nodes */}
+        <div className="node-primary-badge ai">
+          {data.debugMode?.enabled ? <Microscope className="w-4 h-4" /> : <ClipboardList className="w-4 h-4" />}
+          <span className="font-semibold truncate">
+            {data.debugMode?.enabled ? data.debugMode.model : data.model}
+          </span>
+        </div>
+
+        {/* Debug Mode indicator - consistent with other nodes */}
+        {data.debugMode?.enabled && (
+          <div className="text-[10px] px-2 py-1 bg-amber-500/20 text-amber-400 rounded flex items-center gap-1">
+            <Microscope className="w-3 h-3" /> Debug Mode (OpenAI)
+          </div>
+        )}
+
+        {/* Status indicator */}
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium">状态</span>
           <span className={cn('text-xs', getStatusColor())}>
             {getPhaseLabel()}
           </span>
         </div>
-        
-        {data.debugMode?.enabled && (
-          <div className="text-xs px-2 py-1 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
-            🔬 {data.debugMode.model}
-          </div>
-        )}
-        
-        {!data.debugMode?.enabled && (
-          <div className="text-xs text-[var(--color-text-muted)]">
-            🤖 {data.model}
-          </div>
-        )}
-        
+
         <AnimatePresence>
           {planState?.analysisResult && planState.phase !== 'analyzing' && (
             <motion.div
@@ -111,7 +97,7 @@ function PlanNode(props: NodeProps) {
               {planState.analysisResult}
             </motion.div>
           )}
-          
+
           {planState?.phase === 'questions' && planState.questions && (
             <motion.div
               key="questions"
@@ -123,7 +109,7 @@ function PlanNode(props: NodeProps) {
               等待回答 {planState.questions.length} 个问题
             </motion.div>
           )}
-          
+
           {planState?.generatedPlan && (
             <motion.div
               key="generated-plan"
@@ -135,7 +121,7 @@ function PlanNode(props: NodeProps) {
               计划已生成
             </motion.div>
           )}
-          
+
           {planState?.error && (
             <motion.div
               key="error"

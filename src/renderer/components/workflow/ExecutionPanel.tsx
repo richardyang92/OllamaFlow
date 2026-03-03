@@ -1,4 +1,5 @@
 import { useExecutionStore } from '@/store/execution-store'
+import { useWorkspaceStore } from '@/store/workspace-store'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useRef, useEffect } from 'react'
@@ -13,20 +14,25 @@ export default function ExecutionPanel({
   onToggleFiles: () => void
   showFiles: boolean
 }) {
+  const workspacePath = useWorkspaceStore((state) => state.currentWorkspace?.path)
+
   // Get current workspace's logs and status
-  const { logs, status, clearLogs } = useExecutionStore((state) => {
-    const workspacePath = state.currentWorkspacePath
-    if (!workspacePath) {
-      return { logs: [], status: 'idle' as const, clearLogs: state.clearLogs }
-    }
-    const workspaceState = state.workspaces.get(workspacePath)
-    return {
-      logs: workspaceState?.logs || [],
-      status: workspaceState?.status || 'idle',
-      clearLogs: state.clearLogs
-    }
+  const logs = useExecutionStore((state) => {
+    if (!workspacePath) return []
+    return state.getLogsForWorkspace(workspacePath)
   })
+
+  const status = useExecutionStore((state) => {
+    if (!workspacePath) return 'idle' as const
+    return state.getExecutionStatusForWorkspace(workspacePath)
+  })
+
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  const handleClearLogs = () => {
+    if (!workspacePath) return
+    useExecutionStore.getState().clearLogsForWorkspace(workspacePath)
+  }
 
   // Auto-scroll to bottom when logs change
   useEffect(() => {
@@ -65,7 +71,7 @@ export default function ExecutionPanel({
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={clearLogs}
+            onClick={handleClearLogs}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors p-1 rounded hover:bg-[var(--color-bg-hover)]"
             title="清空日志"
           >

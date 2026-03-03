@@ -1,8 +1,10 @@
 import type { Node, Edge } from '@xyflow/react'
 import type { WorkflowNodeData } from '@/types/node'
 import { WorkflowExecutor } from './executor'
+import { useExecutionStore } from '@/store/execution-store'
 
 interface ExecutionInstance {
+  executionId: string
   executor: WorkflowExecutor
   workspacePath: string
   abortController: AbortController
@@ -28,10 +30,15 @@ class ExecutionManager {
       }
     }
 
+    // Create execution instance
+    const executionStore = useExecutionStore.getState()
+    const executionId = executionStore.createExecution(workspacePath, 'workflow')
+
     const executor = new WorkflowExecutor(
       nodes,
       edges,
       workspacePath,
+      executionId,
       ollamaHost,
       userInputValues,
       true
@@ -39,6 +46,7 @@ class ExecutionManager {
 
     const abortController = new AbortController()
     const instance: ExecutionInstance = {
+      executionId,
       executor,
       workspacePath,
       abortController,
@@ -88,6 +96,11 @@ class ExecutionManager {
     instance.status = 'cancelled'
     instance.abortController.abort()
     instance.executor.abort()
+
+    // Update execution store status
+    const executionStore = useExecutionStore.getState()
+    executionStore.cancelExecutionForWorkspace(workspacePath)
+
     return true
   }
 

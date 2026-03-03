@@ -78,10 +78,11 @@ export function DashboardHeader() {
         setWorkflow(workflow as any)
 
         const executionStore = useExecutionStore.getState()
-        const workspaceState = executionStore.workspaces.get(selectedPath)
-        if (workspaceState?.status === 'running' && workspaceState.context?.nodeResults) {
+        const status = executionStore.getExecutionStatusForWorkspace(selectedPath)
+        const nodeResults = executionStore.getNodeResultsForWorkspace(selectedPath)
+        if (status === 'running' && nodeResults) {
           const runningNodeIds: string[] = []
-          workspaceState.context.nodeResults.forEach((result, nodeId) => {
+          nodeResults.forEach((result, nodeId) => {
             if (result.status === 'running') {
               runningNodeIds.push(nodeId)
             }

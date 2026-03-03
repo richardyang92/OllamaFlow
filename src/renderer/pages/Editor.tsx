@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef } from 'react'
+import { useCallback, useState, useRef, useEffect } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check } from 'lucide-react'
@@ -36,20 +36,37 @@ initializeExecutors()
 
 export default function EditorPage() {
   const { currentWorkspace, clearCurrentWorkspace, setCurrentPage } = useWorkspaceStore()
-  const { workflow, isDirty, markClean } = useWorkflowStore()
+  const { workflow, isDirty, markClean, syncEdgeAnimation } = useWorkflowStore()
   const resolvedTheme = useResolvedTheme()
   
   // Subscribe to execution store changes - use workspace-specific status
   const workspacePath = currentWorkspace?.path
-  const cancelExecution = useExecutionStore((state) => state.cancelExecution)
 
   // Get current workspace execution status
   const executionStatus = useExecutionStore((state) => {
     if (!workspacePath) return 'idle' as const
-    const workspaceState = state.workspaces.get(workspacePath)
-    return workspaceState?.status || 'idle'
+    return state.getExecutionStatusForWorkspace(workspacePath)
   })
-  
+
+  // Sync edge animations based on running nodes
+  const nodeResults = useExecutionStore((state) => {
+    if (!workspacePath) return undefined
+    return state.getNodeResultsForWorkspace(workspacePath)
+  })
+
+  useEffect(() => {
+    if (!nodeResults) return
+
+    const runningNodeIds: string[] = []
+    nodeResults.forEach((result, nodeId) => {
+      if (result.status === 'running') {
+        runningNodeIds.push(nodeId)
+      }
+    })
+
+    syncEdgeAnimation(runningNodeIds)
+  }, [nodeResults, syncEdgeAnimation])
+
   const [showFiles, setShowFiles] = useState(false)
   const [showProperties, setShowProperties] = useState(false)
   const [showPalette, setShowPalette] = useState(false)
@@ -119,10 +136,13 @@ export default function EditorPage() {
       
       if (success) {
         useWorkflowStore.getState().setWorkflow(updatedWorkflow)
-        useExecutionStore.getState().addLog({
-          level: 'info',
-          message: '工作流保存成功',
-        })
+        const executionId = useExecutionStore.getState().getActiveExecution(currentWorkspace.path)
+        if (executionId) {
+          useExecutionStore.getState().addLog(executionId, {
+            level: 'info',
+            message: '工作流保存成功',
+          })
+        }
         setSaveFeedback('工作流保存成功')
         setTimeout(() => setSaveFeedback(null), 2000)
         markClean()
@@ -138,10 +158,13 @@ export default function EditorPage() {
       }
     } catch (error) {
       console.error('保存工作流失败:', error)
-      useExecutionStore.getState().addLog({
-        level: 'error',
-        message: `保存工作流失败: ${error instanceof Error ? error.message : String(error)}`,
-      })
+      const executionId = useExecutionStore.getState().getActiveExecution(currentWorkspace.path)
+      if (executionId) {
+        useExecutionStore.getState().addLog(executionId, {
+          level: 'error',
+          message: `保存工作流失败: ${error instanceof Error ? error.message : String(error)}`,
+        })
+      }
       setSaveActive(false)
     }
   }, [currentWorkspace, workflow, markClean, saveActive])
@@ -152,31 +175,36 @@ export default function EditorPage() {
       const confirm = window.confirm('您有未保存的更改。确定要关闭吗？')
       if (!confirm) return
     }
-    if (executionStatus !== 'running') {
-      console.log('[Editor] handleClose - calling resetExecution')
-      useExecutionStore.getState().resetExecution()
+    if (executionStatus !== 'running' && currentWorkspace) {
+      console.log('[Editor] handleClose - calling resetWorkspaceExecution')
+      useExecutionStore.getState().resetWorkspaceExecution(currentWorkspace.path)
     }
     clearCurrentWorkspace()
     useWorkflowStore.getState().clearWorkflow()
     setCurrentPage('welcome')
-  }, [isDirty, clearCurrentWorkspace, executionStatus, setCurrentPage])
+  }, [isDirty, clearCurrentWorkspace, executionStatus, setCurrentPage, currentWorkspace])
 
   const handleExecute = useCallback(async () => {
     if (executionStatus === 'running') {
       if (currentWorkspace) {
         executionManager.cancelExecution(currentWorkspace.path)
+        useExecutionStore.getState().cancelExecutionForWorkspace(currentWorkspace.path)
+        // Sync cancellation status to main process for Welcome page
+        await window.electronAPI.execution.cancel(currentWorkspace.path)
       }
-      cancelExecution()
     } else {
       if (!currentWorkspace) return
 
       const { nodes } = useWorkflowStore.getState()
 
       if (nodes.length === 0) {
-        useExecutionStore.getState().addLog({
-          level: 'warn',
-          message: '没有可执行的节点。请先添加节点到工作流。',
-        })
+        const executionId = useExecutionStore.getState().getActiveExecution(currentWorkspace.path)
+        if (executionId) {
+          useExecutionStore.getState().addLog(executionId, {
+            level: 'warn',
+            message: '没有可执行的节点。请先添加节点到工作流。',
+          })
+        }
         return
       }
 
@@ -194,7 +222,7 @@ export default function EditorPage() {
       const { nodes: workflowNodes, edges: workflowEdges } = useWorkflowStore.getState()
       executeWorkflow(workflowNodes, workflowEdges)
     }
-  }, [executionStatus, currentWorkspace, cancelExecution])
+  }, [executionStatus, currentWorkspace])
 
   const executeWorkflow = useCallback((nodes: any[], edges: any[], inputValues?: Record<string, string>) => {
     if (!currentWorkspace) return
@@ -206,10 +234,13 @@ export default function EditorPage() {
       currentWorkspace.config.ollamaHost,
       inputValues || undefined
     ).catch((error: Error) => {
-      useExecutionStore.getState().addLog({
-        level: 'error',
-        message: `执行错误: ${error.message}`,
-      })
+      const executionId = useExecutionStore.getState().getActiveExecution(currentWorkspace.path)
+      if (executionId) {
+        useExecutionStore.getState().addLog(executionId, {
+          level: 'error',
+          message: `执行错误: ${error.message}`,
+        })
+      }
     })
   }, [currentWorkspace])
 

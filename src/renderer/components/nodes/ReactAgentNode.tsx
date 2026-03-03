@@ -5,6 +5,7 @@ import { ReactAgentNodeData, NodeStatus, AVAILABLE_TOOLS } from '@/types/node'
 import { useReActState } from '@/hooks/useReActState'
 import { useNodeStatus } from '@/hooks/useNodeStatus'
 import { useExecutionStore } from '@/store/execution-store'
+import { useWorkspaceStore } from '@/store/workspace-store'
 import { motion } from 'framer-motion'
 import ReActStepsPanel from './react-agent/ReActStepsPanel'
 
@@ -16,11 +17,10 @@ function ReactAgentNode(props: NodeProps) {
   const nodeResult = useNodeStatus(id)
 
   // Get pending question from current workspace
+  const workspacePath = useWorkspaceStore((state) => state.currentWorkspace?.path)
   const pendingQuestion = useExecutionStore((state) => {
-    const wsPath = state.currentWorkspacePath
-    if (!wsPath) return null
-    const ws = state.workspaces.get(wsPath)
-    return ws?.pendingQuestion || null
+    if (!workspacePath) return null
+    return state.getPendingQuestionForWorkspace(workspacePath)
   })
 
   const isWaitingForInput = pendingQuestion?.nodeId === id && pendingQuestion?.nodeType === 'reactAgent'

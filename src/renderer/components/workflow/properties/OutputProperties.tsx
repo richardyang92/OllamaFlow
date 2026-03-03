@@ -1,5 +1,5 @@
 import type { WorkflowNode, OutputNodeData } from '@/types/node'
-import { useExecutionStore } from '@/store/execution-store'
+import { useNodeStatus } from '@/hooks/useNodeStatus'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -9,7 +9,7 @@ interface Props {
 
 export default function OutputProperties({ node, updateNodeData }: Props) {
   const data = node.data as OutputNodeData
-  const nodeResult = useExecutionStore((state) => state.getNodeStatus(node.id))
+  const nodeResult = useNodeStatus(node.id)
   const output = nodeResult?.output
   const displayOutput = output && typeof output === 'object' && output !== null && 'data' in output ? output.data : output
 

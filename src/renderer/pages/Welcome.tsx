@@ -213,16 +213,17 @@ export default function WelcomePage() {
         setCurrentWorkspace(path, config)
         
         useExecutionStore.getState().switchWorkspaceContext(path)
-        
+
         const workflow = await window.electronAPI.workspace.readWorkflow(path)
         if (workflow) {
           setWorkflow(workflow as any)
-          
+
           const executionStore = useExecutionStore.getState()
-          const workspaceState = executionStore.workspaces.get(path)
-          if (workspaceState?.status === 'running' && workspaceState.context?.nodeResults) {
+          const status = executionStore.getExecutionStatusForWorkspace(path)
+          const nodeResults = executionStore.getNodeResultsForWorkspace(path)
+          if (status === 'running' && nodeResults) {
             const runningNodeIds: string[] = []
-            workspaceState.context.nodeResults.forEach((result, nodeId) => {
+            nodeResults.forEach((result, nodeId) => {
               if (result.status === 'running') {
                 runningNodeIds.push(nodeId)
               }

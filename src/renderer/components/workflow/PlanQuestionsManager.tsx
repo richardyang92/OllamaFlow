@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { useExecutionStore } from '@/store/execution-store'
 import { useWorkspaceStore } from '@/store/workspace-store'
@@ -15,47 +15,64 @@ export default function PlanQuestionsManager() {
   const nodes = useWorkflowStore((state) => state.nodes)
 
   // Get current workspace's pending question and context
-  const { pendingQuestion, executionContext } = useExecutionStore((state) => {
-    const wsPath = workspacePath || state.currentWorkspacePath
-    if (!wsPath) {
-      return { pendingQuestion: null, executionContext: null }
-    }
-    const workspaceState = state.workspaces.get(wsPath)
-    return {
-      pendingQuestion: workspaceState?.pendingQuestion || null,
-      executionContext: workspaceState?.context || null
-    }
+  const pendingQuestion = useExecutionStore((state) => {
+    if (!workspacePath) return null
+    const result = state.getPendingQuestionForWorkspace(workspacePath)
+    console.log('[PlanQuestionsManager] pendingQuestion selector result:', result?.nodeType, result?.nodeId)
+    return result
   })
 
-  const clearPendingQuestion = useExecutionStore((state) => state.clearPendingQuestion)
-  
+  const executionContext = useExecutionStore((state) => {
+    if (!workspacePath) return null
+    return state.getExecutionContextForWorkspace(workspacePath)
+  })
+
   const [isSubmitting, setIsSubmitting] = useState(false)
-  
-  useEffect(() => {
-    if (pendingQuestion) {
-      console.log('[PlanQuestionsManager] Pending question detected:', pendingQuestion.nodeId, 'type:', pendingQuestion.nodeType)
-    }
-  }, [pendingQuestion])
-  
+
   if (!pendingQuestion) {
     return null
   }
-  
+
+  console.log('[PlanQuestionsManager] Rendering with pendingQuestion:', {
+    nodeType: pendingQuestion.nodeType,
+    nodeId: pendingQuestion.nodeId,
+    executionId: pendingQuestion.executionId,
+    questionsCount: pendingQuestion.questions?.length,
+    hasQuestions: !!pendingQuestion.questions,
+    questions: pendingQuestion.questions
+  })
+
+  // Use executionId from pendingQuestion to ensure correct execution is updated
+  // This is critical when multiple executions are running in parallel
+  const executionId = pendingQuestion.executionId
   const node = nodes.find(n => n.id === pendingQuestion.nodeId)
-  
+
   const handlePlanSubmit = async (answers: Record<string, string>) => {
-    if (!workspacePath || isSubmitting || !pendingQuestion) return
-    
+    console.log('[PlanQuestionsManager] handlePlanSubmit called', { isSubmitting, executionId })
+    if (isSubmitting) return
+
     const nodeData = node?.data as PlanNodeData | undefined
-    if (!nodeData) return
-    
+    if (!nodeData) {
+      console.error('[PlanQuestionsManager] No node data found')
+      return
+    }
+
+    // Capture all needed data before clearing pendingQuestion
     const questionData = pendingQuestion
+    const capturedExecutionId = executionId
+
+    console.log('[PlanQuestionsManager] Starting plan generation', { capturedExecutionId, nodeId: questionData.nodeId })
+
     setIsSubmitting(true)
-    
-    clearPendingQuestion()
-    
+
+    // Clear pending question to close the dialog
+    console.log('[PlanQuestionsManager] Clearing pending question')
+    useExecutionStore.getState().clearPendingQuestion(capturedExecutionId)
+
     try {
+      console.log('[PlanQuestionsManager] Calling generatePlanFromAnswers')
       const plan = await generatePlanFromAnswers(
+        capturedExecutionId,
         questionData.nodeId,
         questionData.analysis || '',
         answers,
@@ -66,8 +83,9 @@ export default function PlanQuestionsManager() {
         workspaceConfig?.ollamaHost || 'http://127.0.0.1:11434',
         nodeData.debugMode
       )
-      
-      useExecutionStore.getState().updateNodeStatus(questionData.nodeId, {
+
+      console.log('[PlanQuestionsManager] Plan generated successfully, updating node status')
+      useExecutionStore.getState().updateNodeStatus(capturedExecutionId, questionData.nodeId, {
         nodeId: questionData.nodeId,
         status: 'success',
         output: {
@@ -78,9 +96,10 @@ export default function PlanQuestionsManager() {
         duration: 0,
         timestamp: new Date().toISOString(),
       })
+      console.log('[PlanQuestionsManager] Node status updated')
     } catch (error) {
       console.error('[PlanQuestionsManager] Failed to generate plan:', error)
-      useExecutionStore.getState().updateNodeStatus(questionData.nodeId, {
+      useExecutionStore.getState().updateNodeStatus(capturedExecutionId, questionData.nodeId, {
         nodeId: questionData.nodeId,
         status: 'error',
         error: error instanceof Error ? error.message : '未知错误',
@@ -89,11 +108,12 @@ export default function PlanQuestionsManager() {
       })
     } finally {
       setIsSubmitting(false)
+      console.log('[PlanQuestionsManager] handlePlanSubmit finished')
     }
   }
-  
+
   const handleReactAgentSubmit = async (userInput: string) => {
-    if (!workspacePath || isSubmitting || !pendingQuestion) return
+    if (isSubmitting || !workspacePath) return
 
     const nodeData = node?.data as ReactAgentNodeData | undefined
     if (!nodeData) return
@@ -101,34 +121,34 @@ export default function PlanQuestionsManager() {
     const questionData = pendingQuestion
     setIsSubmitting(true)
 
-    clearPendingQuestion()
+    useExecutionStore.getState().clearPendingQuestion(executionId)
 
     try {
       // Get execution context from store (it's in the local variable now)
       if (!executionContext) {
         throw new Error('Execution context not found')
       }
-      
+
       const result = await continueReactAgentWithUserInput(
         questionData.nodeId,
         userInput,
         nodeData,
         {
           ...executionContext,
-          workspacePath: workspacePath,
+          workspacePath,
           ollamaHost: workspaceConfig?.ollamaHost || 'http://127.0.0.1:11434',
           variables: executionContext.variables || {},
           userInputValues: new Map(),
           onLog: (log) => {
-            useExecutionStore.getState().addLog(log)
+            useExecutionStore.getState().addLog(executionId, log)
           },
           onStream: (nodeId, chunk) => {
-            useExecutionStore.getState().appendStreamOutput(nodeId, chunk)
+            useExecutionStore.getState().appendStreamOutput(executionId, nodeId, chunk)
           },
         }
       )
-      
-      useExecutionStore.getState().updateNodeStatus(questionData.nodeId, {
+
+      useExecutionStore.getState().updateNodeStatus(executionId, questionData.nodeId, {
         nodeId: questionData.nodeId,
         status: 'success',
         output: result,
@@ -137,7 +157,7 @@ export default function PlanQuestionsManager() {
       })
     } catch (error) {
       console.error('[PlanQuestionsManager] Failed to continue ReAct agent:', error)
-      useExecutionStore.getState().updateNodeStatus(questionData.nodeId, {
+      useExecutionStore.getState().updateNodeStatus(executionId, questionData.nodeId, {
         nodeId: questionData.nodeId,
         status: 'error',
         error: error instanceof Error ? error.message : '未知错误',
@@ -148,35 +168,54 @@ export default function PlanQuestionsManager() {
       setIsSubmitting(false)
     }
   }
-  
+
   const handleCancel = () => {
-    if (!pendingQuestion) return
-    
-    useExecutionStore.getState().updateNodeStatus(pendingQuestion.nodeId, {
+    console.log('[PlanQuestionsManager] handleCancel called', {
+      executionId,
       nodeId: pendingQuestion.nodeId,
-      status: 'error',
+    })
+
+    const result = {
+      nodeId: pendingQuestion.nodeId,
+      status: 'error' as const,
       error: '用户取消了输入',
       duration: 0,
       timestamp: new Date().toISOString(),
-    })
-    
-    clearPendingQuestion()
+    }
+
+    console.log('[PlanQuestionsManager] Calling updateNodeStatus with:', { executionId, nodeId: pendingQuestion.nodeId, result })
+
+    useExecutionStore.getState().updateNodeStatus(executionId, pendingQuestion.nodeId, result)
+
+    console.log('[PlanQuestionsManager] Calling clearPendingQuestion')
+    useExecutionStore.getState().clearPendingQuestion(executionId)
   }
-  
+
+  const showPlanDialog = pendingQuestion.nodeType === 'plan' && pendingQuestion.questions && pendingQuestion.questions.length > 0
+  const showReactAgentDialog = pendingQuestion.nodeType === 'reactAgent' && pendingQuestion.prompt
+
+  console.log('[PlanQuestionsManager] Dialog conditions:', {
+    showPlanDialog,
+    showReactAgentDialog,
+    nodeType: pendingQuestion.nodeType,
+    questionsLength: pendingQuestion.questions?.length,
+    hasPrompt: !!pendingQuestion.prompt
+  })
+
   return (
     <AnimatePresence>
-      {pendingQuestion.nodeType === 'plan' && pendingQuestion.questions && pendingQuestion.questions.length > 0 && (
+      {showPlanDialog && (
         <PlanQuestionsDialog
-          questions={pendingQuestion.questions}
+          questions={pendingQuestion.questions!}
           onSubmit={handlePlanSubmit}
           onCancel={handleCancel}
           taskDescription={pendingQuestion.analysis}
         />
       )}
-      
-      {pendingQuestion.nodeType === 'reactAgent' && pendingQuestion.prompt && (
+
+      {showReactAgentDialog && (
         <ReactAgentInputDialog
-          prompt={pendingQuestion.prompt}
+          prompt={pendingQuestion.prompt!}
           context={pendingQuestion.context}
           onSubmit={handleReactAgentSubmit}
           onCancel={handleCancel}

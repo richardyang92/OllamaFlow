@@ -320,7 +320,7 @@ export function createReactAgentExecutor(): NodeExecutor {
 
       // Initialize ReAct state in execution store
       const executionStore = useExecutionStore.getState()
-      executionStore.initReActState(node.id, maxIterations)
+      executionStore.initReActState(context.executionId, node.id, maxIterations)
 
       context.onLog?.({
         nodeId: node.id,
@@ -564,7 +564,7 @@ WAIT_FOR_INPUT: 我找到了两种方案：
           observationError: false,
           startedAt: Date.now(),
         }
-        executionStore.updateReActStep(node.id, newStep)
+        executionStore.updateReActStep(context.executionId, node.id, newStep)
 
         // Get LLM response with retry for tool call parsing errors
         let response: Awaited<ReturnType<typeof ollamaInstance.chat>> | undefined
@@ -640,7 +640,7 @@ WAIT_FOR_INPUT: 我找到了两种方案：
 
         // Update step with thought
         const thought = content || '(思考中...)'
-        executionStore.updateReActStep(node.id, {
+        executionStore.updateReActStep(context.executionId, node.id, {
           id: stepId,
           thought,
           thoughtStreaming: false,
@@ -662,15 +662,15 @@ WAIT_FOR_INPUT: 我找到了两种方案：
             
             const contextText = content.replace(/WAIT_FOR_INPUT:.*$/s, '').trim()
             
-            executionStore.setReActWaitingForInput(node.id, promptText, contextText)
+            executionStore.setReActWaitingForInput(context.executionId, node.id, promptText, contextText)
             
-            executionStore.updateReActStep(node.id, {
+            executionStore.updateReActStep(context.executionId, node.id, {
               id: stepId,
               status: 'completed',
               thought: content,
               thoughtStreaming: false,
             })
-            executionStore.completeReActStep(node.id, stepId)
+            executionStore.completeReActStep(context.executionId, node.id, stepId)
             
             context.onLog?.({
               nodeId: node.id,
@@ -692,12 +692,12 @@ WAIT_FOR_INPUT: 我找到了两种方案：
           
           finalAnswer = content || '任务完成'
 
-          executionStore.updateReActStep(node.id, {
+          executionStore.updateReActStep(context.executionId, node.id, {
             id: stepId,
             status: 'completed',
           })
-          executionStore.completeReActStep(node.id, stepId)
-          executionStore.setReActFinalAnswer(node.id, finalAnswer)
+          executionStore.completeReActStep(context.executionId, node.id, stepId)
+          executionStore.setReActFinalAnswer(context.executionId, node.id, finalAnswer)
 
           context.onLog?.({
             nodeId: node.id,
@@ -725,7 +725,7 @@ WAIT_FOR_INPUT: 我找到了两种方案：
           })
 
           // Update step status to acting
-          executionStore.updateReActStep(node.id, {
+          executionStore.updateReActStep(context.executionId, node.id, {
             id: stepId,
             status: 'acting',
             action: toolName,
@@ -738,13 +738,13 @@ WAIT_FOR_INPUT: 我找到了两种方案：
 
             messages.push({ role: 'tool', content: blockedObservation })
 
-            executionStore.updateReActStep(node.id, {
+            executionStore.updateReActStep(context.executionId, node.id, {
               id: stepId,
               status: 'error',
               observation: blockedObservation,
               observationError: true,
             })
-            executionStore.completeReActStep(node.id, stepId)
+            executionStore.completeReActStep(context.executionId, node.id, stepId)
 
             context.onLog?.({
               nodeId: node.id,
@@ -767,13 +767,13 @@ WAIT_FOR_INPUT: 我找到了两种方案：
 
             messages.push({ role: 'tool', content: errorObs })
 
-            executionStore.updateReActStep(node.id, {
+            executionStore.updateReActStep(context.executionId, node.id, {
               id: stepId,
               status: 'error',
               observation: errorObs,
               observationError: true,
             })
-            executionStore.completeReActStep(node.id, stepId)
+            executionStore.completeReActStep(context.executionId, node.id, stepId)
 
             context.onLog?.({
               nodeId: node.id,
@@ -789,7 +789,7 @@ WAIT_FOR_INPUT: 我找到了两种方案：
           }
 
           // Execute the tool
-          executionStore.updateReActStep(node.id, {
+          executionStore.updateReActStep(context.executionId, node.id, {
             id: stepId,
             status: 'observing',
           })
@@ -810,7 +810,7 @@ WAIT_FOR_INPUT: 我找到了两种方案：
 
             // Sync todos state to store after each tool execution
             const todosStatus = todosManager.getStatus()
-            executionStore.updateReActTodos(node.id, todosStatus.items)
+            executionStore.updateReActTodos(context.executionId, node.id, todosStatus.items)
 
             let observation = result.success ? result.output : `错误: ${result.error}`
 
@@ -880,12 +880,12 @@ WAIT_FOR_INPUT: 我找到了两种方案：
 
             messages.push({ role: 'tool', content: observation })
 
-            executionStore.updateReActStep(node.id, {
+            executionStore.updateReActStep(context.executionId, node.id, {
               id: stepId,
               observation,
               observationError: !result.success,
             })
-            executionStore.completeReActStep(node.id, stepId)
+            executionStore.completeReActStep(context.executionId, node.id, stepId)
 
             context.onLog?.({
               nodeId: node.id,
@@ -905,13 +905,13 @@ WAIT_FOR_INPUT: 我找到了两种方案：
 
             messages.push({ role: 'tool', content: errorObs })
 
-            executionStore.updateReActStep(node.id, {
+            executionStore.updateReActStep(context.executionId, node.id, {
               id: stepId,
               status: 'error',
               observation: errorObs,
               observationError: true,
             })
-            executionStore.completeReActStep(node.id, stepId)
+            executionStore.completeReActStep(context.executionId, node.id, stepId)
 
             context.onLog?.({
               nodeId: node.id,
@@ -929,7 +929,7 @@ WAIT_FOR_INPUT: 我找到了两种方案：
 
       if (!finalAnswer) {
         finalAnswer = `在 ${maxIterations} 次迭代后未能得出最终答案。`
-        executionStore.setReActFinalAnswer(node.id, finalAnswer)
+        executionStore.setReActFinalAnswer(context.executionId, node.id, finalAnswer)
         context.onLog?.({
           nodeId: node.id,
           nodeName: data.label,
@@ -1020,7 +1020,7 @@ async function executeReActWithOpenAI(
 
   // Initialize ReAct state in execution store
   const executionStore = useExecutionStore.getState()
-  executionStore.initReActState(node.id, maxIterations)
+  executionStore.initReActState(context.executionId, node.id, maxIterations)
 
   context.onLog?.({
     nodeId: node.id,
@@ -1254,7 +1254,7 @@ WAIT_FOR_INPUT: 我找到了两种方案：
       observationError: false,
       startedAt: Date.now(),
     }
-    executionStore.updateReActStep(node.id, newStep)
+    executionStore.updateReActStep(context.executionId, node.id, newStep)
 
     try {
       const response = await client.chat({
@@ -1275,7 +1275,7 @@ WAIT_FOR_INPUT: 我找到了两种方案：
 
       // Update step with thought
       const thought = content || '(思考中...)'
-      executionStore.updateReActStep(node.id, {
+      executionStore.updateReActStep(context.executionId, node.id, {
         id: stepId,
         thought,
         thoughtStreaming: false,
@@ -1297,15 +1297,15 @@ WAIT_FOR_INPUT: 我找到了两种方案：
           
           const contextText = content.replace(/WAIT_FOR_INPUT:.*$/s, '').trim()
           
-          executionStore.setReActWaitingForInput(node.id, promptText, contextText)
+          executionStore.setReActWaitingForInput(context.executionId, node.id, promptText, contextText)
           
-          executionStore.updateReActStep(node.id, {
+          executionStore.updateReActStep(context.executionId, node.id, {
             id: stepId,
             status: 'completed',
             thought: content,
             thoughtStreaming: false,
           })
-          executionStore.completeReActStep(node.id, stepId)
+          executionStore.completeReActStep(context.executionId, node.id, stepId)
           
           context.onLog?.({
             nodeId: node.id,
@@ -1326,9 +1326,9 @@ WAIT_FOR_INPUT: 我找到了两种方案：
         }
         
         finalAnswer = content || '任务完成'
-        executionStore.updateReActStep(node.id, { id: stepId, status: 'completed' })
-        executionStore.completeReActStep(node.id, stepId)
-        executionStore.setReActFinalAnswer(node.id, finalAnswer)
+        executionStore.updateReActStep(context.executionId, node.id, { id: stepId, status: 'completed' })
+        executionStore.completeReActStep(context.executionId, node.id, stepId)
+        executionStore.setReActFinalAnswer(context.executionId, node.id, finalAnswer)
 
         context.onLog?.({
           nodeId: node.id,
@@ -1355,7 +1355,7 @@ WAIT_FOR_INPUT: 我找到了两种方案：
           message: `调用工具: ${toolName}`,
         })
 
-        executionStore.updateReActStep(node.id, {
+        executionStore.updateReActStep(context.executionId, node.id, {
           id: stepId,
           status: 'acting',
           action: toolName,
@@ -1368,18 +1368,18 @@ WAIT_FOR_INPUT: 我找到了两种方案：
         if (!tool) {
           const errorObs = `错误: 未知工具 "${toolName}"`
           messages.push({ role: 'tool', content: errorObs, tool_call_id: toolCall.id })
-          executionStore.updateReActStep(node.id, {
+          executionStore.updateReActStep(context.executionId, node.id, {
             id: stepId,
             status: 'error',
             observation: errorObs,
             observationError: true,
           })
-          executionStore.completeReActStep(node.id, stepId)
+          executionStore.completeReActStep(context.executionId, node.id, stepId)
           continue
         }
 
         // Execute the tool
-        executionStore.updateReActStep(node.id, { id: stepId, status: 'observing' })
+        executionStore.updateReActStep(context.executionId, node.id, { id: stepId, status: 'observing' })
 
         if (data.stream) {
           context.onStream?.(node.id, `🔧 调用: ${toolName}\n`)
@@ -1390,17 +1390,17 @@ WAIT_FOR_INPUT: 我找到了两种方案：
 
           // Sync todos state to store after each tool execution
           const todosStatus = todosManager.getStatus()
-          executionStore.updateReActTodos(node.id, todosStatus.items)
+          executionStore.updateReActTodos(context.executionId, node.id, todosStatus.items)
 
           const observation = result.success ? result.output : `错误: ${result.error}`
           messages.push({ role: 'tool', content: observation, tool_call_id: toolCall.id })
 
-          executionStore.updateReActStep(node.id, {
+          executionStore.updateReActStep(context.executionId, node.id, {
             id: stepId,
             observation,
             observationError: !result.success,
           })
-          executionStore.completeReActStep(node.id, stepId)
+          executionStore.completeReActStep(context.executionId, node.id, stepId)
 
           context.onLog?.({
             nodeId: node.id,
@@ -1416,13 +1416,13 @@ WAIT_FOR_INPUT: 我找到了两种方案：
         } catch (error) {
           const errorObs = `工具执行错误: ${(error as Error).message}`
           messages.push({ role: 'tool', content: errorObs, tool_call_id: toolCall.id })
-          executionStore.updateReActStep(node.id, {
+          executionStore.updateReActStep(context.executionId, node.id, {
             id: stepId,
             status: 'error',
             observation: errorObs,
             observationError: true,
           })
-          executionStore.completeReActStep(node.id, stepId)
+          executionStore.completeReActStep(context.executionId, node.id, stepId)
 
           if (data.stream) {
             context.onStream?.(node.id, `❌ ${errorObs}\n`)
@@ -1443,7 +1443,7 @@ WAIT_FOR_INPUT: 我找到了两种方案：
 
   if (!finalAnswer) {
     finalAnswer = `在 ${maxIterations} 次迭代后未能得出最终答案。`
-    executionStore.setReActFinalAnswer(node.id, finalAnswer)
+    executionStore.setReActFinalAnswer(context.executionId, node.id, finalAnswer)
     context.onLog?.({
       nodeId: node.id,
       nodeName: data.label,
@@ -1478,7 +1478,7 @@ export async function continueReactAgentWithUserInput(
   context: ExecutionContext
 ): Promise<unknown> {
   const executionStore = useExecutionStore.getState()
-  const reactState = executionStore.getReActState(nodeId)
+  const reactState = executionStore.getReActState(context.executionId, nodeId)
   
   if (!reactState) {
     throw new Error('ReAct Agent state not found')
@@ -1518,7 +1518,7 @@ async function continueReActWithOllama(
   const todosManager = new TodosManager()
   
   const maxIterations = nodeData.maxIterations || 10
-  const reactState = executionStore.getReActState(nodeId)!
+  const reactState = executionStore.getReActState(context.executionId, nodeId)!
   
   let iteration = reactState.currentIteration
   let finalAnswer: string | null = null
@@ -1549,7 +1549,7 @@ async function continueReActWithOllama(
       observationError: false,
       startedAt: Date.now(),
     }
-    executionStore.updateReActStep(nodeId, newStep)
+    executionStore.updateReActStep(context.executionId, nodeId, newStep)
     
     const response = await ollama.chat({
       model: nodeData.model,
@@ -1566,7 +1566,7 @@ async function continueReActWithOllama(
     messages.push(response.message)
     
     const thought = content || '(思考中...)'
-    executionStore.updateReActStep(nodeId, {
+    executionStore.updateReActStep(context.executionId, nodeId, {
       id: stepId,
       thought,
       thoughtStreaming: false,
@@ -1578,14 +1578,14 @@ async function continueReActWithOllama(
         const promptText = promptMatch ? promptMatch[1].trim() : '请提供更多信息'
         const contextText = content.replace(/WAIT_FOR_INPUT:.*$/s, '').trim()
         
-        executionStore.setReActWaitingForInput(nodeId, promptText, contextText)
-        executionStore.updateReActStep(nodeId, {
+        executionStore.setReActWaitingForInput(context.executionId, nodeId, promptText, contextText)
+        executionStore.updateReActStep(context.executionId, nodeId, {
           id: stepId,
           status: 'completed',
           thought: content,
           thoughtStreaming: false,
         })
-        executionStore.completeReActStep(nodeId, stepId)
+        executionStore.completeReActStep(context.executionId, nodeId, stepId)
         
         return {
           status: 'waiting',
@@ -1595,7 +1595,7 @@ async function continueReActWithOllama(
       }
       
       finalAnswer = content || '任务完成'
-      executionStore.setReActFinalAnswer(nodeId, finalAnswer)
+      executionStore.setReActFinalAnswer(context.executionId, nodeId, finalAnswer)
       break
     }
     
@@ -1606,7 +1606,7 @@ async function continueReActWithOllama(
       
       if (!tool) continue
       
-      executionStore.updateReActStep(nodeId, {
+      executionStore.updateReActStep(context.executionId, nodeId, {
         id: stepId,
         status: 'acting',
         action: toolName,
@@ -1618,13 +1618,13 @@ async function continueReActWithOllama(
       
       messages.push({ role: 'tool', content: observation })
       
-      executionStore.updateReActStep(nodeId, {
+      executionStore.updateReActStep(context.executionId, nodeId, {
         id: stepId,
         status: 'observing',
         observation,
         observationError: !result.success,
       })
-      executionStore.completeReActStep(nodeId, stepId)
+      executionStore.completeReActStep(context.executionId, nodeId, stepId)
     }
   }
   
@@ -1688,7 +1688,7 @@ async function continueReActWithOpenAI(
   
   const todosManager = new TodosManager()
   const maxIterations = nodeData.maxIterations || 10
-  const reactState = executionStore.getReActState(nodeId)!
+  const reactState = executionStore.getReActState(context.executionId, nodeId)!
   
   let iteration = reactState.currentIteration
   let finalAnswer: string | null = null
@@ -1719,7 +1719,7 @@ async function continueReActWithOpenAI(
       observationError: false,
       startedAt: Date.now(),
     }
-    executionStore.updateReActStep(nodeId, newStep)
+    executionStore.updateReActStep(context.executionId, nodeId, newStep)
     
     const response = await client.chat({
       model: debugMode.model,
@@ -1737,7 +1737,7 @@ async function continueReActWithOpenAI(
     messages.push(assistantMessage)
     
     const thought = content || '(思考中...)'
-    executionStore.updateReActStep(nodeId, {
+    executionStore.updateReActStep(context.executionId, nodeId, {
       id: stepId,
       thought,
       thoughtStreaming: false,
@@ -1749,14 +1749,14 @@ async function continueReActWithOpenAI(
         const promptText = promptMatch ? promptMatch[1].trim() : '请提供更多信息'
         const contextText = content.replace(/WAIT_FOR_INPUT:.*$/s, '').trim()
         
-        executionStore.setReActWaitingForInput(nodeId, promptText, contextText)
-        executionStore.updateReActStep(nodeId, {
+        executionStore.setReActWaitingForInput(context.executionId, nodeId, promptText, contextText)
+        executionStore.updateReActStep(context.executionId, nodeId, {
           id: stepId,
           status: 'completed',
           thought: content,
           thoughtStreaming: false,
         })
-        executionStore.completeReActStep(nodeId, stepId)
+        executionStore.completeReActStep(context.executionId, nodeId, stepId)
         
         return {
           status: 'waiting',
@@ -1766,7 +1766,7 @@ async function continueReActWithOpenAI(
       }
       
       finalAnswer = content || '任务完成'
-      executionStore.setReActFinalAnswer(nodeId, finalAnswer)
+      executionStore.setReActFinalAnswer(context.executionId, nodeId, finalAnswer)
       break
     }
     
@@ -1777,7 +1777,7 @@ async function continueReActWithOpenAI(
       
       if (!tool) continue
       
-      executionStore.updateReActStep(nodeId, {
+      executionStore.updateReActStep(context.executionId, nodeId, {
         id: stepId,
         status: 'acting',
         action: toolName,
@@ -1789,13 +1789,13 @@ async function continueReActWithOpenAI(
       
       messages.push({ role: 'tool', tool_call_id: toolCall.id, content: observation })
       
-      executionStore.updateReActStep(nodeId, {
+      executionStore.updateReActStep(context.executionId, nodeId, {
         id: stepId,
         status: 'observing',
         observation,
         observationError: !result.success,
       })
-      executionStore.completeReActStep(nodeId, stepId)
+      executionStore.completeReActStep(context.executionId, nodeId, stepId)
     }
   }
   

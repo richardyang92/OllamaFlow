@@ -11,6 +11,7 @@ const DEBUG = true
 const log = (...args: unknown[]) => DEBUG && console.log('[ExecutionStore]', ...args)
 
 interface PendingQuestion {
+  executionId: string // Store executionId to ensure correct execution is updated
   nodeId: string
   nodeType: 'plan' | 'reactAgent'
   questions?: PlanQuestion[]
@@ -19,7 +20,10 @@ interface PendingQuestion {
   context?: string
 }
 
-interface WorkspaceExecutionState {
+interface ExecutionInstanceState {
+  executionId: string
+  workspacePath: string
+  workflowId: string
   status: ExecutionStatus
   context: ExecutionContext | null
   logs: ExecutionLog[]
@@ -27,12 +31,21 @@ interface WorkspaceExecutionState {
   reactAgentStates: Map<string, ReActExecutionState>
   planStates: Map<string, PlanExecutionState>
   queueStates: Map<string, unknown[]>
+  activeBranches: Map<string, string[]>
   pendingQuestion: PendingQuestion | null
+  createdAt: number // Timestamp for stable sorting
 }
 
 interface ExecutionState {
-  currentWorkspacePath: string | null
-  workspaces: Map<string, WorkspaceExecutionState>
+  executions: Map<string, ExecutionInstanceState>
+  workspaceExecutions: Map<string, Set<string>>
+
+  createExecution: (workspacePath: string, workflowId: string) => string
+  getExecution: (executionId: string) => ExecutionInstanceState | undefined
+  listExecutions: (workspacePath?: string) => string[]
+  deleteExecution: (executionId: string) => void
+  getCurrentWorkspaceExecutions: (workspacePath: string) => ExecutionInstanceState[]
+  getActiveExecution: (workspacePath: string) => string | undefined
 
   startExecution: (workspacePath: string, workflowId: string) => void
   pauseExecution: () => void
@@ -49,68 +62,64 @@ interface ExecutionState {
   cancelExecutionForWorkspace: (workspacePath: string) => void
   completeExecutionForWorkspace: (workspacePath: string, success: boolean) => void
   getExecutionStatusForWorkspace: (workspacePath: string) => ExecutionStatus
+  getLogsForWorkspace: (workspacePath: string) => ExecutionLog[]
+  getPendingQuestionForWorkspace: (workspacePath: string) => PendingQuestion | null
+  getExecutionContextForWorkspace: (workspacePath: string) => ExecutionContext | null
+  getNodeResultsForWorkspace: (workspacePath: string) => Map<string, NodeExecutionResult> | undefined
+  clearLogsForWorkspace: (workspacePath: string) => void
+  getStreamOutputForWorkspace: (workspacePath: string, nodeId: string) => string
 
-  updateNodeStatus: (nodeId: string, result: NodeExecutionResult) => void
-  getNodeStatus: (nodeId: string) => NodeExecutionResult | undefined
+  updateNodeStatus: (executionId: string, nodeId: string, result: NodeExecutionResult) => void
+  getNodeStatus: (executionId: string, nodeId: string) => NodeExecutionResult | undefined
   getNodeStatusForWorkspace: (workspacePath: string, nodeId: string) => NodeExecutionResult | undefined
 
-  appendStreamOutput: (nodeId: string, chunk: string) => void
-  getStreamOutput: (nodeId: string) => string
-  clearStreamOutput: (nodeId: string) => void
+  appendStreamOutput: (executionId: string, nodeId: string, chunk: string) => void
+  getStreamOutput: (executionId: string, nodeId: string) => string
+  clearStreamOutput: (executionId: string, nodeId: string) => void
 
-  addLog: (log: Omit<ExecutionLog, 'id' | 'timestamp' | 'executionId'>) => void
-  clearLogs: () => void
+  addLog: (executionId: string, log: Omit<ExecutionLog, 'id' | 'timestamp' | 'executionId'>) => void
+  clearLogs: (executionId: string) => void
 
-  setVariable: (key: string, value: unknown) => void
-  getVariable: (key: string) => unknown
+  setVariable: (executionId: string, key: string, value: unknown) => void
+  getVariable: (executionId: string, key: string) => unknown
 
-  initReActState: (nodeId: string, maxIterations: number) => void
-  updateReActStep: (nodeId: string, step: Partial<ReActStep> & { id: string }) => void
-  appendReActThought: (nodeId: string, chunk: string) => void
-  appendReActObservation: (nodeId: string, chunk: string, isError?: boolean) => void
-  setReActFinalAnswer: (nodeId: string, answer: string) => void
-  completeReActStep: (nodeId: string, stepId: string) => void
-  getReActState: (nodeId: string) => ReActExecutionState | undefined
+  setActiveBranches: (executionId: string, nodeId: string, branches: string[]) => void
+  getActiveBranches: (executionId: string, nodeId: string) => string[] | undefined
+
+  initReActState: (executionId: string, nodeId: string, maxIterations: number) => void
+  updateReActStep: (executionId: string, nodeId: string, step: Partial<ReActStep> & { id: string }) => void
+  appendReActThought: (executionId: string, nodeId: string, chunk: string) => void
+  appendReActObservation: (executionId: string, nodeId: string, chunk: string, isError?: boolean) => void
+  setReActFinalAnswer: (executionId: string, nodeId: string, answer: string) => void
+  completeReActStep: (executionId: string, nodeId: string, stepId: string) => void
+  getReActState: (executionId: string, nodeId: string) => ReActExecutionState | undefined
   getReActStateForWorkspace: (workspacePath: string, nodeId: string) => ReActExecutionState | undefined
-  clearReActState: (nodeId: string) => void
-  updateReActTodos: (nodeId: string, todos: TodoItem[]) => void
-  setReActWaitingForInput: (nodeId: string, prompt: string, context?: string) => void
+  clearReActState: (executionId: string, nodeId: string) => void
+  updateReActTodos: (executionId: string, nodeId: string, todos: TodoItem[]) => void
+  setReActWaitingForInput: (executionId: string, nodeId: string, prompt: string, context?: string) => void
 
-  initPlanState: (nodeId: string) => void
-  updatePlanPhase: (nodeId: string, phase: PlanExecutionState['phase'], data?: Partial<PlanExecutionState>) => void
-  setPlanQuestions: (nodeId: string, questions: PlanExecutionState['questions'], analysis?: string) => void
-  setPlanAnswers: (nodeId: string, answers: Record<string, string>) => void
-  setPlanResult: (nodeId: string, plan: string) => void
-  setPlanError: (nodeId: string, error: string) => void
-  getPlanState: (nodeId: string) => PlanExecutionState | undefined
+  initPlanState: (executionId: string, nodeId: string) => void
+  updatePlanPhase: (executionId: string, nodeId: string, phase: PlanExecutionState['phase'], data?: Partial<PlanExecutionState>) => void
+  setPlanQuestions: (executionId: string, nodeId: string, questions: PlanExecutionState['questions'], analysis?: string) => void
+  setPlanAnswers: (executionId: string, nodeId: string, answers: Record<string, string>) => void
+  setPlanResult: (executionId: string, nodeId: string, plan: string) => void
+  setPlanError: (executionId: string, nodeId: string, error: string) => void
+  getPlanState: (executionId: string, nodeId: string) => PlanExecutionState | undefined
   getPlanStateForWorkspace: (workspacePath: string, nodeId: string) => PlanExecutionState | undefined
-  clearPlanState: (nodeId: string) => void
-  clearPendingQuestion: () => void
-  getPendingQuestion: () => PendingQuestion | null
+  clearPlanState: (executionId: string, nodeId: string) => void
+  clearPendingQuestion: (executionId: string) => void
+  getPendingQuestion: (executionId: string) => PendingQuestion | null
 
-  getQueue: (nodeId: string) => unknown[]
-  enqueue: (nodeId: string, item: unknown) => void
-  dequeue: (nodeId: string) => unknown | undefined
-  clearQueue: (nodeId: string) => void
+  getQueue: (executionId: string, nodeId: string) => unknown[]
+  enqueue: (executionId: string, nodeId: string, item: unknown) => void
+  dequeue: (executionId: string, nodeId: string) => unknown | undefined
+  clearQueue: (executionId: string, nodeId: string) => void
 }
 
-// Helper functions to get current workspace state
-function getCurrentWorkspaceState(state: ExecutionState): WorkspaceExecutionState | undefined {
-  if (!state.currentWorkspacePath) return undefined
-  return state.workspaces.get(state.currentWorkspacePath)
-}
-
-function getOrCreateWorkspaceState(state: ExecutionState): WorkspaceExecutionState {
-  if (!state.currentWorkspacePath) return createEmptyWorkspaceState()
-  let workspaceState = state.workspaces.get(state.currentWorkspacePath)
-  if (!workspaceState) {
-    workspaceState = createEmptyWorkspaceState()
-    state.workspaces.set(state.currentWorkspacePath, workspaceState)
-  }
-  return workspaceState
-}
-
-const createEmptyWorkspaceState = (): WorkspaceExecutionState => ({
+const createEmptyExecutionState = (executionId: string, workspacePath: string, workflowId: string): ExecutionInstanceState => ({
+  executionId,
+  workspacePath,
+  workflowId,
   status: 'idle',
   context: null,
   logs: [],
@@ -118,328 +127,291 @@ const createEmptyWorkspaceState = (): WorkspaceExecutionState => ({
   reactAgentStates: new Map(),
   planStates: new Map(),
   queueStates: new Map(),
+  activeBranches: new Map(),
   pendingQuestion: null,
+  createdAt: Date.now(),
 })
 
 export const useExecutionStore = create<ExecutionState>((set, get) => ({
-  currentWorkspacePath: null,
-  workspaces: new Map(),
+  executions: new Map(),
+  workspaceExecutions: new Map(),
 
-  startExecution: (workspacePath, workflowId) => {
-    log('startExecution', { workspacePath, workflowId })
+  // Execution instance lifecycle management
+  createExecution: (workspacePath, workflowId) => {
+    const executionId = window.crypto.randomUUID()
+    log('createExecution', { executionId, workspacePath, workflowId })
 
     const context: ExecutionContext = {
       workflowId,
-      executionId: window.crypto.randomUUID(),
+      executionId,
       startTime: new Date().toISOString(),
       nodeResults: new Map(),
       variables: {},
     }
 
-    const workspaces = new Map(get().workspaces)
-    const existingWorkspace = workspaces.get(workspacePath)
+    const executionState = createEmptyExecutionState(executionId, workspacePath, workflowId)
+    executionState.status = 'running'
+    executionState.context = context
 
-    log('startExecution - existing workspace?', !!existingWorkspace, 'workspaceKeys:', Array.from(workspaces.keys()))
+    const executions = new Map(get().executions)
+    executions.set(executionId, executionState)
 
-    workspaces.set(workspacePath, {
-      status: 'running',
-      context,
-      logs: existingWorkspace?.logs || [],
-      streamingOutput: new Map(),
-      reactAgentStates: new Map(),
-      planStates: new Map(),
-      queueStates: new Map(),
-      pendingQuestion: null,
-    })
+    const workspaceExecutions = new Map(get().workspaceExecutions)
+    const workspaceExecSet = workspaceExecutions.get(workspacePath) || new Set()
+    workspaceExecSet.add(executionId)
+    workspaceExecutions.set(workspacePath, workspaceExecSet)
 
-    log('startExecution - workspaces after set:', Array.from(workspaces.keys()))
-    log('startExecution - setting current workspace:', workspacePath)
+    set({ executions, workspaceExecutions })
 
-    set({
-      currentWorkspacePath: workspacePath,
-      workspaces,
-    })
+    log('createExecution - created:', executionId, 'for workspace:', workspacePath)
+    return executionId
+  },
 
-    // Log is added to workspace via addLog which uses currentWorkspacePath
-    get().addLog({
+  getExecution: (executionId) => {
+    return get().executions.get(executionId)
+  },
+
+  listExecutions: (workspacePath) => {
+    if (workspacePath) {
+      const workspaceExecSet = get().workspaceExecutions.get(workspacePath)
+      return workspaceExecSet ? Array.from(workspaceExecSet) : []
+    }
+    return Array.from(get().executions.keys())
+  },
+
+  deleteExecution: (executionId) => {
+    log('deleteExecution', { executionId })
+
+    const execution = get().executions.get(executionId)
+    if (!execution) return
+
+    const executions = new Map(get().executions)
+    executions.delete(executionId)
+
+    const workspaceExecutions = new Map(get().workspaceExecutions)
+    const workspaceExecSet = workspaceExecutions.get(execution.workspacePath)
+    if (workspaceExecSet) {
+      workspaceExecSet.delete(executionId)
+      if (workspaceExecSet.size === 0) {
+        workspaceExecutions.delete(execution.workspacePath)
+      } else {
+        workspaceExecutions.set(execution.workspacePath, workspaceExecSet)
+      }
+    }
+
+    set({ executions, workspaceExecutions })
+    log('deleteExecution - deleted:', executionId)
+  },
+
+  getCurrentWorkspaceExecutions: (workspacePath) => {
+    const workspaceExecSet = get().workspaceExecutions.get(workspacePath)
+    if (!workspaceExecSet) return []
+
+    const executions = get().executions
+    return Array.from(workspaceExecSet)
+      .map(id => executions.get(id))
+      .filter((exec): exec is ExecutionInstanceState => exec !== undefined)
+  },
+
+  getActiveExecution: (workspacePath) => {
+    const workspaceExecs = get().getCurrentWorkspaceExecutions(workspacePath)
+    if (workspaceExecs.length === 0) return undefined
+
+    // Sort by createdAt descending (most recent first)
+    const sortedExecs = [...workspaceExecs].sort((a, b) => b.createdAt - a.createdAt)
+
+    // Priority: running > paused > others (most recent)
+    const runningExec = sortedExecs.find(exec => exec.status === 'running')
+    if (runningExec) return runningExec.executionId
+
+    const pausedExec = sortedExecs.find(exec => exec.status === 'paused')
+    if (pausedExec) return pausedExec.executionId
+
+    // Return most recent execution (first in sorted array)
+    return sortedExecs[0].executionId
+  },
+
+  // Legacy methods for backward compatibility - these use the active execution for the workspace
+  startExecution: (workspacePath, workflowId) => {
+    log('startExecution (legacy)', { workspacePath, workflowId })
+    const executionId = get().createExecution(workspacePath, workflowId)
+    get().addLog(executionId, {
       level: 'info',
       message: `Started execution: ${workflowId}`,
     })
+    return executionId
   },
 
   pauseExecution: () => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
-
-    const newWorkspaces = new Map(workspaces)
-    const workspaceState = newWorkspaces.get(currentWorkspacePath)
-    if (workspaceState) {
-      newWorkspaces.set(currentWorkspacePath, { ...workspaceState, status: 'paused' })
-    }
-
-    set({
-      workspaces: newWorkspaces,
-    })
-    get().addLog({ level: 'info', message: 'Execution paused' })
+    log('pauseExecution (legacy) - deprecated, use pauseExecutionForWorkspace')
   },
 
   resumeExecution: () => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
-
-    const newWorkspaces = new Map(workspaces)
-    const workspaceState = newWorkspaces.get(currentWorkspacePath)
-    if (workspaceState) {
-      newWorkspaces.set(currentWorkspacePath, { ...workspaceState, status: 'running' })
-    }
-
-    set({
-      workspaces: newWorkspaces,
-    })
-    get().addLog({ level: 'info', message: 'Execution resumed' })
+    log('resumeExecution (legacy) - deprecated, use resumeExecutionForWorkspace')
   },
 
   cancelExecution: () => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
-
-    const newWorkspaces = new Map(workspaces)
-    const workspaceState = newWorkspaces.get(currentWorkspacePath)
-    if (workspaceState) {
-      newWorkspaces.set(currentWorkspacePath, {
-        ...workspaceState,
-        status: 'cancelled',
-        context: null
-      })
-    }
-
-    set({
-      workspaces: newWorkspaces,
-    })
-    get().addLog({ level: 'warn', message: 'Execution cancelled' })
+    log('cancelExecution (legacy) - deprecated, use cancelExecutionForWorkspace')
   },
 
   completeExecution: (success) => {
-    const { currentWorkspacePath, workspaces } = get()
-    log('completeExecution', { success, currentWorkspacePath })
-
-    if (!currentWorkspacePath) return
-
-    const newWorkspaces = new Map(workspaces)
-    const workspaceState = newWorkspaces.get(currentWorkspacePath)
-    if (workspaceState) {
-      newWorkspaces.set(currentWorkspacePath, {
-        ...workspaceState,
-        status: success ? 'completed' : 'failed'
-      })
-    }
-
-    set({
-      workspaces: newWorkspaces,
-    })
-    get().addLog({
-      level: success ? 'info' : 'error',
-      message: success ? 'Execution completed' : 'Execution failed',
-    })
+    log('completeExecution (legacy) - deprecated, use completeExecutionForWorkspace', { success })
   },
 
   resetExecution: () => {
-    const { currentWorkspacePath, workspaces } = get()
-    log('resetExecution', { currentWorkspacePath })
-
-    // resetExecution is now a no-op for global state
-    // Use resetWorkspaceExecution to clear a specific workspace's state
-    log('resetExecution - no-op, preserved workspaces:', Array.from(workspaces.keys()))
+    log('resetExecution (legacy) - no-op')
   },
 
   resetWorkspaceExecution: (workspacePath: string) => {
     log('resetWorkspaceExecution', { workspacePath })
-
-    const workspaces = new Map(get().workspaces)
-    workspaces.set(workspacePath, createEmptyWorkspaceState())
-
-    set({ workspaces })
+    const executionIds = get().listExecutions(workspacePath)
+    executionIds.forEach(id => get().deleteExecution(id))
   },
 
   switchWorkspaceContext: (workspacePath: string) => {
-    const workspaces = new Map(get().workspaces)
-    let workspaceState = workspaces.get(workspacePath)
+    log('switchWorkspaceContext (legacy)', { workspacePath })
+    // This is now a no-op since we don't have currentWorkspacePath
+    // UI components should track their own active executionId
+  },
 
-    log('switchWorkspaceContext', {
-      workspacePath,
-      hasWorkspaceState: !!workspaceState,
-      allWorkspacePaths: Array.from(workspaces.keys()),
-      workspaceReactStates: workspaceState ? Array.from(workspaceState.reactAgentStates.keys()) : [],
-    })
-
-    if (!workspaceState) {
-      log('switchWorkspaceContext - no existing state, creating empty for:', workspacePath)
-      workspaceState = createEmptyWorkspaceState()
-      workspaces.set(workspacePath, workspaceState)
+  // Node status operations
+  updateNodeStatus: (executionId, nodeId, result) => {
+    log('updateNodeStatus', { executionId, nodeId, result: { ...result, input: '...', output: '...' } })
+    const execution = get().executions.get(executionId)
+    if (!execution?.context) {
+      log('updateNodeStatus - NO EXECUTION OR CONTEXT FOUND for executionId:', executionId)
+      return
     }
 
-    // Only switch currentWorkspacePath, don't copy state to global
-    // This allows background executions to continue
-    set({
-      currentWorkspacePath: workspacePath,
-      workspaces,
-    })
-
-    log('switchWorkspaceContext - switched to workspace:', workspacePath)
-  },
-
-  updateNodeStatus: (nodeId, result) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
-
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState?.context) return
-
-    const newResults = new Map(workspaceState.context.nodeResults)
+    const newResults = new Map(execution.context.nodeResults)
     newResults.set(nodeId, result)
-    const newContext = { ...workspaceState.context, nodeResults: newResults }
+    const newContext = { ...execution.context, nodeResults: newResults }
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, { ...workspaceState, context: newContext })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, context: newContext })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
+    log('updateNodeStatus - updated, new size:', newResults.size)
   },
 
-  getNodeStatus: (nodeId) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return undefined
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    return workspaceState?.context?.nodeResults.get(nodeId)
+  getNodeStatus: (executionId, nodeId) => {
+    const execution = get().executions.get(executionId)
+    return execution?.context?.nodeResults.get(nodeId)
   },
 
   getNodeStatusForWorkspace: (workspacePath, nodeId) => {
-    const workspaceState = get().workspaces.get(workspacePath)
-    return workspaceState?.context?.nodeResults.get(nodeId)
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    if (!activeExecutionId) return undefined
+    return get().getNodeStatus(activeExecutionId, nodeId)
   },
 
-  appendStreamOutput: (nodeId, chunk) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
+  // Stream output operations
+  appendStreamOutput: (executionId, nodeId, chunk) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
-
-    const newStreamingOutput = new Map(workspaceState.streamingOutput)
+    const newStreamingOutput = new Map(execution.streamingOutput)
     const current = newStreamingOutput.get(nodeId) || ''
     newStreamingOutput.set(nodeId, current + chunk)
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      streamingOutput: newStreamingOutput
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, streamingOutput: newStreamingOutput })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  getStreamOutput: (nodeId) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return ''
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    return workspaceState?.streamingOutput.get(nodeId) || ''
+  getStreamOutput: (executionId, nodeId) => {
+    const execution = get().executions.get(executionId)
+    return execution?.streamingOutput.get(nodeId) || ''
   },
 
-  clearStreamOutput: (nodeId) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
+  clearStreamOutput: (executionId, nodeId) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
-
-    const newStreamingOutput = new Map(workspaceState.streamingOutput)
+    const newStreamingOutput = new Map(execution.streamingOutput)
     newStreamingOutput.delete(nodeId)
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      streamingOutput: newStreamingOutput
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, streamingOutput: newStreamingOutput })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  addLog: (logEntry) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
-
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
+  // Log operations
+  addLog: (executionId, logEntry) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
     const newLog: ExecutionLog = {
       ...logEntry,
       id: window.crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      executionId: workspaceState.context?.executionId ?? '',
+      executionId: execution.context?.executionId ?? executionId,
     }
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      logs: [...workspaceState.logs, newLog]
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, logs: [...execution.logs, newLog] })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  clearLogs: () => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
+  clearLogs: (executionId) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, logs: [] })
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, { ...workspaceState, logs: [] })
-
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  setVariable: (key, value) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
-
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState?.context) return
+  // Variable operations
+  setVariable: (executionId, key, value) => {
+    const execution = get().executions.get(executionId)
+    if (!execution?.context) return
 
     const newContext = {
-      ...workspaceState.context,
-      variables: { ...workspaceState.context.variables, [key]: value },
+      ...execution.context,
+      variables: { ...execution.context.variables, [key]: value },
     }
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, { ...workspaceState, context: newContext })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, context: newContext })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  getVariable: (key) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return undefined
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    return workspaceState?.context?.variables[key]
+  getVariable: (executionId, key) => {
+    const execution = get().executions.get(executionId)
+    return execution?.context?.variables[key]
   },
 
-  initReActState: (nodeId, maxIterations) => {
-    const { currentWorkspacePath, workspaces } = get()
+  // Active branches operations
+  setActiveBranches: (executionId, nodeId, branches) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
-    log('initReActState', {
-      nodeId,
-      maxIterations,
-      currentWorkspacePath,
-      existingKeys: workspaces.get(currentWorkspacePath || '')?.reactAgentStates
-        ? Array.from(workspaces.get(currentWorkspacePath || '')!.reactAgentStates.keys())
-        : [],
-    })
+    const newActiveBranches = new Map(execution.activeBranches)
+    newActiveBranches.set(nodeId, branches)
 
-    if (!currentWorkspacePath) return
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, activeBranches: newActiveBranches })
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
+    set({ executions })
+  },
+
+  getActiveBranches: (executionId, nodeId) => {
+    const execution = get().executions.get(executionId)
+    return execution?.activeBranches.get(nodeId)
+  },
+
+  // ReAct state operations
+  initReActState: (executionId, nodeId, maxIterations) => {
+    log('initReActState', { executionId, nodeId, maxIterations })
+
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
     const newState: ReActExecutionState = {
       nodeId,
@@ -452,39 +424,30 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       todos: [],
     }
 
-    const newReactAgentStates = new Map(workspaceState.reactAgentStates)
+    const newReactAgentStates = new Map(execution.reactAgentStates)
     newReactAgentStates.set(nodeId, newState)
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      reactAgentStates: newReactAgentStates
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, reactAgentStates: newReactAgentStates })
 
-    log('initReActState - saved to workspace:', currentWorkspacePath, 'keys:', Array.from(newReactAgentStates.keys()))
-
-    set({ workspaces: newWorkspaces })
-
-    log('initReActState - after set, workspace keys:', Array.from(newReactAgentStates.keys()))
+    set({ executions })
+    log('initReActState - saved for execution:', executionId)
   },
 
-  updateReActStep: (nodeId, stepUpdate) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
-
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) {
-      log('updateReActStep - NO STATE FOUND for nodeId:', nodeId)
+  updateReActStep: (executionId, nodeId, stepUpdate) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) {
+      log('updateReActStep - NO EXECUTION FOUND for executionId:', executionId)
       return
     }
 
-    const state = workspaceState.reactAgentStates.get(nodeId)
+    const state = execution.reactAgentStates.get(nodeId)
     if (!state) {
-      log('updateReActStep - NO REACT STATE FOUND for nodeId:', nodeId, 'available keys:', Array.from(workspaceState.reactAgentStates.keys()))
+      log('updateReActStep - NO REACT STATE FOUND for nodeId:', nodeId)
       return
     }
 
-    const newReactAgentStates = new Map(workspaceState.reactAgentStates)
+    const newReactAgentStates = new Map(execution.reactAgentStates)
     const stepIndex = state.steps.findIndex((s: ReActStep) => s.id === stepUpdate.id)
 
     if (stepIndex >= 0) {
@@ -501,26 +464,20 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       })
     }
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      reactAgentStates: newReactAgentStates
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, reactAgentStates: newReactAgentStates })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  appendReActThought: (nodeId, chunk) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
+  appendReActThought: (executionId, nodeId, chunk) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
-
-    const state = workspaceState.reactAgentStates.get(nodeId)
+    const state = execution.reactAgentStates.get(nodeId)
     if (!state || state.steps.length === 0) return
 
-    const newReactAgentStates = new Map(workspaceState.reactAgentStates)
+    const newReactAgentStates = new Map(execution.reactAgentStates)
     const lastStep = state.steps[state.steps.length - 1]
     const newSteps = [...state.steps]
     newSteps[newSteps.length - 1] = {
@@ -530,26 +487,20 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     }
     newReactAgentStates.set(nodeId, { ...state, steps: newSteps })
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      reactAgentStates: newReactAgentStates
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, reactAgentStates: newReactAgentStates })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  appendReActObservation: (nodeId, chunk, isError = false) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
+  appendReActObservation: (executionId, nodeId, chunk, isError = false) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
-
-    const state = workspaceState.reactAgentStates.get(nodeId)
+    const state = execution.reactAgentStates.get(nodeId)
     if (!state || state.steps.length === 0) return
 
-    const newReactAgentStates = new Map(workspaceState.reactAgentStates)
+    const newReactAgentStates = new Map(execution.reactAgentStates)
     const lastStep = state.steps[state.steps.length - 1]
     const newSteps = [...state.steps]
     newSteps[newSteps.length - 1] = {
@@ -560,48 +511,36 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     }
     newReactAgentStates.set(nodeId, { ...state, steps: newSteps })
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      reactAgentStates: newReactAgentStates
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, reactAgentStates: newReactAgentStates })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  setReActFinalAnswer: (nodeId, answer) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
+  setReActFinalAnswer: (executionId, nodeId, answer) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
-
-    const state = workspaceState.reactAgentStates.get(nodeId)
+    const state = execution.reactAgentStates.get(nodeId)
     if (!state) return
 
-    const newReactAgentStates = new Map(workspaceState.reactAgentStates)
+    const newReactAgentStates = new Map(execution.reactAgentStates)
     newReactAgentStates.set(nodeId, { ...state, finalAnswer: answer })
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      reactAgentStates: newReactAgentStates
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, reactAgentStates: newReactAgentStates })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  completeReActStep: (nodeId, stepId) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
+  completeReActStep: (executionId, nodeId, stepId) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
-
-    const state = workspaceState.reactAgentStates.get(nodeId)
+    const state = execution.reactAgentStates.get(nodeId)
     if (!state) return
 
-    const newReactAgentStates = new Map(workspaceState.reactAgentStates)
+    const newReactAgentStates = new Map(execution.reactAgentStates)
     const newSteps = state.steps.map((s: ReActStep) =>
       s.id === stepId
         ? {
@@ -615,403 +554,349 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     )
     newReactAgentStates.set(nodeId, { ...state, steps: newSteps })
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      reactAgentStates: newReactAgentStates
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, reactAgentStates: newReactAgentStates })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  getReActState: (nodeId) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return undefined
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    return workspaceState?.reactAgentStates.get(nodeId)
+  getReActState: (executionId, nodeId) => {
+    const execution = get().executions.get(executionId)
+    return execution?.reactAgentStates.get(nodeId)
   },
 
   getReActStateForWorkspace: (workspacePath: string, nodeId: string) => {
-    const workspaceState = get().workspaces.get(workspacePath)
-    return workspaceState?.reactAgentStates.get(nodeId)
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    if (!activeExecutionId) return undefined
+    return get().getReActState(activeExecutionId, nodeId)
   },
 
-  clearReActState: (nodeId) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
+  clearReActState: (executionId, nodeId) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
-
-    const newReactAgentStates = new Map(workspaceState.reactAgentStates)
+    const newReactAgentStates = new Map(execution.reactAgentStates)
     newReactAgentStates.delete(nodeId)
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      reactAgentStates: newReactAgentStates
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, reactAgentStates: newReactAgentStates })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  updateReActTodos: (nodeId, todos) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
+  updateReActTodos: (executionId, nodeId, todos) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
-
-    const state = workspaceState.reactAgentStates.get(nodeId)
+    const state = execution.reactAgentStates.get(nodeId)
     if (!state) return
 
-    const newReactAgentStates = new Map(workspaceState.reactAgentStates)
+    const newReactAgentStates = new Map(execution.reactAgentStates)
     newReactAgentStates.set(nodeId, { ...state, todos })
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      reactAgentStates: newReactAgentStates
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, reactAgentStates: newReactAgentStates })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  setReActWaitingForInput: (nodeId, prompt, context) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
-
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
+  setReActWaitingForInput: (executionId, nodeId, prompt, context) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
     const pendingQuestion: PendingQuestion = {
+      executionId,
       nodeId,
       nodeType: 'reactAgent',
       prompt,
       context,
     }
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      pendingQuestion
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, pendingQuestion })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  getQueue: (nodeId) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return []
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    return workspaceState?.queueStates.get(nodeId) || []
+  // Queue operations
+  getQueue: (executionId, nodeId) => {
+    const execution = get().executions.get(executionId)
+    return execution?.queueStates.get(nodeId) || []
   },
 
-  enqueue: (nodeId, item) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
+  enqueue: (executionId, nodeId, item) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
-
-    const newQueueStates = new Map(workspaceState.queueStates)
+    const newQueueStates = new Map(execution.queueStates)
     const queue = newQueueStates.get(nodeId) || []
     newQueueStates.set(nodeId, [...queue, item])
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      queueStates: newQueueStates
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, queueStates: newQueueStates })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  dequeue: (nodeId) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return undefined
+  dequeue: (executionId, nodeId) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return undefined
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return undefined
-
-    const queue = workspaceState.queueStates.get(nodeId) || []
+    const queue = execution.queueStates.get(nodeId) || []
     if (queue.length === 0) return undefined
 
     const [first, ...rest] = queue
-    const newQueueStates = new Map(workspaceState.queueStates)
+    const newQueueStates = new Map(execution.queueStates)
     newQueueStates.set(nodeId, rest)
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      queueStates: newQueueStates
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, queueStates: newQueueStates })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
     return first
   },
 
-  clearQueue: (nodeId) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
+  clearQueue: (executionId, nodeId) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
-
-    const newQueueStates = new Map(workspaceState.queueStates)
+    const newQueueStates = new Map(execution.queueStates)
     newQueueStates.delete(nodeId)
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      queueStates: newQueueStates
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, queueStates: newQueueStates })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
+  // Workspace-specific execution methods (for backward compatibility)
   startExecutionForWorkspace: (workspacePath, workflowId) => {
     log('startExecutionForWorkspace', { workspacePath, workflowId })
-
-    const context: ExecutionContext = {
-      workflowId,
-      executionId: window.crypto.randomUUID(),
-      startTime: new Date().toISOString(),
-      nodeResults: new Map(),
-      variables: {},
-    }
-
-    const workspaces = new Map(get().workspaces)
-    const existingWorkspace = workspaces.get(workspacePath)
-
-    workspaces.set(workspacePath, {
-      status: 'running',
-      context,
-      logs: existingWorkspace?.logs || [],
-      streamingOutput: new Map(),
-      reactAgentStates: new Map(),
-      planStates: new Map(),
-      queueStates: new Map(),
-      pendingQuestion: null,
-    })
-
-    set({
-      currentWorkspacePath: workspacePath,
-      workspaces,
-    })
+    return get().createExecution(workspacePath, workflowId)
   },
 
   pauseExecutionForWorkspace: (workspacePath) => {
-    const workspaces = new Map(get().workspaces)
-    const workspaceState = workspaces.get(workspacePath)
-    if (workspaceState) {
-      workspaces.set(workspacePath, { ...workspaceState, status: 'paused' })
-      set({ workspaces })
-    }
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    if (!activeExecutionId) return
+
+    const execution = get().executions.get(activeExecutionId)
+    if (!execution) return
+
+    const executions = new Map(get().executions)
+    executions.set(activeExecutionId, { ...execution, status: 'paused' })
+    set({ executions })
   },
 
   resumeExecutionForWorkspace: (workspacePath) => {
-    const workspaces = new Map(get().workspaces)
-    const workspaceState = workspaces.get(workspacePath)
-    if (workspaceState) {
-      workspaces.set(workspacePath, { ...workspaceState, status: 'running' })
-      set({ workspaces })
-    }
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    if (!activeExecutionId) return
+
+    const execution = get().executions.get(activeExecutionId)
+    if (!execution) return
+
+    const executions = new Map(get().executions)
+    executions.set(activeExecutionId, { ...execution, status: 'running' })
+    set({ executions })
   },
 
   cancelExecutionForWorkspace: (workspacePath) => {
-    const workspaces = new Map(get().workspaces)
-    const workspaceState = workspaces.get(workspacePath)
-    if (workspaceState) {
-      workspaces.set(workspacePath, { 
-        ...workspaceState, 
-        status: 'cancelled', 
-        context: null 
-      })
-      set({ workspaces })
-    }
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    if (!activeExecutionId) return
+
+    const execution = get().executions.get(activeExecutionId)
+    if (!execution) return
+
+    const executions = new Map(get().executions)
+    executions.set(activeExecutionId, { ...execution, status: 'cancelled', context: null })
+    set({ executions })
   },
 
   completeExecutionForWorkspace: (workspacePath, success) => {
-    const workspaces = new Map(get().workspaces)
-    const workspaceState = workspaces.get(workspacePath)
-    if (workspaceState) {
-      workspaces.set(workspacePath, { 
-        ...workspaceState, 
-        status: success ? 'completed' : 'failed' 
-      })
-      set({ workspaces })
-    }
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    if (!activeExecutionId) return
+
+    const execution = get().executions.get(activeExecutionId)
+    if (!execution) return
+
+    const executions = new Map(get().executions)
+    executions.set(activeExecutionId, { 
+      ...execution, 
+      status: success ? 'completed' : 'failed' 
+    })
+    set({ executions })
   },
 
   getExecutionStatusForWorkspace: (workspacePath) => {
-    const workspaceState = get().workspaces.get(workspacePath)
-    return workspaceState?.status || 'idle'
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    if (!activeExecutionId) return 'idle'
+    const execution = get().executions.get(activeExecutionId)
+    return execution?.status || 'idle'
   },
 
-  initPlanState: (nodeId) => {
-    const { currentWorkspacePath, workspaces } = get()
+  getLogsForWorkspace: (workspacePath) => {
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    if (!activeExecutionId) return []
+    const execution = get().executions.get(activeExecutionId)
+    return execution?.logs || []
+  },
 
-    log('initPlanState', {
-      nodeId,
-      currentWorkspacePath,
-      existingKeys: workspaces.get(currentWorkspacePath || '')?.planStates
-        ? Array.from(workspaces.get(currentWorkspacePath || '')!.planStates.keys())
-        : [],
-    })
+  getPendingQuestionForWorkspace: (workspacePath) => {
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    if (!activeExecutionId) return null
+    const execution = get().executions.get(activeExecutionId)
+    return execution?.pendingQuestion || null
+  },
 
-    if (!currentWorkspacePath) return
+  getExecutionContextForWorkspace: (workspacePath) => {
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    if (!activeExecutionId) return null
+    const execution = get().executions.get(activeExecutionId)
+    return execution?.context || null
+  },
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
+  getNodeResultsForWorkspace: (workspacePath) => {
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    if (!activeExecutionId) return undefined
+    const execution = get().executions.get(activeExecutionId)
+    return execution?.context?.nodeResults
+  },
+
+  clearLogsForWorkspace: (workspacePath) => {
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    if (!activeExecutionId) return
+    get().clearLogs(activeExecutionId)
+  },
+
+  getStreamOutputForWorkspace: (workspacePath, nodeId) => {
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    if (!activeExecutionId) return ''
+    return get().getStreamOutput(activeExecutionId, nodeId)
+  },
+
+  // Plan state operations
+  initPlanState: (executionId, nodeId) => {
+    log('initPlanState', { executionId, nodeId })
+
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
     const newState: PlanExecutionState = {
       nodeId,
       phase: 'analyzing',
     }
 
-    const newPlanStates = new Map(workspaceState.planStates)
+    const newPlanStates = new Map(execution.planStates)
     newPlanStates.set(nodeId, newState)
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      planStates: newPlanStates
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, planStates: newPlanStates })
 
-    log('initPlanState - saved to workspace:', currentWorkspacePath, 'keys:', Array.from(newPlanStates.keys()))
-
-    set({ workspaces: newWorkspaces })
-
-    log('initPlanState - after set, workspace keys:', Array.from(newPlanStates.keys()))
+    set({ executions })
+    log('initPlanState - saved for execution:', executionId)
   },
 
-  updatePlanPhase: (nodeId, phase, data) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
-
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) {
-      log('updatePlanPhase - NO STATE FOUND for nodeId:', nodeId)
+  updatePlanPhase: (executionId, nodeId, phase, data) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) {
+      log('updatePlanPhase - NO EXECUTION FOUND for executionId:', executionId)
       return
     }
 
-    const state = workspaceState.planStates.get(nodeId)
+    const state = execution.planStates.get(nodeId)
     if (!state) {
-      log('updatePlanPhase - NO PLAN STATE FOUND for nodeId:', nodeId, 'available keys:', Array.from(workspaceState.planStates.keys()))
+      log('updatePlanPhase - NO PLAN STATE FOUND for nodeId:', nodeId)
       return
     }
 
-    const newPlanStates = new Map(workspaceState.planStates)
+    const newPlanStates = new Map(execution.planStates)
     const updatedState = { ...state, phase, ...data }
     newPlanStates.set(nodeId, updatedState)
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      planStates: newPlanStates
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, planStates: newPlanStates })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  setPlanQuestions: (nodeId, questions, analysis) => {
-    get().updatePlanPhase(nodeId, 'questions', { questions })
+  setPlanQuestions: (executionId, nodeId, questions, analysis) => {
+    get().updatePlanPhase(executionId, nodeId, 'questions', { questions })
 
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
-
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
     const pendingQuestion: PendingQuestion = {
+      executionId,
       nodeId,
       nodeType: 'plan',
       questions: questions || [],
       analysis: analysis || '',
     }
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      pendingQuestion
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, pendingQuestion })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  setPlanAnswers: (nodeId, answers) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
+  setPlanAnswers: (executionId, nodeId, answers) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
-
-    const state = workspaceState.planStates.get(nodeId)
+    const state = execution.planStates.get(nodeId)
     if (!state) return
 
-    get().updatePlanPhase(nodeId, 'generating', { answers })
+    get().updatePlanPhase(executionId, nodeId, 'generating', { answers })
   },
 
-  setPlanResult: (nodeId, plan) => {
-    get().updatePlanPhase(nodeId, 'complete', { generatedPlan: plan })
+  setPlanResult: (executionId, nodeId, plan) => {
+    get().updatePlanPhase(executionId, nodeId, 'complete', { generatedPlan: plan })
   },
 
-  setPlanError: (nodeId, error) => {
-    get().updatePlanPhase(nodeId, 'error', { error })
+  setPlanError: (executionId, nodeId, error) => {
+    get().updatePlanPhase(executionId, nodeId, 'error', { error })
   },
 
-  getPlanState: (nodeId) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return undefined
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    return workspaceState?.planStates.get(nodeId)
+  getPlanState: (executionId, nodeId) => {
+    const execution = get().executions.get(executionId)
+    return execution?.planStates.get(nodeId)
   },
 
   getPlanStateForWorkspace: (workspacePath, nodeId) => {
-    const workspaceState = get().workspaces.get(workspacePath)
-    return workspaceState?.planStates.get(nodeId)
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    if (!activeExecutionId) return undefined
+    return get().getPlanState(activeExecutionId, nodeId)
   },
 
-  clearPlanState: (nodeId) => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
+  clearPlanState: (executionId, nodeId) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
-
-    const newPlanStates = new Map(workspaceState.planStates)
+    const newPlanStates = new Map(execution.planStates)
     newPlanStates.delete(nodeId)
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      planStates: newPlanStates
-    })
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, planStates: newPlanStates })
 
-    set({ workspaces: newWorkspaces })
+    set({ executions })
   },
 
-  clearPendingQuestion: () => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return
+  clearPendingQuestion: (executionId) => {
+    log('clearPendingQuestion', { executionId })
+    const execution = get().executions.get(executionId)
+    if (!execution) {
+      log('clearPendingQuestion - execution not found', { executionId })
+      return
+    }
 
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    if (!workspaceState) return
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, pendingQuestion: null })
 
-    const newWorkspaces = new Map(workspaces)
-    newWorkspaces.set(currentWorkspacePath, {
-      ...workspaceState,
-      pendingQuestion: null
-    })
-
-    set({ workspaces: newWorkspaces })
+    set({ executions })
+    log('clearPendingQuestion - cleared for execution:', executionId)
   },
 
-  getPendingQuestion: () => {
-    const { currentWorkspacePath, workspaces } = get()
-    if (!currentWorkspacePath) return null
-    const workspaceState = workspaces.get(currentWorkspacePath)
-    return workspaceState?.pendingQuestion || null
+  getPendingQuestion: (executionId) => {
+    const execution = get().executions.get(executionId)
+    return execution?.pendingQuestion || null
   },
 }))

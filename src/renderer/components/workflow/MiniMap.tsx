@@ -11,6 +11,7 @@ import cc from 'classcat'
 
 import { useStore, useStoreApi, Panel, type Node, type ReactFlowState } from '@xyflow/react'
 import { useExecutionStore } from '@/store/execution-store'
+import { useWorkspaceStore } from '@/store/workspace-store'
 import type { WorkflowNodeData } from '@/types/node'
 
 const defaultWidth = 200
@@ -150,10 +151,9 @@ function MiniMapComponent({
 
   // Get node results from current workspace
   const nodeResults = useExecutionStore((state) => {
-    const wsPath = state.currentWorkspacePath
-    if (!wsPath) return undefined
-    const ws = state.workspaces.get(wsPath)
-    return ws?.context?.nodeResults
+    const workspacePath = useWorkspaceStore.getState().currentWorkspace?.path
+    if (!workspacePath) return undefined
+    return state.getNodeResultsForWorkspace(workspacePath)
   })
 
   const { boundingRect, viewBB, rfId, panZoom, translateExtent, flowWidth, flowHeight, ariaLabelConfig } = useStore(

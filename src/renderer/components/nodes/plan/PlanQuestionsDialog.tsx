@@ -75,8 +75,12 @@ export default function PlanQuestionsDialog({
   }
   
   const handleSubmit = () => {
+    console.log('[PlanQuestionsDialog] handleSubmit called')
     if (validate()) {
+      console.log('[PlanQuestionsDialog] Validation passed, calling onSubmit')
       onSubmit(answers)
+    } else {
+      console.log('[PlanQuestionsDialog] Validation failed', errors)
     }
   }
   
