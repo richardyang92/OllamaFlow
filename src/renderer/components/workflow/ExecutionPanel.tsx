@@ -13,7 +13,19 @@ export default function ExecutionPanel({
   onToggleFiles: () => void
   showFiles: boolean
 }) {
-  const { logs, status, clearLogs } = useExecutionStore()
+  // Get current workspace's logs and status
+  const { logs, status, clearLogs } = useExecutionStore((state) => {
+    const workspacePath = state.currentWorkspacePath
+    if (!workspacePath) {
+      return { logs: [], status: 'idle' as const, clearLogs: state.clearLogs }
+    }
+    const workspaceState = state.workspaces.get(workspacePath)
+    return {
+      logs: workspaceState?.logs || [],
+      status: workspaceState?.status || 'idle',
+      clearLogs: state.clearLogs
+    }
+  })
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom when logs change

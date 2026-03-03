@@ -10,11 +10,24 @@ import { continueReactAgentWithUserInput } from '@/engine/nodes/react-agent'
 import type { PlanNodeData, ReactAgentNodeData } from '@/types/node'
 
 export default function PlanQuestionsManager() {
-  const pendingQuestion = useExecutionStore((state) => state.pendingQuestion)
-  const clearPendingQuestion = useExecutionStore((state) => state.clearPendingQuestion)
-  const workspaceConfig = useWorkspaceStore((state) => state.currentWorkspace?.config)
   const workspacePath = useWorkspaceStore((state) => state.currentWorkspace?.path)
+  const workspaceConfig = useWorkspaceStore((state) => state.currentWorkspace?.config)
   const nodes = useWorkflowStore((state) => state.nodes)
+
+  // Get current workspace's pending question and context
+  const { pendingQuestion, executionContext } = useExecutionStore((state) => {
+    const wsPath = workspacePath || state.currentWorkspacePath
+    if (!wsPath) {
+      return { pendingQuestion: null, executionContext: null }
+    }
+    const workspaceState = state.workspaces.get(wsPath)
+    return {
+      pendingQuestion: workspaceState?.pendingQuestion || null,
+      executionContext: workspaceState?.context || null
+    }
+  })
+
+  const clearPendingQuestion = useExecutionStore((state) => state.clearPendingQuestion)
   
   const [isSubmitting, setIsSubmitting] = useState(false)
   
@@ -81,17 +94,17 @@ export default function PlanQuestionsManager() {
   
   const handleReactAgentSubmit = async (userInput: string) => {
     if (!workspacePath || isSubmitting || !pendingQuestion) return
-    
+
     const nodeData = node?.data as ReactAgentNodeData | undefined
     if (!nodeData) return
-    
+
     const questionData = pendingQuestion
     setIsSubmitting(true)
-    
+
     clearPendingQuestion()
-    
+
     try {
-      const executionContext = useExecutionStore.getState().context
+      // Get execution context from store (it's in the local variable now)
       if (!executionContext) {
         throw new Error('Execution context not found')
       }

@@ -7,46 +7,36 @@ const log = (...args: unknown[]) => DEBUG && console.log('[useNodeStatus]', ...a
 
 export function useNodeStatus(nodeId: string): NodeExecutionResult | undefined {
   const workspacePath = useWorkspaceStore((state) => state.currentWorkspace?.path)
-  
+
   const result = useExecutionStore((state) => {
-    if (!workspacePath) {
-      const globalResult = state.context?.nodeResults.get(nodeId)
-      log('useNodeStatus - no workspacePath, using global', { 
-        nodeId, 
-        found: !!globalResult,
-        status: globalResult?.status
-      })
-      return globalResult
+    const wsPath = workspacePath || state.currentWorkspacePath
+    if (!wsPath) {
+      log('useNodeStatus - no workspacePath', { nodeId, workspacePath, currentWsPath: state.currentWorkspacePath })
+      return undefined
     }
-    
-    const workspaceState = state.workspaces.get(workspacePath)
+
+    const workspaceState = state.workspaces.get(wsPath)
     if (workspaceState) {
       const wsResult = workspaceState.context?.nodeResults.get(nodeId)
-      log('useNodeStatus - from workspace', { 
-        workspacePath, 
-        nodeId, 
+      log('useNodeStatus - from workspace', {
+        workspacePath: wsPath,
+        nodeId,
         found: !!wsResult,
         status: wsResult?.status,
         workspaceContext: !!workspaceState.context,
-        globalCurrentWorkspace: state.currentWorkspacePath
       })
       return wsResult
     }
-    
-    const fallbackResult = state.context?.nodeResults.get(nodeId)
-    log('useNodeStatus - workspace not found, using global fallback', { 
-      workspacePath, 
-      nodeId, 
-      found: !!fallbackResult 
-    })
-    return fallbackResult
+
+    log('useNodeStatus - workspace not found', { workspacePath: wsPath, nodeId })
+    return undefined
   })
-  
-  log('useNodeStatus - result', { 
-    nodeId, 
-    workspacePath, 
-    status: result?.status 
+
+  log('useNodeStatus - result', {
+    nodeId,
+    workspacePath,
+    status: result?.status
   })
-  
+
   return result
 }

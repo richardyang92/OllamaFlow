@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef, useMemo } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check } from 'lucide-react'
@@ -41,16 +41,14 @@ export default function EditorPage() {
   
   // Subscribe to execution store changes - use workspace-specific status
   const workspacePath = currentWorkspace?.path
-  const workspaces = useExecutionStore((state) => state.workspaces)
-  const globalStatus = useExecutionStore((state) => state.status)
   const cancelExecution = useExecutionStore((state) => state.cancelExecution)
-  
+
   // Get current workspace execution status
-  const executionStatus = useMemo(() => {
-    if (!workspacePath) return globalStatus
-    const workspaceState = workspaces.get(workspacePath)
-    return workspaceState?.status || globalStatus
-  }, [workspacePath, workspaces, globalStatus])
+  const executionStatus = useExecutionStore((state) => {
+    if (!workspacePath) return 'idle' as const
+    const workspaceState = state.workspaces.get(workspacePath)
+    return workspaceState?.status || 'idle'
+  })
   
   const [showFiles, setShowFiles] = useState(false)
   const [showProperties, setShowProperties] = useState(false)

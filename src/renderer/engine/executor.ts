@@ -297,6 +297,12 @@ export class WorkflowExecutor {
     }
   }
 
+  // Helper method to get workspace-specific state
+  private getWorkspaceState() {
+    const executionStore = useExecutionStore.getState()
+    return executionStore.workspaces.get(this.workspacePath)
+  }
+
   async execute(): Promise<boolean> {
     // Initialize executors if not done
     if (Object.keys(nodeExecutors).length === 0) {
@@ -411,7 +417,8 @@ export class WorkflowExecutor {
       }
 
       // Check for cancelled
-      if (executionStore.status === 'cancelled' || this.isCancelled) {
+      const workspaceState = this.getWorkspaceState()
+      if (workspaceState?.status === 'cancelled' || this.isCancelled) {
         return false
       }
 
@@ -468,8 +475,9 @@ export class WorkflowExecutor {
       })
 
       try {
-        // Build input from connected nodes - get fresh state each time for parallel execution
-        const input = buildInputContext(nodeId, this.edges, useExecutionStore.getState().context?.nodeResults || new Map())
+        // Build input from connected nodes - get fresh state from workspace for parallel execution
+        const workspaceState = this.getWorkspaceState()
+        const input = buildInputContext(nodeId, this.edges, workspaceState?.context?.nodeResults || new Map())
 
         context.onLog?.({
           nodeId,
@@ -541,9 +549,9 @@ export class WorkflowExecutor {
           // Wait for node to complete (status changes from waiting to success/error)
           await new Promise<void>((resolve) => {
             const checkCompletion = () => {
-              const currentState = useExecutionStore.getState()
-              const nodeResult = currentState.context?.nodeResults?.get(nodeId)
-              
+              const ws = this.getWorkspaceState()
+              const nodeResult = ws?.context?.nodeResults?.get(nodeId)
+
               if (nodeResult?.status === 'success' || nodeResult?.status === 'error') {
                 const output = nodeResult.output as any
                 if (!output || output.status !== 'waiting') {
@@ -551,17 +559,17 @@ export class WorkflowExecutor {
                   return
                 }
               }
-              
+
               // Check again in 100ms
               setTimeout(checkCompletion, 100)
             }
-            
+
             checkCompletion()
           })
 
           // Check if node completed with error (e.g., user cancelled)
-          const finalState = useExecutionStore.getState()
-          const finalResult = finalState.context?.nodeResults?.get(nodeId)
+          const finalWorkspaceState = this.getWorkspaceState()
+          const finalResult = finalWorkspaceState?.context?.nodeResults?.get(nodeId)
           if (finalResult?.status === 'error') {
             return false
           }
@@ -730,8 +738,9 @@ export class WorkflowExecutor {
         const branches = this.identifyParallelBranches(nodeId)
         
         if (branches.length > 0) {
-          console.log('[Parallel] Splitter output before parallel execution:', useExecutionStore.getState().context?.nodeResults?.get(nodeId)?.output)
-          console.log('[Parallel] All nodeResults keys before parallel:', Array.from(useExecutionStore.getState().context?.nodeResults?.keys() || []))
+          const ws = this.getWorkspaceState()
+          console.log('[Parallel] Splitter output before parallel execution:', ws?.context?.nodeResults?.get(nodeId)?.output)
+          console.log('[Parallel] All nodeResults keys before parallel:', Array.from(ws?.context?.nodeResults?.keys() || []))
           
           context.onLog?.({
             nodeId,
@@ -758,8 +767,9 @@ export class WorkflowExecutor {
           )
           
           console.log('[Parallel] All branches completed')
-          console.log('[Parallel] nodeResults after parallel:', Array.from(useExecutionStore.getState().context?.nodeResults?.keys() || []))
-          console.log('[Parallel] Full nodeResults after parallel:', JSON.stringify(Array.from(useExecutionStore.getState().context?.nodeResults?.entries() || []).map(([k, v]) => [k, v.output]), null, 2))
+          const wsAfter = this.getWorkspaceState()
+          console.log('[Parallel] nodeResults after parallel:', Array.from(wsAfter?.context?.nodeResults?.keys() || []))
+          console.log('[Parallel] Full nodeResults after parallel:', JSON.stringify(Array.from(wsAfter?.context?.nodeResults?.entries() || []).map(([k, v]) => [k, v.output]), null, 2))
           
           // Process results based on failure strategy
           let hasFailure = false
@@ -835,8 +845,8 @@ export class WorkflowExecutor {
       }
       
       // After executing a node, check if any queue nodes need re-execution
-      const executionStore = useExecutionStore.getState()
-      const lastResult = executionStore.context?.nodeResults?.get(nodeId)
+      const workspaceState = this.getWorkspaceState()
+      const lastResult = workspaceState?.context?.nodeResults?.get(nodeId)
       
       if (lastResult?.output !== undefined) {
         const downstream = downstreamMap.get(nodeId) || []
@@ -1007,7 +1017,8 @@ export class WorkflowExecutor {
     _variables: Record<string, unknown>
   ): Promise<{ success: boolean; error?: string }> {
     console.log(`[Branch ${branch.branchId}] Starting execution, nodes:`, branch.nodes)
-    console.log(`[Branch ${branch.branchId}] nodeResults at start:`, Array.from(useExecutionStore.getState().context?.nodeResults?.keys() || []))
+    const ws = this.getWorkspaceState()
+    console.log(`[Branch ${branch.branchId}] nodeResults at start:`, Array.from(ws?.context?.nodeResults?.keys() || []))
     
     for (const nodeId of branch.nodes) {
       console.log(`[Branch ${branch.branchId}] Executing node: ${nodeId}`)

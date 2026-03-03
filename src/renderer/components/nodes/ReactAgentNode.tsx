@@ -14,8 +14,15 @@ function ReactAgentNode(props: NodeProps) {
   const reactState = useReActState(id)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
   const nodeResult = useNodeStatus(id)
-  const pendingQuestion = useExecutionStore((state) => state.pendingQuestion)
-  
+
+  // Get pending question from current workspace
+  const pendingQuestion = useExecutionStore((state) => {
+    const wsPath = state.currentWorkspacePath
+    if (!wsPath) return null
+    const ws = state.workspaces.get(wsPath)
+    return ws?.pendingQuestion || null
+  })
+
   const isWaitingForInput = pendingQuestion?.nodeId === id && pendingQuestion?.nodeType === 'reactAgent'
 
   const executionStatus = nodeResult?.status || 'idle'

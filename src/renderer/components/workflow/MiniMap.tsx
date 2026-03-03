@@ -147,7 +147,14 @@ function MiniMapComponent({
 }: MiniMapProps) {
   const store = useStoreApi<Node<WorkflowNodeData>>()
   const svg = useRef<SVGSVGElement>(null)
-  const nodeResults = useExecutionStore((state) => state.context?.nodeResults)
+
+  // Get node results from current workspace
+  const nodeResults = useExecutionStore((state) => {
+    const wsPath = state.currentWorkspacePath
+    if (!wsPath) return undefined
+    const ws = state.workspaces.get(wsPath)
+    return ws?.context?.nodeResults
+  })
 
   const { boundingRect, viewBB, rfId, panZoom, translateExtent, flowWidth, flowHeight, ariaLabelConfig } = useStore(
     selector,
