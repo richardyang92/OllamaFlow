@@ -31,12 +31,17 @@ import WriteFileNode from '@/components/nodes/WriteFileNode'
 import ExecuteCommandNode from '@/components/nodes/ExecuteCommandNode'
 import ImageNode from '@/components/nodes/ImageNode'
 import ReactAgentNode from '@/components/nodes/ReactAgentNode'
+import PlanNode from '@/components/nodes/PlanNode'
 import QueueNode from '@/components/nodes/QueueNode'
 import SplitterNode from '@/components/nodes/SplitterNode'
 import JoinNode from '@/components/nodes/JoinNode'
+import HttpRequestNode from '@/components/nodes/HttpRequestNode'
+import DelayNode from '@/components/nodes/DelayNode'
+import JsonNode from '@/components/nodes/JsonNode'
 
 import AnimatedEdge from '@/components/workflow/edges/AnimatedEdge'
 import { MiniMap } from '@/components/workflow/MiniMap'
+import PlanQuestionsManager from './PlanQuestionsManager'
 
 const nodeTypes = {
   input: InputNode,
@@ -51,9 +56,13 @@ const nodeTypes = {
   writeFile: WriteFileNode,
   executeCommand: ExecuteCommandNode,
   reactAgent: ReactAgentNode,
+  plan: PlanNode,
   queue: QueueNode,
   splitter: SplitterNode,
   join: JoinNode,
+  httpRequest: HttpRequestNode,
+  delay: DelayNode,
+  json: JsonNode,
 } as NodeTypes
 
 const edgeTypes = {
@@ -286,6 +295,7 @@ export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeCl
         />
       </ReactFlow>
       {nodes.length === 0 && <EmptyCanvasState />}
+      <PlanQuestionsManager />
     </div>
   )
 }

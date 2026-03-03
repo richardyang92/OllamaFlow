@@ -225,6 +225,10 @@ import { createReactAgentExecutor } from './nodes/react-agent'
 import { createQueueExecutor } from './nodes/queue'
 import { createSplitterExecutor } from './nodes/splitter'
 import { createJoinExecutor } from './nodes/join'
+import { planExecutor } from './nodes/plan'
+import { createHttpRequestExecutor } from './nodes/http-request'
+import { createDelayExecutor } from './nodes/delay'
+import { createJsonExecutor } from './nodes/json'
 
 // Node executor registry
 const nodeExecutors: Partial<Record<NodeType, NodeExecutor>> = {}
@@ -253,9 +257,13 @@ export function initializeExecutors() {
   registerNodeExecutor('writeFile', createWriteFileExecutor())
   registerNodeExecutor('executeCommand', createExecuteCommandExecutor())
   registerNodeExecutor('reactAgent', createReactAgentExecutor())
+  registerNodeExecutor('plan', planExecutor)
   registerNodeExecutor('queue', createQueueExecutor())
   registerNodeExecutor('splitter', createSplitterExecutor())
   registerNodeExecutor('join', createJoinExecutor())
+  registerNodeExecutor('httpRequest', createHttpRequestExecutor())
+  registerNodeExecutor('delay', createDelayExecutor())
+  registerNodeExecutor('json', createJsonExecutor())
 }
 
 // Main workflow executor
@@ -479,11 +487,6 @@ export class WorkflowExecutor {
         // Execute the node
         const output = await executor.execute(node, input, context)
 
-        // Update variables from output
-        if (typeof output === 'object' && output !== null) {
-          Object.assign(variables, output)
-        }
-
         // Track active branches for smart router nodes
         if (node.data.nodeType === 'smartRouter') {
           const routerData = node.data as any
@@ -503,6 +506,77 @@ export class WorkflowExecutor {
         const checkWorkflowNodes = checkWorkflowStore.nodes;
         if (!checkWorkflowNodes.some(n => n.id === nodeId)) {
           return true
+        }
+
+        // Check if node is waiting for user input
+        if (typeof output === 'object' && output !== null && (output as any).status === 'waiting') {
+          const waitingResult: NodeExecutionResult = {
+            nodeId,
+            status: 'success',
+            input,
+            output,
+            duration: Date.now() - startTime,
+            timestamp: new Date().toISOString(),
+          }
+
+          executionStore.updateNodeStatus(nodeId, waitingResult)
+
+          // Restore edges to non-animated
+          const restoreWorkflowStore = useWorkflowStore.getState()
+          if (restoreWorkflowStore.workflow) {
+            const edgeIds = new Set(incomingEdges.map(e => e.id))
+            const updatedEdges = restoreWorkflowStore.edges.map(e => 
+              edgeIds.has(e.id) ? { ...e, animated: false } : e
+            )
+            restoreWorkflowStore.setWorkflow({ ...restoreWorkflowStore.workflow, edges: updatedEdges })
+          }
+
+          executionStore.addLog({
+            nodeId,
+            nodeName: node.data.label,
+            level: 'info',
+            message: `节点 ${node.data.label} 等待用户输入...`,
+          })
+
+          // Wait for node to complete (status changes from waiting to success/error)
+          await new Promise<void>((resolve) => {
+            const checkCompletion = () => {
+              const currentState = useExecutionStore.getState()
+              const nodeResult = currentState.context?.nodeResults?.get(nodeId)
+              
+              if (nodeResult?.status === 'success' || nodeResult?.status === 'error') {
+                const output = nodeResult.output as any
+                if (!output || output.status !== 'waiting') {
+                  resolve()
+                  return
+                }
+              }
+              
+              // Check again in 100ms
+              setTimeout(checkCompletion, 100)
+            }
+            
+            checkCompletion()
+          })
+
+          // Check if node completed with error (e.g., user cancelled)
+          const finalState = useExecutionStore.getState()
+          const finalResult = finalState.context?.nodeResults?.get(nodeId)
+          if (finalResult?.status === 'error') {
+            return false
+          }
+
+          // Update variables from final output (after user input)
+          if (finalResult?.output && typeof finalResult.output === 'object') {
+            Object.assign(variables, finalResult.output)
+          }
+
+          return true
+        }
+
+        // Update variables from output (for non-waiting nodes)
+        if (typeof output === 'object' && output !== null) {
+          Object.assign(variables, output)
         }
 
         // Record successful result

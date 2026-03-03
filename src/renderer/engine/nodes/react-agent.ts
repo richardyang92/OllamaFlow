@@ -474,6 +474,47 @@ CSS选择器示例: "button.primary", "a[href*=login]", ".submit-btn"
 6. **每次只调用一个工具** - 等待观察结果后再决定下一步
 7. **所有任务完成后给出最终答案** - 不再调用工具，直接回答
 
+## 💬 用户交互（可选）
+
+${data.enableUserInput ? `
+当你在执行任务过程中需要用户确认、提供更多信息或做出选择时，可以使用用户交互功能。
+
+**何时使用**：
+- 需要用户确认是否继续执行某个操作
+- 需要用户提供额外的信息（如 API Key、配置参数等）
+- 遇到多个可行方案，需要用户选择
+- 任务执行前需要用户确认计划
+
+**如何使用**：
+在你的思考或回答中，使用以下格式：
+\`\`\`
+WAIT_FOR_INPUT: 你的问题
+\`\`\`
+
+**示例**：
+\`\`\`
+思考: 我需要访问某个 API，但需要用户提供 API Key。
+
+WAIT_FOR_INPUT: 我需要访问天气 API，请提供您的 API Key
+\`\`\`
+
+或者：
+\`\`\`
+思考: 我找到了两种方案来完成任务，需要用户选择。
+
+WAIT_FOR_INPUT: 我找到了两种方案：
+1. 使用 Python 脚本处理（速度快，但需要安装依赖）
+2. 使用在线 API 处理（无需安装，但速度较慢）
+请选择方案（输入 1 或 2）
+\`\`\`
+
+**注意事项**：
+- 等待用户输入后，你会收到用户的回复，然后继续执行
+- 不要过度使用，仅在确实需要用户参与时使用
+- 提问要清晰明确，避免模糊不清
+- 用户输入后，你可以基于用户的回复继续执行任务
+` : '（用户交互功能未启用）'}
+
 ## JSON格式提醒
 - 代码中的反斜杠必须双写转义（\\\\cos -> \\\\\\\\cos，\\\\n -> \\\\\\\\n）
 - 确保所有字符串正确转义`
@@ -612,8 +653,43 @@ CSS选择器示例: "button.primary", "a[href*=login]", ".submit-btn"
           message: `思考: ${thought.slice(0, 200)}${thought.length > 200 ? '...' : ''}`,
         })
 
-        // Check if no tool calls - means final answer
+        // Check if no tool calls - means final answer or waiting for user input
         if (!response.message.tool_calls || response.message.tool_calls.length === 0) {
+          // Check if the response contains WAIT_FOR_INPUT marker
+          if (data.enableUserInput && content.includes('WAIT_FOR_INPUT:')) {
+            const promptMatch = content.match(/WAIT_FOR_INPUT:\s*(.+?)(?:\n|$)/s)
+            const promptText = promptMatch ? promptMatch[1].trim() : '请提供更多信息'
+            
+            const contextText = content.replace(/WAIT_FOR_INPUT:.*$/s, '').trim()
+            
+            executionStore.setReActWaitingForInput(node.id, promptText, contextText)
+            
+            executionStore.updateReActStep(node.id, {
+              id: stepId,
+              status: 'completed',
+              thought: content,
+              thoughtStreaming: false,
+            })
+            executionStore.completeReActStep(node.id, stepId)
+            
+            context.onLog?.({
+              nodeId: node.id,
+              nodeName: data.label,
+              level: 'info',
+              message: `等待用户输入: ${promptText}`,
+            })
+            
+            if (data.stream) {
+              context.onStream?.(node.id, `\n⏸️ 等待用户输入: ${promptText}\n`)
+            }
+            
+            return {
+              status: 'waiting',
+              prompt: promptText,
+              context: contextText,
+            }
+          }
+          
           finalAnswer = content || '任务完成'
 
           executionStore.updateReActStep(node.id, {
@@ -1098,6 +1174,47 @@ CSS选择器示例: "button.primary", "a[href*=login]", ".submit-btn"
 6. **每次只调用一个工具** - 等待观察结果后再决定下一步
 7. **所有任务完成后给出最终答案** - 不再调用工具，直接回答
 
+## 💬 用户交互（可选）
+
+${data.enableUserInput ? `
+当你在执行任务过程中需要用户确认、提供更多信息或做出选择时，可以使用用户交互功能。
+
+**何时使用**：
+- 需要用户确认是否继续执行某个操作
+- 需要用户提供额外的信息（如 API Key、配置参数等）
+- 遇到多个可行方案，需要用户选择
+- 任务执行前需要用户确认计划
+
+**如何使用**：
+在你的思考或回答中，使用以下格式：
+\`\`\`
+WAIT_FOR_INPUT: 你的问题
+\`\`\`
+
+**示例**：
+\`\`\`
+思考: 我需要访问某个 API，但需要用户提供 API Key。
+
+WAIT_FOR_INPUT: 我需要访问天气 API，请提供您的 API Key
+\`\`\`
+
+或者：
+\`\`\`
+思考: 我找到了两种方案来完成任务，需要用户选择。
+
+WAIT_FOR_INPUT: 我找到了两种方案：
+1. 使用 Python 脚本处理（速度快，但需要安装依赖）
+2. 使用在线 API 处理（无需安装，但速度较慢）
+请选择方案（输入 1 或 2）
+\`\`\`
+
+**注意事项**：
+- 等待用户输入后，你会收到用户的回复，然后继续执行
+- 不要过度使用，仅在确实需要用户参与时使用
+- 提问要清晰明确，避免模糊不清
+- 用户输入后，你可以基于用户的回复继续执行任务
+` : '（用户交互功能未启用）'}
+
 ## JSON格式提醒
 - 代码中的反斜杠必须双写转义（\\\\cos -> \\\\\\\\cos，\\\\n -> \\\\\\\\n）
 - 确保所有字符串正确转义`
@@ -1171,8 +1288,43 @@ CSS选择器示例: "button.primary", "a[href*=login]", ".submit-btn"
         message: `思考: ${thought.slice(0, 200)}${thought.length > 200 ? '...' : ''}`,
       })
 
-      // Check if no tool calls - means final answer
+      // Check if no tool calls - means final answer or waiting for user input
       if (!response.tool_calls || response.tool_calls.length === 0) {
+        // Check if the response contains WAIT_FOR_INPUT marker
+        if (data.enableUserInput && content.includes('WAIT_FOR_INPUT:')) {
+          const promptMatch = content.match(/WAIT_FOR_INPUT:\s*(.+?)(?:\n|$)/s)
+          const promptText = promptMatch ? promptMatch[1].trim() : '请提供更多信息'
+          
+          const contextText = content.replace(/WAIT_FOR_INPUT:.*$/s, '').trim()
+          
+          executionStore.setReActWaitingForInput(node.id, promptText, contextText)
+          
+          executionStore.updateReActStep(node.id, {
+            id: stepId,
+            status: 'completed',
+            thought: content,
+            thoughtStreaming: false,
+          })
+          executionStore.completeReActStep(node.id, stepId)
+          
+          context.onLog?.({
+            nodeId: node.id,
+            nodeName: data.label,
+            level: 'info',
+            message: `等待用户输入: ${promptText}`,
+          })
+          
+          if (data.stream) {
+            context.onStream?.(node.id, `\n⏸️ 等待用户输入: ${promptText}\n`)
+          }
+          
+          return {
+            status: 'waiting',
+            prompt: promptText,
+            context: contextText,
+          }
+        }
+        
         finalAnswer = content || '任务完成'
         executionStore.updateReActStep(node.id, { id: stepId, status: 'completed' })
         executionStore.completeReActStep(node.id, stepId)
@@ -1310,6 +1462,347 @@ CSS选择器示例: "button.primary", "a[href*=login]", ".submit-btn"
     message: `ReAct 智能体执行完成 (OpenAI)，迭代次数: ${iteration}`,
   })
 
+  return {
+    response: finalAnswer,
+    provider: 'openai',
+  }
+}
+
+/**
+ * Continue ReAct Agent execution with user input
+ */
+export async function continueReactAgentWithUserInput(
+  nodeId: string,
+  userInput: string,
+  nodeData: ReactAgentNodeData,
+  context: ExecutionContext
+): Promise<unknown> {
+  const executionStore = useExecutionStore.getState()
+  const reactState = executionStore.getReActState(nodeId)
+  
+  if (!reactState) {
+    throw new Error('ReAct Agent state not found')
+  }
+  
+  const debugMode = nodeData.debugMode
+  
+  context.onLog?.({
+    nodeId,
+    nodeName: nodeData.label,
+    level: 'info',
+    message: `用户输入: ${userInput.slice(0, 100)}...`,
+  })
+  
+  if (debugMode?.enabled) {
+    return continueReActWithOpenAI(nodeId, userInput, nodeData, context)
+  } else {
+    return continueReActWithOllama(nodeId, userInput, nodeData, context)
+  }
+}
+
+async function continueReActWithOllama(
+  nodeId: string,
+  userInput: string,
+  nodeData: ReactAgentNodeData,
+  context: ExecutionContext
+): Promise<unknown> {
+  const executionStore = useExecutionStore.getState()
+  const ollama = new Ollama({ host: context.ollamaHost })
+  
+  const vars = { ...context.variables }
+  const systemPrompt = interpolateVariables(nodeData.systemPrompt, vars)
+  const userMessage = interpolateVariables(nodeData.userMessage, vars)
+  
+  const allTools = getEnabledTools(nodeData.enabledTools || [])
+  const ollamaTools = convertToOllamaTools(allTools)
+  const todosManager = new TodosManager()
+  
+  const maxIterations = nodeData.maxIterations || 10
+  const reactState = executionStore.getReActState(nodeId)!
+  
+  let iteration = reactState.currentIteration
+  let finalAnswer: string | null = null
+  
+  const messages: Message[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userMessage },
+    { role: 'user', content: userInput }
+  ]
+  
+  while (iteration < maxIterations && !finalAnswer) {
+    if (context.signal?.aborted) {
+      break
+    }
+    
+    iteration++
+    const stepId = `step-${iteration}-${Date.now()}`
+    const newStep: ReActStep = {
+      id: stepId,
+      iteration,
+      status: 'thinking',
+      thought: '',
+      thoughtStreaming: true,
+      action: null,
+      actionInput: null,
+      observation: null,
+      observationStreaming: false,
+      observationError: false,
+      startedAt: Date.now(),
+    }
+    executionStore.updateReActStep(nodeId, newStep)
+    
+    const response = await ollama.chat({
+      model: nodeData.model,
+      messages,
+      tools: ollamaTools,
+      options: {
+        temperature: nodeData.temperature,
+        num_predict: nodeData.maxTokens,
+      },
+      stream: false,
+    })
+    
+    const content = response.message.content || ''
+    messages.push(response.message)
+    
+    const thought = content || '(思考中...)'
+    executionStore.updateReActStep(nodeId, {
+      id: stepId,
+      thought,
+      thoughtStreaming: false,
+    })
+    
+    if (!response.message.tool_calls || response.message.tool_calls.length === 0) {
+      if (nodeData.enableUserInput && content.includes('WAIT_FOR_INPUT:')) {
+        const promptMatch = content.match(/WAIT_FOR_INPUT:\s*(.+?)(?:\n|$)/s)
+        const promptText = promptMatch ? promptMatch[1].trim() : '请提供更多信息'
+        const contextText = content.replace(/WAIT_FOR_INPUT:.*$/s, '').trim()
+        
+        executionStore.setReActWaitingForInput(nodeId, promptText, contextText)
+        executionStore.updateReActStep(nodeId, {
+          id: stepId,
+          status: 'completed',
+          thought: content,
+          thoughtStreaming: false,
+        })
+        executionStore.completeReActStep(nodeId, stepId)
+        
+        return {
+          status: 'waiting',
+          prompt: promptText,
+          context: contextText,
+        }
+      }
+      
+      finalAnswer = content || '任务完成'
+      executionStore.setReActFinalAnswer(nodeId, finalAnswer)
+      break
+    }
+    
+    for (const toolCall of response.message.tool_calls) {
+      const toolName = toolCall.function.name
+      const toolArgs = toolCall.function.arguments
+      const tool = allTools.find(t => t.name === toolName)
+      
+      if (!tool) continue
+      
+      executionStore.updateReActStep(nodeId, {
+        id: stepId,
+        status: 'acting',
+        action: toolName,
+        actionInput: JSON.stringify(toolArgs),
+      })
+      
+      const result = await executeTool(tool, toolArgs, context, todosManager)
+      const observation = result.success ? result.output : `错误: ${result.error}`
+      
+      messages.push({ role: 'tool', content: observation })
+      
+      executionStore.updateReActStep(nodeId, {
+        id: stepId,
+        status: 'observing',
+        observation,
+        observationError: !result.success,
+      })
+      executionStore.completeReActStep(nodeId, stepId)
+    }
+  }
+  
+  if (!finalAnswer) {
+    finalAnswer = `在 ${maxIterations} 次迭代后未能得出最终答案。`
+  }
+  
+  return {
+    response: finalAnswer,
+  }
+}
+
+async function continueReActWithOpenAI(
+  nodeId: string,
+  userInput: string,
+  nodeData: ReactAgentNodeData,
+  context: ExecutionContext
+): Promise<unknown> {
+  const executionStore = useExecutionStore.getState()
+  const debugMode = nodeData.debugMode!
+  
+  let apiKey = debugMode.apiKey
+  if (!apiKey) {
+    const storedKey = await window.electronAPI.openai.getApiKey(`react-${nodeId}`)
+    if (storedKey) {
+      apiKey = storedKey
+    } else {
+      const workspaceKey = await window.electronAPI.openai.getApiKey('workspace-default')
+      if (workspaceKey) {
+        apiKey = workspaceKey
+      }
+    }
+  }
+  
+  if (!apiKey) {
+    throw new Error('OpenAI API Key 未配置')
+  }
+  
+  const client = new OpenAIClient(apiKey, debugMode.apiEndpoint)
+  
+  const vars = { ...context.variables }
+  const systemPrompt = interpolateVariables(nodeData.systemPrompt, vars)
+  const userMessage = interpolateVariables(nodeData.userMessage, vars)
+  
+  const allTools = getEnabledTools(nodeData.enabledTools || [])
+  const openaiTools = allTools.map(tool => {
+    const params = getToolParameters(tool.type)
+    return {
+      type: 'function' as const,
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: {
+          type: params.type,
+          properties: params.properties as Record<string, unknown>,
+          required: params.required
+        }
+      }
+    }
+  })
+  
+  const todosManager = new TodosManager()
+  const maxIterations = nodeData.maxIterations || 10
+  const reactState = executionStore.getReActState(nodeId)!
+  
+  let iteration = reactState.currentIteration
+  let finalAnswer: string | null = null
+  
+  const messages: OpenAIMessage[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userMessage },
+    { role: 'user', content: userInput }
+  ]
+  
+  while (iteration < maxIterations && !finalAnswer) {
+    if (context.signal?.aborted) {
+      break
+    }
+    
+    iteration++
+    const stepId = `step-${iteration}-${Date.now()}`
+    const newStep: ReActStep = {
+      id: stepId,
+      iteration,
+      status: 'thinking',
+      thought: '',
+      thoughtStreaming: true,
+      action: null,
+      actionInput: null,
+      observation: null,
+      observationStreaming: false,
+      observationError: false,
+      startedAt: Date.now(),
+    }
+    executionStore.updateReActStep(nodeId, newStep)
+    
+    const response = await client.chat({
+      model: debugMode.model,
+      messages,
+      temperature: nodeData.temperature,
+      max_tokens: nodeData.maxTokens,
+      tools: openaiTools,
+    })
+    
+    const content = response.content || ''
+    const assistantMessage: OpenAIMessage = { role: 'assistant', content, tool_calls: response.tool_calls }
+    if (response.reasoning_content) {
+      assistantMessage.reasoning_content = response.reasoning_content
+    }
+    messages.push(assistantMessage)
+    
+    const thought = content || '(思考中...)'
+    executionStore.updateReActStep(nodeId, {
+      id: stepId,
+      thought,
+      thoughtStreaming: false,
+    })
+    
+    if (!response.tool_calls || response.tool_calls.length === 0) {
+      if (nodeData.enableUserInput && content.includes('WAIT_FOR_INPUT:')) {
+        const promptMatch = content.match(/WAIT_FOR_INPUT:\s*(.+?)(?:\n|$)/s)
+        const promptText = promptMatch ? promptMatch[1].trim() : '请提供更多信息'
+        const contextText = content.replace(/WAIT_FOR_INPUT:.*$/s, '').trim()
+        
+        executionStore.setReActWaitingForInput(nodeId, promptText, contextText)
+        executionStore.updateReActStep(nodeId, {
+          id: stepId,
+          status: 'completed',
+          thought: content,
+          thoughtStreaming: false,
+        })
+        executionStore.completeReActStep(nodeId, stepId)
+        
+        return {
+          status: 'waiting',
+          prompt: promptText,
+          context: contextText,
+        }
+      }
+      
+      finalAnswer = content || '任务完成'
+      executionStore.setReActFinalAnswer(nodeId, finalAnswer)
+      break
+    }
+    
+    for (const toolCall of response.tool_calls) {
+      const toolName = toolCall.function.name
+      const toolArgs = parseToolCallArgs(toolCall.function.arguments)
+      const tool = allTools.find(t => t.name === toolName)
+      
+      if (!tool) continue
+      
+      executionStore.updateReActStep(nodeId, {
+        id: stepId,
+        status: 'acting',
+        action: toolName,
+        actionInput: JSON.stringify(toolArgs),
+      })
+      
+      const result = await executeTool(tool, toolArgs, context, todosManager)
+      const observation = result.success ? result.output : `错误: ${result.error}`
+      
+      messages.push({ role: 'tool', tool_call_id: toolCall.id, content: observation })
+      
+      executionStore.updateReActStep(nodeId, {
+        id: stepId,
+        status: 'observing',
+        observation,
+        observationError: !result.success,
+      })
+      executionStore.completeReActStep(nodeId, stepId)
+    }
+  }
+  
+  if (!finalAnswer) {
+    finalAnswer = `在 ${maxIterations} 次迭代后未能得出最终答案。`
+  }
+  
   return {
     response: finalAnswer,
     provider: 'openai',

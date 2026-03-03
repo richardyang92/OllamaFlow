@@ -4,6 +4,7 @@ import BaseNode from './BaseNode'
 import { ReactAgentNodeData, NodeStatus, AVAILABLE_TOOLS } from '@/types/node'
 import { useReActState } from '@/hooks/useReActState'
 import { useNodeStatus } from '@/hooks/useNodeStatus'
+import { useExecutionStore } from '@/store/execution-store'
 import { motion } from 'framer-motion'
 import ReActStepsPanel from './react-agent/ReActStepsPanel'
 
@@ -13,6 +14,9 @@ function ReactAgentNode(props: NodeProps) {
   const reactState = useReActState(id)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
   const nodeResult = useNodeStatus(id)
+  const pendingQuestion = useExecutionStore((state) => state.pendingQuestion)
+  
+  const isWaitingForInput = pendingQuestion?.nodeId === id && pendingQuestion?.nodeType === 'reactAgent'
 
   const executionStatus = nodeResult?.status || 'idle'
   const nodeStatus: NodeStatus =
@@ -21,6 +25,16 @@ function ReactAgentNode(props: NodeProps) {
       : (executionStatus as NodeStatus)
 
   const getStatusStyle = () => {
+    if (isWaitingForInput) {
+      return {
+        color: 'text-blue-400',
+        bg: 'bg-blue-500/10',
+        border: 'border-blue-500/20',
+        icon: '💬',
+        label: '等待输入',
+      }
+    }
+    
     switch (nodeStatus) {
       case 'running':
         return {
@@ -78,6 +92,12 @@ function ReactAgentNode(props: NodeProps) {
         {data.debugMode?.enabled && (
           <div className="text-[10px] px-2 py-1 bg-amber-500/20 text-amber-400 rounded flex items-center gap-1">
             <span>🔬</span> Debug Mode (OpenAI)
+          </div>
+        )}
+        
+        {isWaitingForInput && (
+          <div className="text-[10px] px-2 py-1 bg-blue-500/20 text-blue-400 rounded flex items-center gap-1">
+            <span>💬</span> 等待用户输入
           </div>
         )}
 

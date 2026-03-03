@@ -285,6 +285,32 @@ export default function ReactAgentProperties({ node, updateNodeData }: Props) {
         </label>
       </div>
 
+      {/* Enable User Input */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="enableUserInput"
+            checked={data.enableUserInput || false}
+            onChange={(e) => updateNodeData(node.id, { enableUserInput: e.target.checked })}
+            className="rounded border-[var(--color-border-subtle)] bg-[var(--color-bg-input)]"
+          />
+          <label htmlFor="enableUserInput" className="text-sm text-[var(--color-text)]">
+            启用用户交互
+          </label>
+        </div>
+        {data.enableUserInput && (
+          <div className="px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+            <p className="text-xs text-blue-400">
+              💬 智能体可以在需要时请求用户输入。
+            </p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+              在系统提示词中指导 AI 使用 "WAIT_FOR_INPUT: 问题内容" 格式来请求用户输入。
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* 调试模式 - 可折叠区域 */}
       <div className="border-t border-[var(--color-border-subtle)] pt-4">
         <button

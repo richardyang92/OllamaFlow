@@ -59,7 +59,7 @@ function BaseNode({ data, selected, children, icon, className }: BaseNodeProps) 
       transition={{ duration: 0.2, ease: 'easeOut' }}
       data-status={status}
       className={cn(
-        'min-w-[200px] max-w-[280px]',
+        'min-w-[160px] max-w-[240px]',
         'rounded-glass-lg',
         'glass-node',
         'border',

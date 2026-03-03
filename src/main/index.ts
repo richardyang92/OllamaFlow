@@ -52,6 +52,10 @@ function createWindow() {
   }
 }
 
+app.commandLine.appendSwitch('ignore-gpu-blacklist')
+app.commandLine.appendSwitch('enable-gpu-rasterization')
+app.commandLine.appendSwitch('enable-zero-copy')
+
 app.whenReady().then(() => {
   createWindow()
 

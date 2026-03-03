@@ -5,10 +5,19 @@ import type {
   NodeExecutionResult,
   ExecutionLog,
 } from '@/types/execution'
-import type { ReActExecutionState, ReActStep, TodoItem } from '@/types/node'
+import type { ReActExecutionState, ReActStep, TodoItem, PlanExecutionState, PlanQuestion } from '@/types/node'
 
 const DEBUG = true
 const log = (...args: unknown[]) => DEBUG && console.log('[ExecutionStore]', ...args)
+
+interface PendingQuestion {
+  nodeId: string
+  nodeType: 'plan' | 'reactAgent'
+  questions?: PlanQuestion[]
+  analysis?: string
+  prompt?: string
+  context?: string
+}
 
 interface WorkspaceExecutionState {
   status: ExecutionStatus
@@ -16,7 +25,9 @@ interface WorkspaceExecutionState {
   logs: ExecutionLog[]
   streamingOutput: Map<string, string>
   reactAgentStates: Map<string, ReActExecutionState>
+  planStates: Map<string, PlanExecutionState>
   queueStates: Map<string, unknown[]>
+  pendingQuestion: PendingQuestion | null
 }
 
 interface ExecutionState {
@@ -28,7 +39,9 @@ interface ExecutionState {
   logs: ExecutionLog[]
   streamingOutput: Map<string, string>
   reactAgentStates: Map<string, ReActExecutionState>
+  planStates: Map<string, PlanExecutionState>
   queueStates: Map<string, unknown[]>
+  pendingQuestion: PendingQuestion | null
 
   startExecution: (workspacePath: string, workflowId: string) => void
   pauseExecution: () => void
@@ -70,6 +83,19 @@ interface ExecutionState {
   getReActStateForWorkspace: (workspacePath: string, nodeId: string) => ReActExecutionState | undefined
   clearReActState: (nodeId: string) => void
   updateReActTodos: (nodeId: string, todos: TodoItem[]) => void
+  setReActWaitingForInput: (nodeId: string, prompt: string, context?: string) => void
+
+  initPlanState: (nodeId: string) => void
+  updatePlanPhase: (nodeId: string, phase: PlanExecutionState['phase'], data?: Partial<PlanExecutionState>) => void
+  setPlanQuestions: (nodeId: string, questions: PlanExecutionState['questions'], analysis?: string) => void
+  setPlanAnswers: (nodeId: string, answers: Record<string, string>) => void
+  setPlanResult: (nodeId: string, plan: string) => void
+  setPlanError: (nodeId: string, error: string) => void
+  getPlanState: (nodeId: string) => PlanExecutionState | undefined
+  getPlanStateForWorkspace: (workspacePath: string, nodeId: string) => PlanExecutionState | undefined
+  clearPlanState: (nodeId: string) => void
+  clearPendingQuestion: () => void
+  getPendingQuestion: () => PendingQuestion | null
 
   getQueue: (nodeId: string) => unknown[]
   enqueue: (nodeId: string, item: unknown) => void
@@ -83,7 +109,9 @@ const createEmptyWorkspaceState = (): WorkspaceExecutionState => ({
   logs: [],
   streamingOutput: new Map(),
   reactAgentStates: new Map(),
+  planStates: new Map(),
   queueStates: new Map(),
+  pendingQuestion: null,
 })
 
 export const useExecutionStore = create<ExecutionState>((set, get) => ({
@@ -95,7 +123,9 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
   logs: [],
   streamingOutput: new Map(),
   reactAgentStates: new Map(),
+  planStates: new Map(),
   queueStates: new Map(),
+  pendingQuestion: null,
 
   startExecution: (workspacePath, workflowId) => {
     log('startExecution', { workspacePath, workflowId })
@@ -119,7 +149,9 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       logs: existingWorkspace?.logs || [],
       streamingOutput: new Map(),
       reactAgentStates: new Map(),
+      planStates: new Map(),
       queueStates: new Map(),
+      pendingQuestion: null,
     })
 
     log('startExecution - workspaces after set:', Array.from(workspaces.keys()))
@@ -741,6 +773,33 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     }
   },
 
+  setReActWaitingForInput: (nodeId, prompt, context) => {
+    const { currentWorkspacePath, workspaces } = get()
+    const pendingQuestion: PendingQuestion = {
+      nodeId,
+      nodeType: 'reactAgent',
+      prompt,
+      context,
+    }
+    
+    if (currentWorkspacePath) {
+      const newWorkspaces = new Map(workspaces)
+      const workspaceState = newWorkspaces.get(currentWorkspacePath)
+      if (workspaceState) {
+        newWorkspaces.set(currentWorkspacePath, { 
+          ...workspaceState, 
+          pendingQuestion 
+        })
+      }
+      set({ 
+        workspaces: newWorkspaces,
+        pendingQuestion 
+      })
+    } else {
+      set({ pendingQuestion })
+    }
+  },
+
   getQueue: (nodeId) => {
     return get().queueStates.get(nodeId) || []
   },
@@ -845,7 +904,9 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       logs: existingWorkspace?.logs || [],
       streamingOutput: new Map(),
       reactAgentStates: new Map(),
+      planStates: new Map(),
       queueStates: new Map(),
+      pendingQuestion: null,
     })
 
     set({
@@ -856,7 +917,9 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       logs: existingWorkspace?.logs || [],
       streamingOutput: new Map(),
       reactAgentStates: new Map(),
+      planStates: new Map(),
       queueStates: new Map(),
+      pendingQuestion: null,
     })
   },
 
@@ -906,5 +969,180 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
   getExecutionStatusForWorkspace: (workspacePath) => {
     const workspaceState = get().workspaces.get(workspacePath)
     return workspaceState?.status || 'idle'
+  },
+
+  initPlanState: (nodeId) => {
+    const { planStates, currentWorkspacePath, workspaces } = get()
+    
+    log('initPlanState', { 
+      nodeId, 
+      currentWorkspacePath,
+      existingGlobalKeys: Array.from(planStates.keys()),
+    })
+    
+    const newState: PlanExecutionState = {
+      nodeId,
+      phase: 'analyzing',
+    }
+
+    const newMap = new Map(planStates)
+    newMap.set(nodeId, newState)
+
+    if (currentWorkspacePath) {
+      const newWorkspaces = new Map(workspaces)
+      const workspaceState = newWorkspaces.get(currentWorkspacePath)
+      if (workspaceState) {
+        const newPlanStates = new Map(workspaceState.planStates)
+        newPlanStates.set(nodeId, newState)
+        newWorkspaces.set(currentWorkspacePath, { 
+          ...workspaceState, 
+          planStates: newPlanStates 
+        })
+        log('initPlanState - saved to workspace:', currentWorkspacePath, 'keys:', Array.from(newPlanStates.keys()))
+      }
+      set({ 
+        workspaces: newWorkspaces,
+        planStates: newMap 
+      })
+    } else {
+      log('initPlanState - no currentWorkspacePath, only setting global')
+      set({ planStates: newMap })
+    }
+    
+    log('initPlanState - after set, global keys:', Array.from(get().planStates.keys()))
+  },
+
+  updatePlanPhase: (nodeId, phase, data) => {
+    const { planStates, currentWorkspacePath, workspaces } = get()
+    const state = planStates.get(nodeId)
+    if (!state) {
+      log('updatePlanPhase - NO STATE FOUND for nodeId:', nodeId, 'available keys:', Array.from(planStates.keys()))
+      return
+    }
+
+    const newMap = new Map(planStates)
+    const updatedState = { ...state, phase, ...data }
+    newMap.set(nodeId, updatedState)
+
+    if (currentWorkspacePath) {
+      const newWorkspaces = new Map(workspaces)
+      const workspaceState = newWorkspaces.get(currentWorkspacePath)
+      if (workspaceState) {
+        newWorkspaces.set(currentWorkspacePath, { 
+          ...workspaceState, 
+          planStates: new Map(newMap) 
+        })
+      }
+      set({ 
+        workspaces: newWorkspaces,
+        planStates: newMap 
+      })
+    } else {
+      set({ planStates: newMap })
+    }
+  },
+
+  setPlanQuestions: (nodeId, questions, analysis) => {
+    get().updatePlanPhase(nodeId, 'questions', { questions })
+    
+    const { currentWorkspacePath, workspaces } = get()
+    const pendingQuestion: PendingQuestion = {
+      nodeId,
+      nodeType: 'plan',
+      questions: questions || [],
+      analysis: analysis || '',
+    }
+    
+    if (currentWorkspacePath) {
+      const newWorkspaces = new Map(workspaces)
+      const workspaceState = newWorkspaces.get(currentWorkspacePath)
+      if (workspaceState) {
+        newWorkspaces.set(currentWorkspacePath, { 
+          ...workspaceState, 
+          pendingQuestion 
+        })
+      }
+      set({ 
+        workspaces: newWorkspaces,
+        pendingQuestion 
+      })
+    } else {
+      set({ pendingQuestion })
+    }
+  },
+
+  setPlanAnswers: (nodeId, answers) => {
+    const { planStates } = get()
+    const state = planStates.get(nodeId)
+    if (!state) return
+    
+    get().updatePlanPhase(nodeId, 'generating', { answers })
+  },
+
+  setPlanResult: (nodeId, plan) => {
+    get().updatePlanPhase(nodeId, 'complete', { generatedPlan: plan })
+  },
+
+  setPlanError: (nodeId, error) => {
+    get().updatePlanPhase(nodeId, 'error', { error })
+  },
+
+  getPlanState: (nodeId) => {
+    return get().planStates.get(nodeId)
+  },
+
+  getPlanStateForWorkspace: (workspacePath, nodeId) => {
+    const workspaceState = get().workspaces.get(workspacePath)
+    return workspaceState?.planStates.get(nodeId)
+  },
+
+  clearPlanState: (nodeId) => {
+    const { planStates, currentWorkspacePath, workspaces } = get()
+    const newMap = new Map(planStates)
+    newMap.delete(nodeId)
+
+    if (currentWorkspacePath) {
+      const newWorkspaces = new Map(workspaces)
+      const workspaceState = newWorkspaces.get(currentWorkspacePath)
+      if (workspaceState) {
+        const workspacePlanStates = new Map(workspaceState.planStates)
+        workspacePlanStates.delete(nodeId)
+        newWorkspaces.set(currentWorkspacePath, { 
+          ...workspaceState, 
+          planStates: workspacePlanStates 
+        })
+      }
+      set({ 
+        workspaces: newWorkspaces,
+        planStates: newMap 
+      })
+    } else {
+      set({ planStates: newMap })
+    }
+  },
+
+  clearPendingQuestion: () => {
+    const { currentWorkspacePath, workspaces } = get()
+    
+    if (currentWorkspacePath) {
+      const newWorkspaces = new Map(workspaces)
+      const workspaceState = newWorkspaces.get(currentWorkspacePath)
+      if (workspaceState) {
+        newWorkspaces.set(currentWorkspacePath, { 
+          ...workspaceState, 
+          pendingQuestion: null 
+        })
+      }
+      set({ 
+        workspaces: newWorkspaces,
+        pendingQuestion: null 
+      })
+    } else {
+      set({ pendingQuestion: null })
+    }
+  },
+
+  getPendingQuestion: () => {
+    return get().pendingQuestion
   },
 }))

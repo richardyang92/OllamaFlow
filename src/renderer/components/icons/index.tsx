@@ -23,6 +23,10 @@ import {
   Sparkles,
   ListOrdered,
   Split,
+  ClipboardList,
+  Globe,
+  Clock,
+  Braces,
 } from 'lucide-react'
 
 export const NodeIconMap = {
@@ -39,9 +43,13 @@ export const NodeIconMap = {
   writeFile: Save,
   executeCommand: Terminal,
   reactAgent: Brain,
+  plan: ClipboardList,
   queue: ListOrdered,
   splitter: Split,
   join: GitMerge,
+  httpRequest: Globe,
+  delay: Clock,
+  json: Braces,
 } as const
 
 export const UIIconMap = {

@@ -34,6 +34,9 @@ npm run lint         # Run ESLint
 Located in [src/renderer/store/](src/renderer/store/):
 - **workflow-store.ts** - React Flow nodes/edges, node CRUD operations, dirty tracking
 - **execution-store.ts** - Workflow execution state, node results, logs, streaming output
+  - Supports multi-workspace execution state isolation via `workspaces` Map
+  - Each workspace maintains independent: context, logs, streamingOutput, reactAgentStates, planStates, queueStates, pendingQuestion
+  - Use `switchWorkspaceContext()` to restore workspace-specific state when switching between workspaces
 - **workspace-store.ts** - Current workspace, config, recent workspaces list, app page navigation
 - **settings-store.ts** - Application settings
 
@@ -219,6 +222,63 @@ The `smartRouter` node type uses AI to dynamically route execution to different 
 2. Workspace default key (`workspace-default`)
 
 **Value Passthrough**: Uses `extractActualValue()` to unwrap single-field inputs. If input is `{ value: "text" }`, downstream nodes receive `"text"` directly instead of the wrapper object.
+
+### Plan Node
+The `plan` node type provides AI-powered task planning with optional user clarification:
+- **Executor**: [plan.ts](src/renderer/engine/nodes/plan.ts) - Two-phase planning with optional questions
+- **Phases**: `analyzing` → `questions` (optional) → `generating` → `complete` / `error`
+- **Question Flow**: If the AI determines more information is needed, it generates structured questions that the user must answer before plan generation continues
+- **State**: Managed via `PlanExecutionState` in execution store with workspace isolation
+- **Question Manager**: [PlanQuestionsManager.tsx](src/renderer/components/workflow/PlanQuestionsManager.tsx) handles the dialog for collecting user answers
+- **User Input Hook**: [usePlanState.ts](src/renderer/hooks/usePlanState.ts) - Access plan state respecting workspace context
+
+**Debug Mode**: Like ReAct Agent, supports OpenAI-compatible API for testing/production use.
+
+**API Key Hierarchy**: For OpenAI-compatible mode, API keys are resolved in order:
+1. Node-specific key (`plan-{model}`)
+2. Workspace default key (`workspace-default`)
+
+### ReAct Agent User Input Interaction
+When `enableUserInput` is true, the ReAct agent can pause execution and request user input:
+- **Trigger**: Agent calls a special `request_user_input` tool with prompt and optional context
+- **State**: Managed via `pendingQuestion` in execution store
+- **Dialog**: [ReactAgentInputDialog.tsx](src/renderer/components/nodes/react-agent/ReactAgentInputDialog.tsx) displays the prompt
+- **Continuation**: After user submits, `continueReactAgentWithUserInput()` resumes execution with the user's response
+- **Integration**: [PlanQuestionsManager.tsx](src/renderer/components/workflow/PlanQuestionsManager.tsx) handles both Plan and ReAct Agent dialogs
+
+### Parallel Execution Nodes (Splitter/Join)
+For parallel workflow execution:
+- **Splitter** ([splitter.ts](src/renderer/engine/nodes/splitter.ts)): Distributes single input to multiple outputs simultaneously
+- **Join** ([join.ts](src/renderer/engine/nodes/join.ts)): Collects outputs from multiple parallel branches into a single object
+- **Pattern**: Use `Splitter → [multiple branches] → Join` for parallel processing
+- **Failure Strategy**: Splitter node supports `continueOthers` (default) or `failAll` on branch errors
+
+### Queue Node
+The `queue` node ([queue.ts](src/renderer/engine/nodes/queue.ts)) manages queued data flow:
+- Collects multiple inputs into a queue stored in execution store
+- Outputs one item at a time (first-in-first-out)
+- Clears queue and outputs current inputs when new data arrives
+- State persists per-workspace via `queueStates` Map
+
+### HTTP Request Node
+The `httpRequest` node ([http-request.ts](src/renderer/engine/nodes/http-request.ts)) makes HTTP requests:
+- Supports GET, POST, PUT, DELETE, PATCH methods
+- Configurable headers, query parameters, and body (JSON/text/form)
+- Response type handling: JSON (auto-parse) or text
+- Timeout configuration with default 30 seconds
+- Bypasses CORS by routing through main process (`window.electronAPI.http.fetch`)
+
+### Delay Node
+The `delay` node ([delay.ts](src/renderer/engine/nodes/delay.ts)) pauses execution:
+- Configurable delay in milliseconds
+- Optional passthrough mode to include input in output
+
+### JSON Node
+The `json` node ([json.ts](src/renderer/engine/nodes/json.ts)) processes JSON data:
+- **parse**: Convert JSON string to object
+- **stringify**: Convert object to JSON string (pretty-printed)
+- **extract**: Extract nested values using JSONPath-like syntax (supports dot notation and array indices like `items[0].name`)
+- **merge**: Merge multiple input objects into one
 
 ## UI Localization
 The application UI uses Chinese localization throughout:

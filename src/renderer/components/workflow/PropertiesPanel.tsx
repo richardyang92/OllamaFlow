@@ -18,6 +18,10 @@ import ImageProperties from './properties/ImageProperties'
 import QueueProperties from './properties/QueueProperties'
 import SplitterProperties from './properties/SplitterProperties'
 import JoinProperties from './properties/JoinProperties'
+import PlanProperties from './properties/PlanProperties'
+import HttpRequestProperties from './properties/HttpRequestProperties'
+import DelayProperties from './properties/DelayProperties'
+import JsonProperties from './properties/JsonProperties'
 import { cn } from '@/lib/utils'
 
 function EditFeedback({ message }: { message: string }) {
@@ -99,6 +103,14 @@ function PropertiesPanelContent({
         return <SplitterProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       case 'join':
         return <JoinProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
+      case 'plan':
+        return <PlanProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
+      case 'httpRequest':
+        return <HttpRequestProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
+      case 'delay':
+        return <DelayProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
+      case 'json':
+        return <JsonProperties node={selectedNode} updateNodeData={safeUpdateNodeData} />
       default:
         return (
           <div className="text-[var(--color-text-muted)] text-sm">此节点类型没有可配置的属性.</div>

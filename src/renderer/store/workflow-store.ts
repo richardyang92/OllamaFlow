@@ -28,8 +28,10 @@ export function getEdgeColorByNodeType(nodeType: NodeType): string {
     writeFile: 'rgba(251, 146, 60, 0.6)', // orange
     executeCommand: 'rgba(248, 113, 113, 0.6)', // red
     reactAgent: 'rgba(167, 139, 250, 0.6)', // purple - same as ollamaChat
+    plan: 'rgba(167, 139, 250, 0.6)', // purple - same as reactAgent
     queue: 'rgba(52, 211, 153, 0.6)', // emerald
     splitter: 'rgba(251, 191, 36, 0.6)', // amber
+    join: 'rgba(52, 211, 153, 0.6)', // emerald - same as queue
   }
   return colorMap[nodeType] || 'rgba(148, 163, 184, 0.5)' // slate
 }
@@ -48,8 +50,10 @@ export function getEdgeHoverColorByNodeType(nodeType: NodeType): string {
     writeFile: 'rgba(251, 146, 60, 0.9)', // orange
     executeCommand: 'rgba(248, 113, 113, 0.9)', // red
     reactAgent: 'rgba(167, 139, 250, 0.9)', // purple - same as ollamaChat
+    plan: 'rgba(167, 139, 250, 0.9)', // purple - same as reactAgent
     queue: 'rgba(52, 211, 153, 0.9)', // emerald
     splitter: 'rgba(251, 191, 36, 0.9)', // amber
+    join: 'rgba(52, 211, 153, 0.9)', // emerald - same as queue
   }
   return colorMap[nodeType] || 'rgba(148, 163, 184, 0.8)' // slate
 }

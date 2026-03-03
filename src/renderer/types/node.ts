@@ -27,9 +27,13 @@ export type NodeType =
   | 'writeFile'
   | 'executeCommand'
   | 'reactAgent'
+  | 'plan'
   | 'queue'
   | 'splitter'
   | 'join'
+  | 'httpRequest'
+  | 'delay'
+  | 'json'
 
 // ReAct Agent Tool Definition
 // Browser tool types
@@ -231,6 +235,34 @@ export interface ReActExecutionState {
   todos: TodoItem[]  // 待办事项列表
 }
 
+// Plan Node Question Types
+export type PlanQuestionType = 'text' | 'textarea' | 'select' | 'multiselect' | 'number' | 'boolean'
+
+// Plan Node Question
+export interface PlanQuestion {
+  id: string
+  question: string
+  type: PlanQuestionType
+  options?: string[]  // for select/multiselect
+  required: boolean
+  placeholder?: string
+  defaultValue?: string
+}
+
+// Plan Node Phase
+export type PlanPhase = 'analyzing' | 'questions' | 'generating' | 'complete' | 'error'
+
+// Plan Node Execution State
+export interface PlanExecutionState {
+  nodeId: string
+  phase: PlanPhase
+  questions?: PlanQuestion[]
+  answers?: Record<string, string>
+  analysisResult?: string
+  generatedPlan?: string
+  error?: string
+}
+
 // Base node data
 export interface BaseNodeData extends Record<string, unknown> {
   label: string
@@ -365,6 +397,17 @@ export interface ReactAgentNodeData extends BaseNodeData {
   enabledTools: AvailableToolId[]
   stream: boolean
   debugMode?: DebugModeConfig
+  enableUserInput?: boolean
+}
+
+// Plan Node
+export interface PlanNodeData extends BaseNodeData {
+  nodeType: 'plan'
+  model: string
+  systemPrompt: string
+  temperature: number
+  maxTokens: number
+  debugMode?: DebugModeConfig
 }
 
 // Queue Node - collects multiple inputs into an array
@@ -386,6 +429,35 @@ export interface JoinNodeData extends BaseNodeData {
   inputCount: number
 }
 
+// HTTP Request Node
+export interface HttpRequestNodeData extends BaseNodeData {
+  nodeType: 'httpRequest'
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
+  url: string
+  headers: Record<string, string>
+  queryParams: Record<string, string>
+  bodyType: 'none' | 'json' | 'text' | 'form'
+  body: string
+  timeout: number
+  responseType: 'json' | 'text'
+}
+
+// Delay Node
+export interface DelayNodeData extends BaseNodeData {
+  nodeType: 'delay'
+  delayMs: number
+  passthrough: boolean
+}
+
+// JSON Node
+export type JsonNodeMode = 'parse' | 'stringify' | 'extract' | 'merge'
+
+export interface JsonNodeData extends BaseNodeData {
+  nodeType: 'json'
+  mode: JsonNodeMode
+  jsonPath: string  // for extract mode
+}
+
 // Union type for all node data
 export type WorkflowNodeData =
   | InputNodeData
@@ -400,9 +472,13 @@ export type WorkflowNodeData =
   | WriteFileNodeData
   | ExecuteCommandNodeData
   | ReactAgentNodeData
+  | PlanNodeData
   | QueueNodeData
   | SplitterNodeData
   | JoinNodeData
+  | HttpRequestNodeData
+  | DelayNodeData
+  | JsonNodeData
 
 // Workflow node type
 export type WorkflowNode = Node<WorkflowNodeData>
@@ -693,6 +769,28 @@ export const nodeTemplates: NodeTemplate[] = [
     },
   },
   {
+    type: 'plan',
+    label: '智能规划',
+    icon: 'plan',
+    category: 'AI',
+    colorScheme: 'purple',
+    description: '智能分析任务并生成执行计划，如有需要会向用户提问',
+    defaultData: {
+      nodeType: 'plan',
+      label: '智能规划',
+      category: 'AI',
+      model: 'glm-4.7-flash:latest',
+      systemPrompt: '你是一个专业的任务规划助手。根据用户的任务描述，分析任务需求，如果信息不足则提出相关问题，最后生成详细的执行计划。',
+      temperature: 0.7,
+      maxTokens: 4096,
+      inputs: [{ id: 'task', name: 'task', label: '任务描述', dataType: 'string' }],
+      outputs: [
+        { id: 'plan', name: 'plan', label: '执行计划', dataType: 'string' },
+        { id: 'hadQuestions', name: 'hadQuestions', label: '是否有提问', dataType: 'boolean' },
+      ],
+    },
+  },
+  {
     type: 'queue',
     label: '队列',
     icon: 'queue',
@@ -748,6 +846,66 @@ export const nodeTemplates: NodeTemplate[] = [
         { id: 'input2', name: 'input2', label: '输入2', dataType: 'any' },
       ],
       outputs: [{ id: 'output', name: 'output', label: '输出', dataType: 'object' }],
+    },
+  },
+  {
+    type: 'httpRequest',
+    label: 'HTTP 请求',
+    icon: 'httpRequest',
+    category: 'Data',
+    colorScheme: 'green',
+    description: '发送 HTTP 请求调用外部 API',
+    defaultData: {
+      nodeType: 'httpRequest',
+      label: 'HTTP 请求',
+      category: 'Data',
+      method: 'GET',
+      url: '',
+      headers: {},
+      queryParams: {},
+      bodyType: 'none',
+      body: '',
+      timeout: 30000,
+      responseType: 'json',
+      inputs: [{ id: 'input', name: 'input', label: '输入', dataType: 'any' }],
+      outputs: [
+        { id: 'response', name: 'response', label: '响应', dataType: 'any' },
+        { id: 'status', name: 'status', label: '状态码', dataType: 'number' },
+      ],
+    },
+  },
+  {
+    type: 'delay',
+    label: '延迟',
+    icon: 'delay',
+    category: 'Logic',
+    colorScheme: 'blue',
+    description: '暂停执行指定时间',
+    defaultData: {
+      nodeType: 'delay',
+      label: '延迟',
+      category: 'Logic',
+      delayMs: 1000,
+      passthrough: true,
+      inputs: [{ id: 'input', name: 'input', label: '输入', dataType: 'any' }],
+      outputs: [{ id: 'output', name: 'output', label: '输出', dataType: 'any' }],
+    },
+  },
+  {
+    type: 'json',
+    label: 'JSON 处理',
+    icon: 'json',
+    category: 'Data',
+    colorScheme: 'yellow',
+    description: 'JSON 解析、提取、转换',
+    defaultData: {
+      nodeType: 'json',
+      label: 'JSON 处理',
+      category: 'Data',
+      mode: 'parse',
+      jsonPath: '',
+      inputs: [{ id: 'input', name: 'input', label: '输入', dataType: 'any' }],
+      outputs: [{ id: 'output', name: 'output', label: '输出', dataType: 'any' }],
     },
   },
 ]

@@ -7,6 +7,101 @@ export interface FileItem {
   path: string
 }
 
+function getFileIcon(filename: string, isDirectory: boolean): string {
+  if (isDirectory) return '📁'
+  
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+  
+  const iconMap: Record<string, string> = {
+    js: '📜',
+    jsx: '⚛️',
+    ts: '📘',
+    tsx: '⚛️',
+    py: '🐍',
+    java: '☕',
+    cpp: '⚡',
+    c: '⚡',
+    go: '🐹',
+    rs: '🦀',
+    rb: '💎',
+    php: '🐘',
+    swift: '🍎',
+    kt: '📱',
+    
+    json: '📋',
+    yaml: '⚙️',
+    yml: '⚙️',
+    xml: '📄',
+    toml: '⚙️',
+    ini: '⚙️',
+    env: '🔐',
+    
+    md: '📝',
+    txt: '📄',
+    rst: '📝',
+    adoc: '📖',
+    
+    html: '🌐',
+    htm: '🌐',
+    css: '🎨',
+    scss: '🎨',
+    sass: '🎨',
+    less: '🎨',
+    
+    jpg: '🖼️',
+    jpeg: '🖼️',
+    png: '🖼️',
+    gif: '🖼️',
+    svg: '🖼️',
+    webp: '🖼️',
+    ico: '🖼️',
+    bmp: '🖼️',
+    
+    mp4: '🎬',
+    avi: '🎬',
+    mov: '🎬',
+    wmv: '🎬',
+    flv: '🎬',
+    webm: '🎬',
+    mkv: '🎬',
+    
+    mp3: '🎵',
+    wav: '🎵',
+    ogg: '🎵',
+    flac: '🎵',
+    aac: '🎵',
+    m4a: '🎵',
+    
+    pdf: '📕',
+    doc: '📘',
+    docx: '📘',
+    xls: '📊',
+    xlsx: '📊',
+    ppt: '📊',
+    pptx: '📊',
+    
+    zip: '📦',
+    tar: '📦',
+    gz: '📦',
+    rar: '📦',
+    '7z': '📦',
+    bz2: '📦',
+    
+    sql: '🗃️',
+    db: '🗃️',
+    sqlite: '🗃️',
+    
+    sh: '💻',
+    bash: '💻',
+    zsh: '💻',
+    bat: '💻',
+    cmd: '💻',
+    ps1: '💻',
+  }
+  
+  return iconMap[ext] || '📄'
+}
+
 export default function WorkspaceFiles({ 
   onClose, 
   onFileClick 
@@ -95,7 +190,7 @@ export default function WorkspaceFiles({
               onClick={() => handleFileClick(file)}
               className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--color-bg-hover)] rounded cursor-pointer transition-colors"
             >
-              <span>{file.isDirectory ? '📁' : '📄'}</span>
+              <span>{getFileIcon(file.name, file.isDirectory)}</span>
               <span className="text-xs truncate text-[var(--color-text)]">{file.name}</span>
             </div>
           ))
