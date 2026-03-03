@@ -14,6 +14,8 @@ interface ToolParamProperty {
   description?: string
   enum?: string[]
   items?: ToolParamProperty
+  properties?: Record<string, ToolParamProperty>
+  required?: string[]
 }
 
 // Get tool parameters schema based on tool type
@@ -74,6 +76,34 @@ function getToolParameters(toolType: string): {
           url: { type: 'string', description: '请求URL' }
         },
         required: ['url']
+      }
+    case 'writeMultipleFiles':
+      return {
+        type: 'object',
+        properties: {
+          files: {
+            type: 'array',
+            description: '文件列表',
+            items: {
+              type: 'object',
+              properties: {
+                filename: { type: 'string', description: '文件路径' },
+                content: { type: 'string', description: '文件内容' }
+              },
+              required: ['filename', 'content']
+            }
+          }
+        },
+        required: ['files']
+      }
+    case 'executePython':
+      return {
+        type: 'object',
+        properties: {
+          code: { type: 'string', description: 'Python 代码' },
+          saveAs: { type: 'string', description: '可选：保存为文件名（如 script.py）' }
+        },
+        required: ['code']
       }
     // Browser tools
     case 'browser_navigate':
@@ -283,6 +313,127 @@ function detectLoop(
   return { isLoop: false, loopType: null, suggestion: null, blockedActions: [] }
 }
 
+/**
+ * Analyze dependencies between tool calls to determine which can be executed in parallel
+ * Returns groups of tool calls that can be executed together
+ */
+interface ToolCallWithIndex {
+  toolCall: { id: string; function: { name: string; arguments: string } }
+  index: number
+}
+
+function analyzeToolDependencies(
+  toolCalls: Array<{ id: string; function: { name: string; arguments: string } }>
+): ToolCallWithIndex[][] {
+  if (toolCalls.length <= 1) {
+    return toolCalls.map((tc, i) => ({ toolCall: tc, index: i })).map(t => [t])
+  }
+
+  // Parse tool arguments to extract file references
+  const getFileReferences = (toolName: string, args: Record<string, unknown>): string[] => {
+    const refs: string[] = []
+    const lowerName = toolName.toLowerCase()
+
+    if (lowerName === 'writefile' || lowerName === 'readfile') {
+      if (args.filename) refs.push(String(args.filename).toLowerCase())
+      if (args.filePath) refs.push(String(args.filePath).toLowerCase())
+    } else if (lowerName === 'executecommand') {
+      // Extract potential file references from command
+      const command = String(args.command || '')
+      // Match common patterns like "python script.py" or "node app.js"
+      const fileMatches = command.match(/\b(\w+\.(py|js|ts|sh|json|txt))\b/gi)
+      if (fileMatches) refs.push(...fileMatches.map(f => f.toLowerCase()))
+    }
+
+    return refs
+  }
+
+  // Build dependency graph
+  const toolCallInfos = toolCalls.map((tc, i) => {
+    const args = parseToolCallArgs(tc.function.arguments)
+    return {
+      toolCall: tc,
+      index: i,
+      name: tc.function.name.toLowerCase(),
+      args,
+      fileRefs: getFileReferences(tc.function.name, args),
+      dependsOn: new Set<number>(),
+    }
+  })
+
+  // Analyze dependencies
+  for (let i = 0; i < toolCallInfos.length; i++) {
+    for (let j = 0; j < i; j++) {
+      const current = toolCallInfos[i]
+      const previous = toolCallInfos[j]
+
+      // Rule 1: readFile always depends on previous operations (result might be used)
+      if (current.name === 'readfile') {
+        current.dependsOn.add(j)
+        continue
+      }
+
+      // Rule 2: executeCommand after writeFile on same file → dependency
+      if (current.name === 'executecommand' && previous.name === 'writefile') {
+        const execFiles = current.fileRefs
+        const writeFile = previous.args.filename || previous.args.filePath
+        if (writeFile && execFiles.some(f => f.includes(String(writeFile).toLowerCase()))) {
+          current.dependsOn.add(j)
+        }
+      }
+
+      // Rule 3: writeFile to same file → dependency (overwrite)
+      if (current.name === 'writefile' && previous.name === 'writefile') {
+        const currentFile = String(current.args.filename || current.args.filePath).toLowerCase()
+        const previousFile = String(previous.args.filename || previous.args.filePath).toLowerCase()
+        if (currentFile === previousFile) {
+          current.dependsOn.add(j)
+        }
+      }
+
+      // Rule 4: todos operations should be sequential
+      if (current.name === 'todos' && previous.name === 'todos') {
+        current.dependsOn.add(j)
+      }
+    }
+  }
+
+  // Group tool calls by dependency levels (topological sort)
+  const groups: ToolCallWithIndex[][] = []
+  const assigned = new Set<number>()
+
+  while (assigned.size < toolCallInfos.length) {
+    const group: ToolCallWithIndex[] = []
+
+    for (const info of toolCallInfos) {
+      if (assigned.has(info.index)) continue
+
+      // Check if all dependencies are satisfied
+      const depsSatisfied = Array.from(info.dependsOn).every(dep => assigned.has(dep))
+      if (depsSatisfied) {
+        group.push({ toolCall: info.toolCall, index: info.index })
+      }
+    }
+
+    if (group.length === 0) {
+      // Circular dependency or bug, just add remaining items sequentially
+      for (const info of toolCallInfos) {
+        if (!assigned.has(info.index)) {
+          group.push({ toolCall: info.toolCall, index: info.index })
+          break
+        }
+      }
+    }
+
+    for (const item of group) {
+      assigned.add(item.index)
+    }
+    groups.push(group)
+  }
+
+  return groups
+}
+
 export function createReactAgentExecutor(): NodeExecutor {
   return {
     async execute(
@@ -405,6 +556,30 @@ CSS选择器示例: "button.primary", "a[href*=login]", ".submit-btn"
 等待指定元素出现在页面上。
 输入: {"selector": ".result", "timeout": 5000}
 
+## ⚡ 效率原则（必须遵守）
+
+### 1. 合并独立操作
+- **一次写入多个文件**：如果需要创建多个相关文件，可以连续调用 writeFile，不需要等待
+- **避免中间文件**：不要为了"先保存"而写临时文件，直接生成最终版本
+
+### 2. 一次性生成完整代码
+- **预先思考完整方案**：在写代码前，先在思考中规划好完整的实现
+- **包含所有依赖**：确保代码包含所有必要的 import 语句和依赖
+- **考虑边界情况**：预先处理可能的错误和异常
+
+### 3. 减少不必要的操作
+- **限制任务列表查看**：不要反复调用 todos.list，最多每 3 步查看一次
+- **任务完成即停止**：任务成功后直接给出最终答案，不要重复执行验证
+- **避免重写文件**：写文件前确保代码正确，减少修复轮次
+
+### 4. 环境感知
+- **Python 命令**：Mac/Linux 使用 python3，Windows 使用 python
+- **检查依赖**：如果命令失败，先检查是否缺少依赖
+
+### 5. 批量任务管理
+- **使用 todos.init**：一次性创建所有任务，避免多次 todos.add
+- **合并相似任务**：将强相关的步骤合并为一个任务
+
 ## 工作流程（ReAct循环）
 
 1. **思考** (Think): 分析任务，决定下一步行动
@@ -514,6 +689,21 @@ WAIT_FOR_INPUT: 我找到了两种方案：
 - 提问要清晰明确，避免模糊不清
 - 用户输入后，你可以基于用户的回复继续执行任务
 ` : '（用户交互功能未启用）'}
+
+## 📝 代码生成检查清单
+
+生成代码时，必须确保：
+- [ ] **所有必要的 import 语句已包含**（如 matplotlib.pyplot, numpy 等）
+- [ ] **变量在使用前已定义**
+- [ ] **类和函数正确导入**（如 from matplotlib.patches import Ellipse）
+- [ ] **文件路径使用正确的分隔符**
+- [ ] **异常处理已添加**（如 try-except 块）
+- [ ] **代码不包含硬编码的敏感信息**
+
+常见错误及修复：
+- NameError: name 'Ellipse' is not defined → 添加 from matplotlib.patches import Ellipse
+- ModuleNotFoundError: No module named 'xxx' → 在执行前用 pip install 安装
+- python: command not found → 使用 python3 代替 python
 
 ## JSON格式提醒
 - 代码中的反斜杠必须双写转义（\\\\cos -> \\\\\\\\cos，\\\\n -> \\\\\\\\n）
@@ -1105,6 +1295,30 @@ CSS选择器示例: "button.primary", "a[href*=login]", ".submit-btn"
 等待指定元素出现在页面上。
 输入: {"selector": ".result", "timeout": 5000}
 
+## ⚡ 效率原则（必须遵守）
+
+### 1. 合并独立操作
+- **一次写入多个文件**：如果需要创建多个相关文件，可以连续调用 writeFile，不需要等待
+- **避免中间文件**：不要为了"先保存"而写临时文件，直接生成最终版本
+
+### 2. 一次性生成完整代码
+- **预先思考完整方案**：在写代码前，先在思考中规划好完整的实现
+- **包含所有依赖**：确保代码包含所有必要的 import 语句和依赖
+- **考虑边界情况**：预先处理可能的错误和异常
+
+### 3. 减少不必要的操作
+- **限制任务列表查看**：不要反复调用 todos.list，最多每 3 步查看一次
+- **任务完成即停止**：任务成功后直接给出最终答案，不要重复执行验证
+- **避免重写文件**：写文件前确保代码正确，减少修复轮次
+
+### 4. 环境感知
+- **Python 命令**：Mac/Linux 使用 python3，Windows 使用 python
+- **检查依赖**：如果命令失败，先检查是否缺少依赖
+
+### 5. 批量任务管理
+- **使用 todos.init**：一次性创建所有任务，避免多次 todos.add
+- **合并相似任务**：将强相关的步骤合并为一个任务
+
 ## 工作流程（ReAct循环）
 
 1. **思考** (Think): 分析任务，决定下一步行动
@@ -1214,6 +1428,21 @@ WAIT_FOR_INPUT: 我找到了两种方案：
 - 提问要清晰明确，避免模糊不清
 - 用户输入后，你可以基于用户的回复继续执行任务
 ` : '（用户交互功能未启用）'}
+
+## 📝 代码生成检查清单
+
+生成代码时，必须确保：
+- [ ] **所有必要的 import 语句已包含**（如 matplotlib.pyplot, numpy 等）
+- [ ] **变量在使用前已定义**
+- [ ] **类和函数正确导入**（如 from matplotlib.patches import Ellipse）
+- [ ] **文件路径使用正确的分隔符**
+- [ ] **异常处理已添加**（如 try-except 块）
+- [ ] **代码不包含硬编码的敏感信息**
+
+常见错误及修复：
+- NameError: name 'Ellipse' is not defined → 添加 from matplotlib.patches import Ellipse
+- ModuleNotFoundError: No module named 'xxx' → 在执行前用 pip install 安装
+- python: command not found → 使用 python3 代替 python
 
 ## JSON格式提醒
 - 代码中的反斜杠必须双写转义（\\\\cos -> \\\\\\\\cos，\\\\n -> \\\\\\\\n）
@@ -1343,92 +1572,96 @@ WAIT_FOR_INPUT: 我找到了两种方案：
         break
       }
 
-      // Process tool calls
-      for (const toolCall of response.tool_calls) {
-        const toolName = toolCall.function.name
-        const toolArgs = parseToolCallArgs(toolCall.function.arguments)
+      // Process tool calls with parallel execution support
+      const toolCallGroups = analyzeToolDependencies(response.tool_calls)
+      const isParallelExecution = toolCallGroups.length > 0 && toolCallGroups[0].length > 1
 
+      if (isParallelExecution) {
         context.onLog?.({
           nodeId: node.id,
           nodeName: data.label,
           level: 'info',
-          message: `调用工具: ${toolName}`,
+          message: `并行执行 ${response.tool_calls.length} 个工具调用`,
         })
+      }
 
-        executionStore.updateReActStep(context.executionId, node.id, {
-          id: stepId,
-          status: 'acting',
-          action: toolName,
-          actionInput: JSON.stringify(toolArgs),
-        })
+      for (const group of toolCallGroups) {
+        // Execute tools in the same group in parallel
+        const results = await Promise.all(group.map(async ({ toolCall }) => {
+          const toolName = toolCall.function.name
+          const toolArgs = parseToolCallArgs(toolCall.function.arguments)
 
-        // Find and execute the tool
-        const tool = allTools.find(t => t.name === toolName)
-
-        if (!tool) {
-          const errorObs = `错误: 未知工具 "${toolName}"`
-          messages.push({ role: 'tool', content: errorObs, tool_call_id: toolCall.id })
-          executionStore.updateReActStep(context.executionId, node.id, {
-            id: stepId,
-            status: 'error',
-            observation: errorObs,
-            observationError: true,
+          context.onLog?.({
+            nodeId: node.id,
+            nodeName: data.label,
+            level: 'info',
+            message: `调用工具: ${toolName}`,
           })
-          executionStore.completeReActStep(context.executionId, node.id, stepId)
-          continue
-        }
 
-        // Execute the tool
-        executionStore.updateReActStep(context.executionId, node.id, { id: stepId, status: 'observing' })
+          // Find and execute the tool
+          const tool = allTools.find(t => t.name === toolName)
 
-        if (data.stream) {
-          context.onStream?.(node.id, `🔧 调用: ${toolName}\n`)
-        }
+          if (!tool) {
+            return {
+              toolCallId: toolCall.id,
+              toolName,
+              success: false,
+              observation: `错误: 未知工具 "${toolName}"`,
+            }
+          }
 
-        try {
-          const result = await executeTool(tool, toolArgs, context, todosManager)
+          if (data.stream) {
+            context.onStream?.(node.id, `🔧 调用: ${toolName}\n`)
+          }
 
-          // Sync todos state to store after each tool execution
-          const todosStatus = todosManager.getStatus()
-          executionStore.updateReActTodos(context.executionId, node.id, todosStatus.items)
+          try {
+            const result = await executeTool(tool, toolArgs, context, todosManager)
+            return {
+              toolCallId: toolCall.id,
+              toolName,
+              success: result.success,
+              observation: result.success ? result.output : `错误: ${result.error}`,
+            }
+          } catch (error) {
+            return {
+              toolCallId: toolCall.id,
+              toolName,
+              success: false,
+              observation: `工具执行错误: ${(error as Error).message}`,
+            }
+          }
+        }))
 
-          const observation = result.success ? result.output : `错误: ${result.error}`
-          messages.push({ role: 'tool', content: observation, tool_call_id: toolCall.id })
-
-          executionStore.updateReActStep(context.executionId, node.id, {
-            id: stepId,
-            observation,
-            observationError: !result.success,
-          })
-          executionStore.completeReActStep(context.executionId, node.id, stepId)
+        // Process results and update messages
+        for (const result of results) {
+          messages.push({ role: 'tool', content: result.observation, tool_call_id: result.toolCallId })
 
           context.onLog?.({
             nodeId: node.id,
             nodeName: data.label,
             level: result.success ? 'info' : 'error',
-            message: `观察: ${observation.slice(0, 200)}${observation.length > 200 ? '...' : ''}`,
+            message: `观察: ${result.observation.slice(0, 200)}${result.observation.length > 200 ? '...' : ''}`,
           })
 
           if (data.stream) {
-            const truncatedObs = observation.length > 500 ? observation.slice(0, 500) + '...' : observation
+            const truncatedObs = result.observation.length > 500 ? result.observation.slice(0, 500) + '...' : result.observation
             context.onStream?.(node.id, `👁 观察: ${truncatedObs}\n`)
           }
-        } catch (error) {
-          const errorObs = `工具执行错误: ${(error as Error).message}`
-          messages.push({ role: 'tool', content: errorObs, tool_call_id: toolCall.id })
-          executionStore.updateReActStep(context.executionId, node.id, {
-            id: stepId,
-            status: 'error',
-            observation: errorObs,
-            observationError: true,
-          })
-          executionStore.completeReActStep(context.executionId, node.id, stepId)
-
-          if (data.stream) {
-            context.onStream?.(node.id, `❌ ${errorObs}\n`)
-          }
         }
+
+        // Sync todos state after each group
+        const todosStatus = todosManager.getStatus()
+        executionStore.updateReActTodos(context.executionId, node.id, todosStatus.items)
       }
+
+      // Update step status after all tool calls
+      executionStore.updateReActStep(context.executionId, node.id, {
+        id: stepId,
+        status: 'observing',
+        action: response.tool_calls.map(tc => tc.function.name).join(', '),
+        actionInput: JSON.stringify(response.tool_calls.map(tc => parseToolCallArgs(tc.function.arguments))),
+      })
+      executionStore.completeReActStep(context.executionId, node.id, stepId)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       context.onLog?.({

@@ -53,9 +53,9 @@ function AnimatedEdge(props: AnimatedEdgeProps) {
           strokeDasharray="8,4"
           fill="none"
           filter={selected ? `url(#${filterId})` : undefined}
-          initial={{ strokeDashoffset: 12 }}
+          initial={{ strokeDashoffset: 0 }}
           animate={{
-            strokeDashoffset: 0,
+            strokeDashoffset: -12,
           }}
           transition={{
             duration: 1,

@@ -1,8 +1,12 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useEffect } from 'react'
-import { X, FileText, Image, File, Loader2 } from 'lucide-react'
+import { X, Image, File, Loader2, FileCode } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { cn } from '@/lib/utils'
+import ViewToggle, { ViewMode } from './preview/ViewToggle'
+import MarkdownRenderer from './preview/MarkdownRenderer'
+import HtmlRenderer from './preview/HtmlRenderer'
+import CodeRenderer from './preview/CodeRenderer'
 
 interface FileItem {
   name: string
@@ -15,16 +19,25 @@ interface Props {
   onClose: () => void
 }
 
-type FileType = 'text' | 'image' | 'pdf' | 'unknown'
+type FileType = 'markdown' | 'html' | 'code' | 'image' | 'pdf' | 'unknown'
 
 const getFileType = (filename: string): FileType => {
   const ext = filename.split('.').pop()?.toLowerCase() || ''
-  
-  const textExts = ['txt', 'md', 'json', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'yaml', 'yml', 'xml', 'csv', 'log', 'ini', 'conf', 'sh', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'h', 'hpp', 'vue', 'svelte']
+
+  const markdownExts = ['md', 'markdown', 'mdown', 'mkd']
+  const htmlExts = ['html', 'htm', 'xhtml']
+  const codeExts = [
+    'txt', 'json', 'js', 'ts', 'jsx', 'tsx', 'css', 'scss', 'sass', 'less',
+    'yaml', 'yml', 'xml', 'csv', 'log', 'ini', 'conf', 'sh', 'bash', 'zsh',
+    'py', 'rb', 'go', 'rs', 'java', 'c', 'cpp', 'h', 'hpp', 'cs', 'php',
+    'swift', 'kt', 'scala', 'lua', 'r', 'sql', 'ps1', 'dockerfile', 'vue', 'svelte'
+  ]
   const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico']
   const pdfExts = ['pdf']
-  
-  if (textExts.includes(ext)) return 'text'
+
+  if (markdownExts.includes(ext)) return 'markdown'
+  if (htmlExts.includes(ext)) return 'html'
+  if (codeExts.includes(ext)) return 'code'
   if (imageExts.includes(ext)) return 'image'
   if (pdfExts.includes(ext)) return 'pdf'
   return 'unknown'
@@ -32,12 +45,31 @@ const getFileType = (filename: string): FileType => {
 
 const getFileIcon = (fileType: FileType) => {
   switch (fileType) {
-    case 'text':
-      return FileText
+    case 'markdown':
+    case 'html':
+    case 'code':
+      return FileCode
     case 'image':
       return Image
     default:
       return File
+  }
+}
+
+const getFileTypeColor = (fileType: FileType) => {
+  switch (fileType) {
+    case 'markdown':
+      return 'bg-purple-500/20 text-purple-400'
+    case 'html':
+      return 'bg-orange-500/20 text-orange-400'
+    case 'code':
+      return 'bg-blue-500/20 text-blue-400'
+    case 'image':
+      return 'bg-green-500/20 text-green-400'
+    case 'pdf':
+      return 'bg-red-500/20 text-red-400'
+    default:
+      return 'bg-gray-500/20 text-gray-400'
   }
 }
 
@@ -48,13 +80,18 @@ export default function FilePreviewDialog({ file, onClose }: Props) {
   const [content, setContent] = useState<string>('')
   const [imageData, setImageData] = useState<string>('')
   const [pdfData, setPdfData] = useState<string>('')
-  
+  const [viewMode, setViewMode] = useState<ViewMode>('preview')
+
   const fileType = getFileType(file.name)
   const FileIcon = getFileIcon(fileType)
 
+  // 判断是否显示视图切换按钮
+  const showViewToggle = fileType === 'markdown' || fileType === 'html'
+
   useEffect(() => {
     loadFileContent()
-    
+    setViewMode('preview') // 文件切换时重置为预览模式
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose()
@@ -66,19 +103,12 @@ export default function FilePreviewDialog({ file, onClose }: Props) {
 
   const loadFileContent = async () => {
     if (!currentWorkspace) return
-    
+
     setLoading(true)
     setError(null)
-    
+
     try {
-      if (fileType === 'text') {
-        const result = await window.electronAPI.file.read(currentWorkspace.path, file.path)
-        if (result.success && result.content) {
-          setContent(result.content)
-        } else {
-          setError(result.error || '读取文件失败')
-        }
-      } else if (fileType === 'image') {
+      if (fileType === 'image') {
         const result = await window.electronAPI.file.readImage(currentWorkspace.path, file.path)
         if (result.success && result.dataUrl) {
           setImageData(result.dataUrl)
@@ -91,6 +121,14 @@ export default function FilePreviewDialog({ file, onClose }: Props) {
           setPdfData(result.dataUrl)
         } else {
           setError(result.error || '读取PDF失败')
+        }
+      } else {
+        // markdown, html, code, unknown 都读取文本内容
+        const result = await window.electronAPI.file.read(currentWorkspace.path, file.path)
+        if (result.success && result.content) {
+          setContent(result.content)
+        } else {
+          setError(result.error || '读取文件失败')
         }
       }
     } catch (err) {
@@ -118,18 +156,24 @@ export default function FilePreviewDialog({ file, onClose }: Props) {
       )
     }
 
+    // 源码视图
+    if (viewMode === 'source') {
+      return <CodeRenderer content={content} filename={file.name} />
+    }
+
+    // 预览视图
     switch (fileType) {
-      case 'text':
-        return (
-          <pre className="p-4 overflow-auto max-h-[60vh] text-sm text-[var(--color-text)] bg-[var(--color-bg-input)] rounded-lg font-mono whitespace-pre-wrap break-all">
-            {content}
-          </pre>
-        )
+      case 'markdown':
+        return <MarkdownRenderer content={content} />
+      case 'html':
+        return <HtmlRenderer content={content} />
+      case 'code':
+        return <CodeRenderer content={content} filename={file.name} />
       case 'image':
         return (
           <div className="flex items-center justify-center p-4 overflow-auto max-h-[60vh]">
-            <img 
-              src={imageData} 
+            <img
+              src={imageData}
               alt={file.name}
               className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-lg"
             />
@@ -175,13 +219,7 @@ export default function FilePreviewDialog({ file, onClose }: Props) {
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-subtle)]">
             <div className="flex items-center gap-3">
-              <div className={cn(
-                'p-2 rounded-lg',
-                fileType === 'text' && 'bg-blue-500/20 text-blue-400',
-                fileType === 'image' && 'bg-green-500/20 text-green-400',
-                fileType === 'pdf' && 'bg-red-500/20 text-red-400',
-                fileType === 'unknown' && 'bg-gray-500/20 text-gray-400'
-              )}>
+              <div className={cn('p-2 rounded-lg', getFileTypeColor(fileType))}>
                 <FileIcon className="w-5 h-5" />
               </div>
               <div>
@@ -193,12 +231,17 @@ export default function FilePreviewDialog({ file, onClose }: Props) {
                 </p>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-3">
+              {showViewToggle && (
+                <ViewToggle mode={viewMode} onChange={setViewMode} />
+              )}
+              <button
+                onClick={onClose}
+                className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           <div className="overflow-auto max-h-[70vh]">

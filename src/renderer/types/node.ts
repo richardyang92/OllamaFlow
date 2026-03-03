@@ -51,7 +51,7 @@ export interface ToolDefinition {
   id: string
   name: string
   description: string
-  type: 'readFile' | 'writeFile' | 'executeCommand' | 'httpRequest' | 'todos' | 'getCurrentDate' | BrowserToolType
+  type: 'readFile' | 'writeFile' | 'executeCommand' | 'httpRequest' | 'todos' | 'getCurrentDate' | 'writeMultipleFiles' | 'executePython' | BrowserToolType
   config: Record<string, unknown>
 }
 
@@ -106,6 +106,22 @@ export const AVAILABLE_TOOLS = [
     label: 'HTTP 请求',
     description: '发送 HTTP 请求。输入: URL字符串',
     type: 'httpRequest' as const,
+    builtIn: false,
+  },
+  {
+    id: 'writeMultipleFiles',
+    name: 'writeMultipleFiles',
+    label: '批量写文件',
+    description: '一次性写入多个文件。输入: {"files": [{"filename": "file1.py", "content": "..."}, {"filename": "file2.py", "content": "..."}]}。适合需要创建多个相关文件的场景',
+    type: 'writeMultipleFiles' as const,
+    builtIn: false,
+  },
+  {
+    id: 'executePython',
+    name: 'executePython',
+    label: '执行Python代码',
+    description: '直接执行 Python 代码，无需先写入文件。输入: {"code": "print(1+1)"}。可选参数: {"saveAs": "script.py"} 保存代码到文件',
+    type: 'executePython' as const,
     builtIn: false,
   },
   {

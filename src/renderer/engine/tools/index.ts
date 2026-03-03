@@ -598,6 +598,132 @@ async function executeBrowserTool(
   }
 }
 
+// Execute write multiple files tool
+async function executeWriteMultipleFiles(
+  actionInput: string | Record<string, unknown>,
+  workspacePath: string
+): Promise<ToolResult> {
+  try {
+    // Parse files array from input
+    let files: Array<{ filename: string; content: string }> = []
+
+    if (typeof actionInput === 'object' && 'files' in actionInput) {
+      files = (actionInput.files as Array<{ filename: string; content: string }>) || []
+    } else if (typeof actionInput === 'string') {
+      const parsed = JSON.parse(actionInput)
+      files = parsed.files || []
+    }
+
+    if (!Array.isArray(files) || files.length === 0) {
+      return { success: false, output: '', error: '未提供有效的文件列表' }
+    }
+
+    const results: string[] = []
+    let successCount = 0
+
+    for (const file of files) {
+      const filePath = file.filename || (file as Record<string, unknown>).filePath as string
+      const fileContent = file.content || ''
+
+      if (!filePath) {
+        results.push(`❌ 跳过: 缺少文件名`)
+        continue
+      }
+
+      const result = await window.electronAPI.file.write(workspacePath, filePath, fileContent)
+      if (result.success) {
+        results.push(`✅ ${filePath}`)
+        successCount++
+      } else {
+        results.push(`❌ ${filePath}: ${result.error || '写入失败'}`)
+      }
+    }
+
+    return {
+      success: successCount > 0,
+      output: `批量写入完成 (${successCount}/${files.length}):\n${results.join('\n')}`,
+      error: successCount === files.length ? undefined : '部分文件写入失败',
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      error: `批量写文件错误: ${(error as Error).message}`,
+    }
+  }
+}
+
+// Execute Python code directly
+async function executePythonCode(
+  actionInput: string | Record<string, unknown>,
+  workspacePath: string,
+  config: Record<string, unknown>
+): Promise<ToolResult> {
+  try {
+    // Parse code from input
+    let code: string
+    let saveAs: string | undefined
+
+    if (typeof actionInput === 'object') {
+      code = (actionInput.code as string) || ''
+      saveAs = actionInput.saveAs as string | undefined
+    } else {
+      const parsed = JSON.parse(actionInput)
+      code = parsed.code || ''
+      saveAs = parsed.saveAs
+    }
+
+    if (!code.trim()) {
+      return { success: false, output: '', error: '未提供 Python 代码' }
+    }
+
+    // Save code to temporary file
+    const tempFile = saveAs || `_temp_python_${Date.now()}.py`
+    const writeResult = await window.electronAPI.file.write(workspacePath, tempFile, code)
+
+    if (!writeResult.success) {
+      return { success: false, output: '', error: `写入临时文件失败: ${writeResult.error}` }
+    }
+
+    // Execute the Python script
+    const timeout = (config.timeout as number) || 60000
+    // Try python3 first (Mac/Linux), fall back to python (Windows)
+    const isWindows = typeof navigator !== 'undefined' && /windows|win/i.test(navigator.userAgent)
+    const pythonCmd = isWindows ? 'python' : 'python3'
+
+    const result = await window.electronAPI.command.execute(workspacePath, {
+      command: `${pythonCmd} ${tempFile}`,
+      cwd: '',
+      timeout,
+    })
+
+    // Note: Temporary files are left in workspace for debugging purposes
+    // They can be manually cleaned up if needed
+
+    const output = result.stdout || ''
+    const stderr = result.stderr || ''
+
+    if (!result.success) {
+      return {
+        success: false,
+        output: output + (stderr ? `\n错误: ${stderr}` : ''),
+        error: `执行失败 (退出码: ${result.exitCode}): ${stderr}`,
+      }
+    }
+
+    return {
+      success: true,
+      output: output + (saveAs ? `\n代码已保存到: ${saveAs}` : ''),
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      error: `执行 Python 错误: ${(error as Error).message}`,
+    }
+  }
+}
+
 // Main tool execution function
 export async function executeTool(
   tool: ToolDefinition,
@@ -624,6 +750,12 @@ export async function executeTool(
 
     case 'httpRequest':
       return executeHttpRequest(actionInput, tool.config)
+
+    case 'writeMultipleFiles':
+      return executeWriteMultipleFiles(actionInput, workspacePath)
+
+    case 'executePython':
+      return executePythonCode(actionInput, workspacePath, tool.config)
 
     case 'getCurrentDate':
       return executeGetCurrentDate(actionInput)

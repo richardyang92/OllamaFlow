@@ -1,0 +1,212 @@
+/* ============================================
+   Markdown 渲染样式
+   ============================================ */
+
+/* 基础 Markdown 容器样式 */
+.markdown-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-text);
+}
+
+/* 段落 */
+.markdown-body p {
+  margin: 1em 0;
+}
+
+/* 标题 */
+.markdown-body h1 {
+  font-size: 2em;
+  font-weight: 700;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.markdown-body h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.markdown-body h3 {
+  font-size: 1.25em;
+  font-weight: 600;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+}
+
+.markdown-body h4 {
+  font-size: 1em;
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+.markdown-body h5 {
+  font-size: 0.875em;
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+.markdown-body h6 {
+  font-size: 0.85em;
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  color: var(--color-text-muted);
+}
+
+/* 链接 */
+.markdown-body a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+/* 列表 */
+.markdown-body ul,
+.markdown-body ol {
+  margin: 1em 0;
+  padding-left: 2em;
+}
+
+.markdown-body li {
+  margin: 0.25em 0;
+}
+
+.markdown-body li + li {
+  margin-top: 0.25em;
+}
+
+/* 任务列表 */
+.markdown-body input[type="checkbox"] {
+  margin-right: 0.5em;
+  accent-color: var(--color-accent);
+}
+
+/* 引用块 */
+.markdown-body blockquote {
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  border-left: 4px solid var(--color-accent);
+  color: var(--color-text-muted);
+  background: var(--color-bg-input);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.markdown-body blockquote p {
+  margin: 0.5em 0;
+}
+
+/* 代码 - 行内 */
+.markdown-body code {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  font-size: 0.9em;
+  padding: 0.2em 0.4em;
+  background: var(--color-bg-input);
+  border-radius: var(--radius-sm);
+}
+
+/* 代码 - 块级 */
+.markdown-body pre {
+  margin: 1em 0;
+  padding: 1em;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.875em;
+  line-height: 1.5;
+}
+
+/* 表格 */
+.markdown-body table {
+  width: 100%;
+  margin: 1em 0;
+  border-collapse: collapse;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.markdown-body th {
+  padding: 0.75em 1em;
+  text-align: left;
+  font-weight: 600;
+  background: var(--color-bg-input);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.markdown-body td {
+  padding: 0.75em 1em;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.markdown-body tr:last-child td {
+  border-bottom: none;
+}
+
+.markdown-body tr:nth-child(2n) {
+  background: var(--color-bg-input);
+}
+
+/* 水平线 */
+.markdown-body hr {
+  margin: 2em 0;
+  border: none;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+/* 图片 */
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  margin: 1em 0;
+}
+
+/* 删除线 */
+.markdown-body del {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
+/* 强调 */
+.markdown-body strong {
+  font-weight: 600;
+}
+
+.markdown-body em {
+  font-style: italic;
+}
+
+/* KaTeX 数学公式 */
+.markdown-body .katex {
+  font-size: 1.1em;
+}
+
+.markdown-body .katex-display {
+  margin: 1em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* highlight.js 代码高亮调整 */
+.markdown-body .hljs {
+  background: transparent;
+  padding: 0;
+}
