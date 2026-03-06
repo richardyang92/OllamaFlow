@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check } from 'lucide-react'
@@ -6,15 +6,15 @@ import { useWorkspaceStore } from '@/store/workspace-store'
 import { useWorkflowStore } from '@/store/workflow-store'
 import { useExecutionStore } from '@/store/execution-store'
 import { useResolvedTheme } from '@/contexts/ThemeContext'
+import { PanelProvider, usePanelContext } from '@/contexts/PanelContext'
 import FlowCanvas from '@/components/workflow/FlowCanvas'
 import { FloatingToolbar } from '@/components/workflow/FloatingToolbar'
-import NodePalette from '@/components/workflow/NodePalette'
-import PropertiesPanel from '@/components/workflow/PropertiesPanel'
-import WorkspaceFiles, { type FileItem } from '@/components/workflow/WorkspaceFiles'
+import { FloatingIconBar } from '@/components/workflow/FloatingIconBar'
+import { FloatingSidebar } from '@/components/workflow/FloatingSidebar'
+import { type FileItem } from '@/components/workflow/WorkspaceFiles'
 import ExecutionPanel from '@/components/workflow/ExecutionPanel'
 import InputDialog from '@/components/workflow/InputDialog'
 import FilePreviewDialog from '@/components/workflow/FilePreviewDialog'
-import { CollapsibleDrawer } from '@/components/ui/CollapsibleDrawer'
 import { initializeExecutors } from '@/engine/executor'
 import { executionManager } from '@/engine/execution-manager'
 
@@ -34,11 +34,17 @@ function EditFeedback({ message }: { message: string }) {
 
 initializeExecutors()
 
-export default function EditorPage() {
+function EditorContent() {
   const { currentWorkspace, clearCurrentWorkspace, setCurrentPage } = useWorkspaceStore()
   const { workflow, isDirty, markClean, syncEdgeAnimation } = useWorkflowStore()
   const resolvedTheme = useResolvedTheme()
-  
+  const {
+    executionPanelVisible,
+    toggleExecutionPanel,
+    isPanelManuallyClosed,
+    setActivePanel
+  } = usePanelContext()
+
   // Subscribe to execution store changes - use workspace-specific status
   const workspacePath = currentWorkspace?.path
 
@@ -67,25 +73,20 @@ export default function EditorPage() {
     syncEdgeAnimation(runningNodeIds)
   }, [nodeResults, syncEdgeAnimation])
 
-  const [showFiles, setShowFiles] = useState(false)
-  const [showProperties, setShowProperties] = useState(false)
-  const [showPalette, setShowPalette] = useState(false)
-  const [showLogs, setShowLogs] = useState(false)
   const [showInputDialog, setShowInputDialog] = useState(false)
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null)
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null)
   const [saveActive, setSaveActive] = useState(false)
-  const userClosedPropertiesRef = useRef(false)
-
-  const handlePropertiesClose = useCallback(() => {
-    userClosedPropertiesRef.current = true
-    setShowProperties(false)
-  }, [])
 
   const handleNodeClick = useCallback(() => {
-    userClosedPropertiesRef.current = false
-    setShowProperties(true)
-  }, [])
+    // Always open properties panel when clicking a node
+    setActivePanel('properties')
+  }, [setActivePanel])
+
+  const handlePaneClick = useCallback(() => {
+    // Close properties panel when clicking on empty canvas
+    setActivePanel(null)
+  }, [setActivePanel])
 
   const handleSave = useCallback(async () => {
     if (!currentWorkspace || !workflow || saveActive) return
@@ -94,7 +95,7 @@ export default function EditorPage() {
     const startTime = Date.now()
     try {
       const { nodes, edges } = useWorkflowStore.getState()
-      
+
       const serializedNodes = nodes.map(node => ({
         id: node.id,
         type: node.type,
@@ -106,7 +107,7 @@ export default function EditorPage() {
         height: node.height,
         data: node.data
       }))
-      
+
       const serializedEdges = edges.map(edge => ({
         id: edge.id,
         source: edge.source,
@@ -118,7 +119,7 @@ export default function EditorPage() {
         style: edge.style,
         data: edge.data
       }))
-      
+
       const updatedWorkflow = {
         ...workflow,
         metadata: {
@@ -133,7 +134,7 @@ export default function EditorPage() {
         currentWorkspace.path,
         updatedWorkflow
       )
-      
+
       if (success) {
         useWorkflowStore.getState().setWorkflow(updatedWorkflow)
         const executionId = useExecutionStore.getState().getActiveExecution(currentWorkspace.path)
@@ -227,6 +228,11 @@ export default function EditorPage() {
   const executeWorkflow = useCallback((nodes: any[], edges: any[], inputValues?: Record<string, string>) => {
     if (!currentWorkspace) return
 
+    // Smart context: auto-open execution panel if not manually closed
+    if (!isPanelManuallyClosed('execution')) {
+      toggleExecutionPanel()
+    }
+
     executionManager.startExecution(
       currentWorkspace.path,
       nodes,
@@ -242,7 +248,7 @@ export default function EditorPage() {
         })
       }
     })
-  }, [currentWorkspace])
+  }, [currentWorkspace, isPanelManuallyClosed, toggleExecutionPanel])
 
   const handleInputSubmit = useCallback((values: Record<string, string>) => {
     setShowInputDialog(false)
@@ -256,98 +262,124 @@ export default function EditorPage() {
   }, [])
 
   const handleDragStart = useCallback(() => {
-    setShowPalette(true)
-  }, [])
+    // Smart context: auto-open nodes panel
+    if (!isPanelManuallyClosed('nodes')) {
+      setActivePanel('nodes')
+    }
+  }, [isPanelManuallyClosed, setActivePanel])
+
+  // Export workflow
+  const handleExport = useCallback(async () => {
+    if (!workflow) return
+
+    const { nodes, edges } = useWorkflowStore.getState()
+    const exportData = {
+      metadata: workflow.metadata,
+      nodes: nodes.map(node => ({
+        id: node.id,
+        type: node.type,
+        position: node.position,
+        parentId: node.parentId,
+        extent: node.extent,
+        expandParent: node.expandParent,
+        width: node.width,
+        height: node.height,
+        data: node.data
+      })),
+      edges: edges.map(edge => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
+        type: edge.type,
+        animated: edge.animated,
+        style: edge.style,
+        data: edge.data
+      })),
+      viewport: { x: 0, y: 0, zoom: 1 }
+    }
+
+    const filePath = await window.electronAPI.workflow.export(JSON.stringify(exportData, null, 2))
+    if (filePath) {
+      setSaveFeedback('工作流导出成功')
+      setTimeout(() => setSaveFeedback(null), 2000)
+    }
+  }, [workflow])
+
+  // Import workflow
+  const handleImport = useCallback(async () => {
+    const content = await window.electronAPI.workflow.import()
+    if (!content) return
+
+    try {
+      const importedData = JSON.parse(content)
+      const { nodes, edges, metadata } = importedData
+
+      // Update workflow with imported data
+      if (currentWorkspace && workflow) {
+        const updatedWorkflow = {
+          ...workflow,
+          metadata: {
+            ...workflow.metadata,
+            ...metadata,
+            updatedAt: new Date().toISOString(),
+          },
+          nodes,
+          edges,
+        }
+        useWorkflowStore.getState().setWorkflow(updatedWorkflow)
+        setSaveFeedback('工作流导入成功')
+        setTimeout(() => setSaveFeedback(null), 2000)
+      }
+    } catch (error) {
+      console.error('导入工作流失败:', error)
+      setSaveFeedback('导入失败：无效的工作流文件')
+      setTimeout(() => setSaveFeedback(null), 2000)
+    }
+  }, [currentWorkspace, workflow])
 
   return (
-    <ReactFlowProvider>
-      <div className="h-screen flex flex-col bg-[var(--color-bg-canvas)] text-[var(--color-text)] overflow-hidden">
-        <FloatingToolbar
-          workspaceName={currentWorkspace?.config.name || '未命名'}
-          isDirty={isDirty}
-          executionStatus={executionStatus}
-          showPalette={showPalette}
-          showLogs={showLogs}
-          saveActive={saveActive}
-          onSave={handleSave}
-          onClose={handleClose}
-          onExecute={handleExecute}
-          onToggleLogs={() => {
-            if (!showLogs) {
-              setShowFiles(true)
-            }
-            setShowLogs(!showLogs)
-          }}
-          onTogglePalette={() => setShowPalette(!showPalette)}
-        />
+    <div className="h-screen flex flex-col bg-[var(--color-bg-canvas)] text-[var(--color-text)] overflow-hidden">
+      <FloatingToolbar
+        workspaceName={currentWorkspace?.config.name || '未命名'}
+        isDirty={isDirty}
+        executionStatus={executionStatus}
+        saveActive={saveActive}
+        onSave={handleSave}
+        onClose={handleClose}
+        onExecute={handleExecute}
+        onExport={handleExport}
+        onImport={handleImport}
+      />
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 flex overflow-hidden relative">
-            <FlowCanvas 
-              colorMode={resolvedTheme}
-              onDragStart={handleDragStart}
-              onNodeClick={handleNodeClick}
-            />
-            
-            <AnimatePresence>
-              {showLogs && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 20 }}
-                  className="absolute bottom-4 left-4 right-4 z-30 h-64 glass-panel rounded-glass-lg"
-                >
-                  <div className="flex h-full">
-                    {showFiles && (
-                      <div className="w-56 shrink-0 pr-2 border-r border-[var(--color-border-subtle)]">
-                        <WorkspaceFiles 
-                          onClose={() => setShowFiles(false)} 
-                          onFileClick={(file) => setSelectedFile(file)}
-                        />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <ExecutionPanel 
-                        onClose={() => setShowLogs(false)} 
-                        onToggleFiles={() => setShowFiles(!showFiles)} 
-                        showFiles={showFiles} 
-                      />
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex overflow-hidden relative">
+          <FlowCanvas
+            colorMode={resolvedTheme}
+            onDragStart={handleDragStart}
+            onNodeClick={handleNodeClick}
+            onPaneClick={handlePaneClick}
+          />
+
+          <AnimatePresence>
+            {executionPanelVisible && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                className="absolute bottom-4 left-4 right-4 z-30 h-64 glass-panel rounded-glass-lg"
+              >
+                <ExecutionPanel onClose={() => toggleExecutionPanel()} />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-
-        <CollapsibleDrawer
-          side="left"
-          isOpen={showPalette}
-          onClose={() => setShowPalette(false)}
-          width={280}
-          minWidth={240}
-          maxWidth={400}
-        >
-          <NodePalette 
-            onClose={() => setShowPalette(false)} 
-            isDrawer
-          />
-        </CollapsibleDrawer>
-
-        <CollapsibleDrawer
-          side="right"
-          isOpen={showProperties}
-          onClose={handlePropertiesClose}
-          width={320}
-          minWidth={280}
-          maxWidth={480}
-        >
-          <PropertiesPanel 
-            onClose={handlePropertiesClose} 
-            isDrawer
-          />
-        </CollapsibleDrawer>
       </div>
+
+      {/* Floating panel system */}
+      <FloatingIconBar />
+      <FloatingSidebar onFileClick={(file) => setSelectedFile(file)} />
 
       {showInputDialog && (
         <InputDialog
@@ -367,6 +399,16 @@ export default function EditorPage() {
       <AnimatePresence>
         {saveFeedback && <EditFeedback message={saveFeedback} />}
       </AnimatePresence>
+    </div>
+  )
+}
+
+export default function EditorPage() {
+  return (
+    <ReactFlowProvider>
+      <PanelProvider>
+        <EditorContent />
+      </PanelProvider>
     </ReactFlowProvider>
   )
 }

@@ -1,4 +1,4 @@
-import { useCallback, useRef, DragEvent, useState } from 'react'
+import { useCallback, useRef, DragEvent, useState, useEffect } from 'react'
 import {
   ReactFlow,
   Background,
@@ -9,6 +9,7 @@ import {
   Node,
   Edge,
   OnSelectionChangeParams,
+  SelectionMode,
   type ColorMode,
   type NodeTypes,
 } from '@xyflow/react'
@@ -74,6 +75,7 @@ interface FlowCanvasProps {
   colorMode?: ColorMode
   onDragStart?: () => void
   onNodeClick?: () => void
+  onPaneClick?: () => void
 }
 
 function EmptyCanvasState() {
@@ -137,16 +139,36 @@ function EmptyCanvasState() {
   )
 }
 
-export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeClick: onNodeClickProp }: FlowCanvasProps) {
+export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeClick: onNodeClickProp, onPaneClick: onPaneClickProp }: FlowCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<Node<WorkflowNodeData>, Edge> | null>(null)
 
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, selectNode } =
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, selectNode, copySelectedNodes, pasteNodes } =
     useWorkflowStore()
 
   const onInit = useCallback((instance: ReactFlowInstance<Node<WorkflowNodeData>, Edge>) => {
     setReactFlowInstance(instance)
   }, [])
+
+  // Keyboard shortcuts for copy/paste
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check for Cmd/Ctrl + C (copy)
+      if ((event.metaKey || event.ctrlKey) && event.key === 'c') {
+        const selectedNodes = nodes.filter(n => n.selected)
+        if (selectedNodes.length > 0) {
+          copySelectedNodes()
+        }
+      }
+      // Check for Cmd/Ctrl + V (paste)
+      if ((event.metaKey || event.ctrlKey) && event.key === 'v') {
+        pasteNodes()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [nodes, copySelectedNodes, pasteNodes])
 
   const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -195,7 +217,7 @@ export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeCl
         }
 
         const newNode: WorkflowNode = {
-          id: `${template.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: `${template.type}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
           type: template.type,
           position: finalPosition,
           parentId: parentId,
@@ -225,7 +247,8 @@ export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeCl
 
   const onPaneClick = useCallback(() => {
     selectNode(null)
-  }, [selectNode])
+    onPaneClickProp?.()
+  }, [selectNode, onPaneClickProp])
 
   const onEdgeClick = useCallback((_event: React.MouseEvent, _edge: Edge) => {
     // 边点击处理（可用于未来扩展）
@@ -264,6 +287,9 @@ export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeCl
         snapToGrid
         snapGrid={[15, 15]}
         deleteKeyCode={['Delete', 'Backspace']}
+        selectionMode={SelectionMode.Partial}
+        selectionOnDrag={true}
+        panOnDrag={[1, 2]}
         defaultEdgeOptions={{
           type: 'default',
           animated: false,

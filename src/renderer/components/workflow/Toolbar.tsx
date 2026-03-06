@@ -1,5 +1,7 @@
 import type { ExecutionStatus } from '@/types/execution'
 import { motion } from 'framer-motion'
+import { Undo2, Redo2, Download, Upload } from 'lucide-react'
+import { useTemporalStore } from '@/store/workflow-store'
 
 interface ToolbarProps {
   workspaceName: string
@@ -9,6 +11,8 @@ interface ToolbarProps {
   onClose: () => void
   onExecute: () => void
   onToggleLogs: () => void
+  onExport?: () => void
+  onImport?: () => void
 }
 
 export default function Toolbar({
@@ -19,9 +23,22 @@ export default function Toolbar({
   onClose,
   onExecute,
   onToggleLogs,
+  onExport,
+  onImport,
 }: ToolbarProps) {
   // 检测 macOS 以适配交通灯按钮位置
   const isMac = navigator.userAgent.toLowerCase().includes('mac')
+
+  // Undo/Redo state
+  const { undo, redo, pastStates, futureStates } = useTemporalStore((state) => ({
+    undo: state.undo,
+    redo: state.redo,
+    pastStates: state.pastStates,
+    futureStates: state.futureStates,
+  }))
+
+  const canUndo = pastStates.length > 0
+  const canRedo = futureStates.length > 0
 
   return (
     <div
@@ -55,8 +72,60 @@ export default function Toolbar({
         </div>
       </div>
 
-      {/* Right side - Logs, Save and Execute buttons */}
+      {/* Right side - Undo/Redo, Import/Export, Logs, Save and Execute buttons */}
       <div className="flex items-center gap-2">
+        {/* Undo/Redo buttons */}
+        <div className="flex items-center gap-1 mr-2">
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={undo}
+            disabled={!canUndo}
+            className="btn-sci-fi btn-ghost btn-sm px-2 py-1.5"
+            title="撤销 (Cmd+Z)"
+          >
+            <Undo2 className={`w-4 h-4 ${canUndo ? 'text-zinc-300' : 'text-zinc-600'}`} />
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={redo}
+            disabled={!canRedo}
+            className="btn-sci-fi btn-ghost btn-sm px-2 py-1.5"
+            title="重做 (Cmd+Shift+Z)"
+          >
+            <Redo2 className={`w-4 h-4 ${canRedo ? 'text-zinc-300' : 'text-zinc-600'}`} />
+          </motion.button>
+        </div>
+
+        <div className="h-6 w-px bg-white/10" />
+
+        {/* Import/Export buttons */}
+        {onImport && (
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={onImport}
+            className="btn-sci-fi btn-ghost btn-sm px-2 py-1.5"
+            title="导入工作流"
+          >
+            <Upload className="w-4 h-4 text-zinc-300" />
+          </motion.button>
+        )}
+        {onExport && (
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={onExport}
+            className="btn-sci-fi btn-ghost btn-sm px-2 py-1.5"
+            title="导出工作流"
+          >
+            <Download className="w-4 h-4 text-zinc-300" />
+          </motion.button>
+        )}
+
+        <div className="h-6 w-px bg-white/10" />
+
         <motion.button
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}

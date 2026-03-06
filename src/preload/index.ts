@@ -257,6 +257,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('recent:remove', path),
   },
 
+  // Workflow import/export
+  workflow: {
+    export: (workflowData: string): Promise<string | null> =>
+      ipcRenderer.invoke('workflow:export', workflowData),
+
+    import: (): Promise<string | null> =>
+      ipcRenderer.invoke('workflow:import'),
+  },
+
   // Execution status
   execution: {
     getAllStatuses: (): Promise<Record<string, WorkspaceExecutionStatus>> =>
@@ -407,6 +416,10 @@ declare global {
         get: () => Promise<RecentWorkspace[]>
         add: (path: string, name: string, description?: string) => Promise<RecentWorkspace[]>
         remove: (path: string) => Promise<RecentWorkspace[]>
+      }
+      workflow: {
+        export: (workflowData: string) => Promise<string | null>
+        import: () => Promise<string | null>
       }
       execution: {
         getAllStatuses: () => Promise<Record<string, WorkspaceExecutionStatus>>

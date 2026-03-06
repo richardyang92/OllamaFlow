@@ -102,12 +102,14 @@ function getFileIcon(filename: string, isDirectory: boolean): string {
   return iconMap[ext] || '📄'
 }
 
-export default function WorkspaceFiles({ 
-  onClose, 
-  onFileClick 
-}: { 
+export default function WorkspaceFiles({
+  onClose,
+  onFileClick,
+  isDrawer = false,
+}: {
   onClose: () => void
   onFileClick?: (file: FileItem) => void
+  isDrawer?: boolean
 }) {
   const { currentWorkspace } = useWorkspaceStore()
   const [files, setFiles] = useState<FileItem[]>([])
@@ -157,14 +159,16 @@ export default function WorkspaceFiles({
   }
 
   return (
-    <div className="h-full flex flex-col bg-[var(--color-bg-panel)] backdrop-blur-md rounded-lg border border-[var(--color-border-subtle)] overflow-hidden">
-      {/* Header with unified styling */}
-      <div className="flex items-center justify-between p-3 border-b border-[var(--color-border-subtle)]">
-        <span className="text-xs font-medium text-[var(--color-text-muted)]">📁 文件</span>
-        <button onClick={onClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] text-xs transition-colors">
-          ▼
-        </button>
-      </div>
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Header - only show when not in drawer mode */}
+      {!isDrawer && (
+        <div className="flex items-center justify-between p-3 border-b border-[var(--color-border-subtle)]">
+          <span className="text-xs font-medium text-[var(--color-text-muted)]">📁 文件</span>
+          <button onClick={onClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] text-xs transition-colors">
+            ▼
+          </button>
+        </div>
+      )}
 
       {/* Breadcrumb with consistent padding */}
       {currentPath && (

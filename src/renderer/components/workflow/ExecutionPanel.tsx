@@ -3,16 +3,12 @@ import { useWorkspaceStore } from '@/store/workspace-store'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useRef, useEffect } from 'react'
-import { Trash2, ChevronDown, FolderOpen, Folder, ClipboardList } from 'lucide-react'
+import { Trash2, ChevronDown, ClipboardList } from 'lucide-react'
 
 export default function ExecutionPanel({
   onClose,
-  onToggleFiles,
-  showFiles,
 }: {
   onClose?: () => void
-  onToggleFiles: () => void
-  showFiles: boolean
 }) {
   const workspacePath = useWorkspaceStore((state) => state.currentWorkspace?.path)
 
@@ -76,13 +72,6 @@ export default function ExecutionPanel({
             title="清空日志"
           >
             <Trash2 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={onToggleFiles}
-            className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors p-1 rounded hover:bg-[var(--color-bg-hover)]"
-            title={showFiles ? '隐藏文件' : '显示文件'}
-          >
-            {showFiles ? <FolderOpen className="w-3.5 h-3.5" /> : <Folder className="w-3.5 h-3.5" />}
           </button>
           {onClose && (
             <button

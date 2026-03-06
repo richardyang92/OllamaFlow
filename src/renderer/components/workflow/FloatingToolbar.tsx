@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Play, Square, Save, ArrowLeft, FileText, Sun, Moon, Monitor, Blocks } from 'lucide-react'
+import { Play, Square, Save, ArrowLeft, Sun, Moon, Monitor, Undo2, Redo2, Download, Upload } from 'lucide-react'
 import { useTheme, type ThemeMode } from '@/contexts/ThemeContext'
+import { useTemporalStore } from '@/store/workflow-store'
 import type { ExecutionStatus } from '@/types/execution'
 import { cn } from '@/lib/utils'
 
@@ -9,14 +10,12 @@ interface FloatingToolbarProps {
   workspaceName: string
   isDirty: boolean
   executionStatus: ExecutionStatus
-  showPalette: boolean
-  showLogs: boolean
   saveActive: boolean
   onSave: () => void
   onClose: () => void
   onExecute: () => void
-  onToggleLogs: () => void
-  onTogglePalette: () => void
+  onExport?: () => void
+  onImport?: () => void
 }
 
 function StatusIndicator({
@@ -79,17 +78,26 @@ export function FloatingToolbar({
   workspaceName,
   isDirty,
   executionStatus,
-  showPalette,
-  showLogs,
   saveActive,
   onSave,
   onClose,
   onExecute,
-  onToggleLogs,
-  onTogglePalette,
+  onExport,
+  onImport,
 }: FloatingToolbarProps) {
   const { themeMode, setThemeMode, resolvedTheme } = useTheme()
   const [isHovered, setIsHovered] = useState(false)
+
+  // Undo/Redo state
+  const { undo, redo, pastStates, futureStates } = useTemporalStore((state) => ({
+    undo: state.undo,
+    redo: state.redo,
+    pastStates: state.pastStates,
+    futureStates: state.futureStates,
+  }))
+
+  const canUndo = pastStates.length > 0
+  const canRedo = futureStates.length > 0
 
   const handleThemeToggle = () => {
     const modes: ThemeMode[] = ['light', 'dark', 'system']
@@ -101,8 +109,8 @@ export function FloatingToolbar({
   const ThemeIcon = themeMode === 'system' ? Monitor : resolvedTheme === 'dark' ? Moon : Sun
   const isDark = resolvedTheme === 'dark'
   const glowColor = isDark ? '255,255,255' : '0,0,0'
-  const shadowValue = isHovered 
-    ? `0 0 30px rgba(${glowColor},0.1), 0 0 60px rgba(${glowColor},0.05)` 
+  const shadowValue = isHovered
+    ? `0 0 30px rgba(${glowColor},0.1), 0 0 60px rgba(${glowColor},0.05)`
     : `0 0 20px rgba(${glowColor},0.05)`
 
   return (
@@ -137,9 +145,9 @@ export function FloatingToolbar({
       )} />
 
       <div className="flex items-center gap-2 px-2">
-        <span 
+        <span
           className="text-sm font-medium max-w-32 truncate transition-opacity duration-300"
-          style={{ 
+          style={{
             color: 'var(--color-text)',
             opacity: isHovered ? 1 : 0.5
           }}
@@ -154,20 +162,50 @@ export function FloatingToolbar({
         isHovered ? 'bg-[var(--color-border)]' : 'bg-[var(--color-border)]/30'
       )} />
 
+      {/* Undo/Redo buttons */}
       <ToolbarButton
-        icon={Blocks}
-        onClick={onTogglePalette}
-        tooltip="节点面板"
-        active={showPalette}
+        icon={Undo2}
+        onClick={() => undo()}
+        disabled={!canUndo}
+        tooltip="撤销 (⌘Z)"
         isHovered={isHovered}
       />
       <ToolbarButton
-        icon={FileText}
-        onClick={onToggleLogs}
-        tooltip="执行日志"
-        active={showLogs}
+        icon={Redo2}
+        onClick={() => redo()}
+        disabled={!canRedo}
+        tooltip="重做 (⌘⇧Z)"
         isHovered={isHovered}
       />
+
+      <div className={cn(
+        'w-px h-5 mx-1 transition-colors duration-300',
+        isHovered ? 'bg-[var(--color-border)]' : 'bg-[var(--color-border)]/30'
+      )} />
+
+      {/* Import/Export buttons */}
+      {onImport && (
+        <ToolbarButton
+          icon={Upload}
+          onClick={onImport}
+          tooltip="导入工作流"
+          isHovered={isHovered}
+        />
+      )}
+      {onExport && (
+        <ToolbarButton
+          icon={Download}
+          onClick={onExport}
+          tooltip="导出工作流"
+          isHovered={isHovered}
+        />
+      )}
+
+      <div className={cn(
+        'w-px h-5 mx-1 transition-colors duration-300',
+        isHovered ? 'bg-[var(--color-border)]' : 'bg-[var(--color-border)]/30'
+      )} />
+
       <ToolbarButton
         icon={Save}
         onClick={onSave}

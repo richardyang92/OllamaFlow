@@ -258,6 +258,34 @@ ipcMain.handle('workspace:delete', async (_, workspacePath: string) => {
   }
 })
 
+// Workflow: Export workflow to file
+ipcMain.handle('workflow:export', async (_, workflowData: string) => {
+  const result = await dialog.showSaveDialog(mainWindow!, {
+    title: '导出工作流',
+    defaultPath: 'workflow.ollamaflow',
+    filters: [{ name: 'OllamaFlow Workflow', extensions: ['ollamaflow', 'json'] }]
+  })
+
+  if (result.canceled || !result.filePath) return null
+
+  await fs.writeFile(result.filePath, workflowData, 'utf-8')
+  return result.filePath
+})
+
+// Workflow: Import workflow from file
+ipcMain.handle('workflow:import', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    title: '导入工作流',
+    filters: [{ name: 'OllamaFlow Workflow', extensions: ['ollamaflow', 'json'] }],
+    properties: ['openFile']
+  })
+
+  if (result.canceled || result.filePaths.length === 0) return null
+
+  const content = await fs.readFile(result.filePaths[0], 'utf-8')
+  return content
+})
+
 // File: Read file
 ipcMain.handle('file:read', async (_, workspacePath: string, relativePath: string) => {
   const fullPath = path.join(workspacePath, relativePath)
