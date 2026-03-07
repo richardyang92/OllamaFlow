@@ -1,0 +1,377 @@
+{
+  "metadata": {
+    "id": "6746c592-3d28-47f0-a42d-42d9791cbd50",
+    "name": "网页查询助手",
+    "createdAt": "2026-03-07T05:51:55.259Z",
+    "updatedAt": "2026-03-07T06:17:12.894Z",
+    "version": "1.0.0"
+  },
+  "nodes": [
+    {
+      "id": "input-1772862726237-w2ebqlya3",
+      "type": "input",
+      "position": {
+        "x": 675,
+        "y": 90
+      },
+      "data": {
+        "nodeType": "input",
+        "label": "输入",
+        "category": "Input",
+        "inputType": "string",
+        "defaultValue": "帮我搜索武汉今天的房价",
+        "prompt": "请输入一个值:",
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "value",
+            "label": "值",
+            "dataType": "any"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ollamaChat-1772862734370-fq2pc3k00",
+      "type": "ollamaChat",
+      "position": {
+        "x": 1170,
+        "y": 165
+      },
+      "data": {
+        "nodeType": "ollamaChat",
+        "label": "Ollama 对话",
+        "category": "AI",
+        "model": "glm-4.7-flash:latest",
+        "systemPrompt": "你是一个关键词提取助手。你的任务是从用户的搜索请求中提取3-5个最能代表其意图的关键词。请确保关键词准确、简洁，并优先选择名词或核心短语。如果用户输入的内容较短，无法提取出3个关键词，则返回实际可用的关键词（可能少于3个）。请以JSON字符串格式输出，格式为：{\"keywords\": [\"关键词1\", \"关键词2\", \"关键词3\"]}。注意：只输出JSON，不要包含其他解释或文字。",
+        "userMessage": "{{input}}",
+        "temperature": 0.7,
+        "topP": 0.9,
+        "maxTokens": 8192,
+        "stream": true,
+        "inputs": [
+          {
+            "id": "input",
+            "name": "input",
+            "label": "输入",
+            "dataType": "string"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "response",
+            "name": "response",
+            "label": "响应",
+            "dataType": "string"
+          }
+        ],
+        "debugMode": {
+          "enabled": true,
+          "apiEndpoint": "https://api.deepseek.com",
+          "apiKey": "",
+          "model": "deepseek-chat"
+        }
+      }
+    },
+    {
+      "id": "output-1772862964338-s0bfn95qa",
+      "type": "output",
+      "position": {
+        "x": 660,
+        "y": 525
+      },
+      "data": {
+        "nodeType": "output",
+        "label": "输出",
+        "category": "Output",
+        "outputType": "display",
+        "sourceType": "input",
+        "inputs": [
+          {
+            "id": "data",
+            "name": "data",
+            "label": "数据",
+            "dataType": "any"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "data",
+            "name": "data",
+            "label": "数据",
+            "dataType": "any"
+          }
+        ]
+      }
+    },
+    {
+      "id": "json-1772862976420-cnefh7149",
+      "type": "json",
+      "position": {
+        "x": 1725,
+        "y": 15
+      },
+      "data": {
+        "nodeType": "json",
+        "label": "JSON 处理",
+        "category": "Data",
+        "mode": "parse",
+        "jsonPath": "",
+        "inputs": [
+          {
+            "id": "input",
+            "name": "input",
+            "label": "输入",
+            "dataType": "any"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "output",
+            "name": "output",
+            "label": "输出",
+            "dataType": "any"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ollamaChat-1772863106790-j4ley5vs8",
+      "type": "ollamaChat",
+      "position": {
+        "x": 975,
+        "y": 615
+      },
+      "data": {
+        "nodeType": "ollamaChat",
+        "label": "Ollama 对话",
+        "category": "AI",
+        "model": "glm-4.7-flash:latest",
+        "systemPrompt": "你是一个搜索查询改写助手，专门为Bing搜索引擎优化搜索查询。你的任务是将用户提供的一组关键词改写成适合Bing的搜索提示词，以获取高质量、相关的搜索结果。改写后的查询应充分利用Bing的搜索特性（如精确匹配、排除词、站点限定、文件类型过滤等），同时保持自然语言的连贯性和清晰度。请将关键词组合成一个完整的自然语言查询（可以是问题或短语），确保包含所有关键信息。如果关键词本身已构成合理查询，可适当优化以提升搜索效果。输出格式为JSON，包含两个字段：\n\n\"search_query\": 改写后的搜索查询（字符串）\n\"website\": 固定为 \"www.bing.com\"\n例如：{\"search_query\": \"Python编程入门教程\", \"website\": \"www.bing.com\"}\n只输出JSON，不要包含其他解释或文字。",
+        "userMessage": "{{input}}",
+        "temperature": 0.7,
+        "topP": 0.9,
+        "maxTokens": 8192,
+        "stream": true,
+        "inputs": [
+          {
+            "id": "input",
+            "name": "input",
+            "label": "输入",
+            "dataType": "string"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "response",
+            "name": "response",
+            "label": "响应",
+            "dataType": "string"
+          }
+        ],
+        "debugMode": {
+          "enabled": true,
+          "apiEndpoint": "https://api.deepseek.com",
+          "apiKey": "",
+          "model": "deepseek-chat"
+        }
+      }
+    },
+    {
+      "id": "reactAgent-1772863239657-sjtcrvcmu",
+      "type": "reactAgent",
+      "position": {
+        "x": 1590,
+        "y": 525
+      },
+      "data": {
+        "nodeType": "reactAgent",
+        "label": "ReAct 智能体",
+        "category": "AI",
+        "model": "glm-4.7-flash:latest",
+        "systemPrompt": "你是一个善于分析和执行任务的智能助手。",
+        "userMessage": "{{input}}",
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "maxIterations": 40,
+        "enabledTools": [
+          "executeCommand",
+          "readFile",
+          "httpRequest",
+          "browser_navigate",
+          "browser_click",
+          "browser_type",
+          "browser_scroll",
+          "browser_screenshot",
+          "browser_getContent",
+          "browser_evaluate",
+          "browser_wait"
+        ],
+        "stream": true,
+        "inputs": [
+          {
+            "id": "input",
+            "name": "input",
+            "label": "输入",
+            "dataType": "string"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "response",
+            "name": "response",
+            "label": "最终回答",
+            "dataType": "string"
+          }
+        ],
+        "debugMode": {
+          "enabled": true,
+          "apiEndpoint": "https://api.deepseek.com",
+          "apiKey": "",
+          "model": "deepseek-chat"
+        }
+      }
+    },
+    {
+      "id": "output-1772863300324-xjfk0yzj6",
+      "type": "output",
+      "position": {
+        "x": 1980,
+        "y": 390
+      },
+      "data": {
+        "nodeType": "output",
+        "label": "输出",
+        "category": "Output",
+        "outputType": "display",
+        "sourceType": "input",
+        "inputs": [
+          {
+            "id": "data",
+            "name": "data",
+            "label": "数据",
+            "dataType": "any"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "data",
+            "name": "data",
+            "label": "数据",
+            "dataType": "any"
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1772862749855-f7zwuns5i",
+      "source": "input-1772862726237-w2ebqlya3",
+      "target": "ollamaChat-1772862734370-fq2pc3k00",
+      "sourceHandle": "value",
+      "targetHandle": "input",
+      "type": "default",
+      "animated": false,
+      "style": {
+        "stroke": "rgba(34, 211, 238, 0.6)",
+        "strokeWidth": 2
+      },
+      "data": {
+        "hoverColor": "rgba(34, 211, 238, 0.9)",
+        "baseColor": "rgba(34, 211, 238, 0.6)"
+      }
+    },
+    {
+      "id": "edge-1772862982571-e33erduep",
+      "source": "ollamaChat-1772862734370-fq2pc3k00",
+      "target": "json-1772862976420-cnefh7149",
+      "sourceHandle": "response",
+      "targetHandle": "input",
+      "type": "default",
+      "animated": false,
+      "style": {
+        "stroke": "rgba(167, 139, 250, 0.6)",
+        "strokeWidth": 2
+      },
+      "data": {
+        "hoverColor": "rgba(167, 139, 250, 0.9)",
+        "baseColor": "rgba(167, 139, 250, 0.6)"
+      }
+    },
+    {
+      "id": "edge-1772862985171-x7agfhhig",
+      "source": "json-1772862976420-cnefh7149",
+      "target": "output-1772862964338-s0bfn95qa",
+      "sourceHandle": "output",
+      "targetHandle": "data",
+      "type": "default",
+      "animated": false,
+      "style": {
+        "stroke": "rgba(249, 115, 22, 0.6)",
+        "strokeWidth": 2
+      },
+      "data": {
+        "hoverColor": "rgba(249, 115, 22, 0.9)",
+        "baseColor": "rgba(249, 115, 22, 0.6)"
+      }
+    },
+    {
+      "id": "edge-1772863110719-r12w2sc5s",
+      "source": "output-1772862964338-s0bfn95qa",
+      "target": "ollamaChat-1772863106790-j4ley5vs8",
+      "sourceHandle": "data",
+      "targetHandle": "input",
+      "type": "default",
+      "animated": false,
+      "style": {
+        "stroke": "rgba(45, 212, 191, 0.6)",
+        "strokeWidth": 2
+      },
+      "data": {
+        "hoverColor": "rgba(45, 212, 191, 0.9)",
+        "baseColor": "rgba(45, 212, 191, 0.6)"
+      }
+    },
+    {
+      "id": "edge-1772863306423-zoinjxjfy",
+      "source": "reactAgent-1772863239657-sjtcrvcmu",
+      "target": "output-1772863300324-xjfk0yzj6",
+      "sourceHandle": "response",
+      "targetHandle": "data",
+      "type": "default",
+      "animated": false,
+      "style": {
+        "stroke": "rgba(167, 139, 250, 0.6)",
+        "strokeWidth": 2
+      },
+      "data": {
+        "hoverColor": "rgba(167, 139, 250, 0.9)",
+        "baseColor": "rgba(167, 139, 250, 0.6)"
+      }
+    },
+    {
+      "id": "edge-1772864231428-0ndndnb05",
+      "source": "ollamaChat-1772863106790-j4ley5vs8",
+      "target": "reactAgent-1772863239657-sjtcrvcmu",
+      "sourceHandle": "response",
+      "targetHandle": "input",
+      "type": "default",
+      "animated": false,
+      "style": {
+        "stroke": "rgba(167, 139, 250, 0.6)",
+        "strokeWidth": 2
+      },
+      "data": {
+        "hoverColor": "rgba(167, 139, 250, 0.9)",
+        "baseColor": "rgba(167, 139, 250, 0.6)"
+      }
+    }
+  ],
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  }
+}

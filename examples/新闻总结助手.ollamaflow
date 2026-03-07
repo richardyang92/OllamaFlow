@@ -1,0 +1,323 @@
+{
+  "metadata": {
+    "id": "8c341b85-4141-49c8-a188-b8a052ccca6c",
+    "name": "新闻总结助手",
+    "createdAt": "2026-03-02T05:01:00.603Z",
+    "updatedAt": "2026-03-03T10:49:53.268Z",
+    "version": "1.0.0"
+  },
+  "nodes": [
+    {
+      "id": "input-1772431529490-33sa7ydlq",
+      "type": "input",
+      "position": {
+        "x": 345,
+        "y": 210
+      },
+      "data": {
+        "nodeType": "input",
+        "label": "输入",
+        "category": "Input",
+        "inputType": "string",
+        "defaultValue": "帮我总结今天的新闻热点",
+        "prompt": "请输入一个值:",
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "value",
+            "label": "值",
+            "dataType": "any"
+          }
+        ]
+      }
+    },
+    {
+      "id": "plan-1772431534756-6e0fxpziy",
+      "type": "plan",
+      "position": {
+        "x": 630,
+        "y": 210
+      },
+      "data": {
+        "nodeType": "plan",
+        "label": "智能规划",
+        "category": "AI",
+        "model": "glm-4.7-flash:latest",
+        "systemPrompt": "你是一个专业的任务规划助手。根据用户的任务描述，分析任务需求，如果信息不足则提出相关问题，最后生成详细的执行计划。",
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "inputs": [
+          {
+            "id": "task",
+            "name": "task",
+            "label": "任务描述",
+            "dataType": "string"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "plan",
+            "name": "plan",
+            "label": "执行计划",
+            "dataType": "string"
+          },
+          {
+            "id": "hadQuestions",
+            "name": "hadQuestions",
+            "label": "是否有提问",
+            "dataType": "boolean"
+          }
+        ],
+        "debugMode": {
+          "enabled": true,
+          "apiEndpoint": "https://api.deepseek.com",
+          "apiKey": "",
+          "model": "deepseek-chat"
+        }
+      }
+    },
+    {
+      "id": "output-1772431553406-3fmoupr0n",
+      "type": "output",
+      "position": {
+        "x": 345,
+        "y": 495
+      },
+      "data": {
+        "nodeType": "output",
+        "label": "输出",
+        "category": "Output",
+        "outputType": "display",
+        "sourceType": "input",
+        "inputs": [
+          {
+            "id": "data",
+            "name": "data",
+            "label": "数据",
+            "dataType": "any"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "data",
+            "name": "data",
+            "label": "数据",
+            "dataType": "any"
+          }
+        ]
+      }
+    },
+    {
+      "id": "output-1772431579239-zccsf1t7y",
+      "type": "output",
+      "position": {
+        "x": 630,
+        "y": 495
+      },
+      "data": {
+        "nodeType": "output",
+        "label": "输出",
+        "category": "Output",
+        "outputType": "display",
+        "sourceType": "input",
+        "inputs": [
+          {
+            "id": "data",
+            "name": "data",
+            "label": "数据",
+            "dataType": "any"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "data",
+            "name": "data",
+            "label": "数据",
+            "dataType": "any"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reactAgent-1772434290838-92cfk3pjc",
+      "type": "reactAgent",
+      "position": {
+        "x": 975,
+        "y": 210
+      },
+      "data": {
+        "nodeType": "reactAgent",
+        "label": "ReAct 智能体",
+        "category": "AI",
+        "model": "glm-4.7-flash:latest",
+        "systemPrompt": "你是一个善于分析和执行任务的智能助手。",
+        "userMessage": "{{input}}",
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "maxIterations": 50,
+        "enabledTools": [
+          "executeCommand",
+          "readFile",
+          "writeFile",
+          "httpRequest",
+          "browser_navigate",
+          "browser_click",
+          "browser_type",
+          "browser_scroll",
+          "browser_screenshot",
+          "browser_getContent",
+          "browser_evaluate",
+          "browser_wait"
+        ],
+        "stream": true,
+        "inputs": [
+          {
+            "id": "input",
+            "name": "input",
+            "label": "输入",
+            "dataType": "string"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "response",
+            "name": "response",
+            "label": "最终回答",
+            "dataType": "string"
+          }
+        ],
+        "debugMode": {
+          "enabled": true,
+          "apiEndpoint": "https://api.deepseek.com",
+          "apiKey": "",
+          "model": "deepseek-chat"
+        },
+        "enableUserInput": true
+      }
+    },
+    {
+      "id": "output-1772434301888-s1y4r3qvl",
+      "type": "output",
+      "position": {
+        "x": 1320,
+        "y": 210
+      },
+      "data": {
+        "nodeType": "output",
+        "label": "输出",
+        "category": "Output",
+        "outputType": "display",
+        "sourceType": "input",
+        "inputs": [
+          {
+            "id": "data",
+            "name": "data",
+            "label": "数据",
+            "dataType": "any"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "data",
+            "name": "data",
+            "label": "数据",
+            "dataType": "any"
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1772431540657-wv0nfdljl",
+      "source": "input-1772431529490-33sa7ydlq",
+      "target": "plan-1772431534756-6e0fxpziy",
+      "sourceHandle": "value",
+      "targetHandle": "task",
+      "type": "default",
+      "animated": false,
+      "style": {
+        "stroke": "rgba(34, 211, 238, 0.6)",
+        "strokeWidth": 2
+      },
+      "data": {
+        "hoverColor": "rgba(34, 211, 238, 0.9)",
+        "baseColor": "rgba(34, 211, 238, 0.6)"
+      }
+    },
+    {
+      "id": "edge-1772431575439-v29dm2ymy",
+      "source": "plan-1772431534756-6e0fxpziy",
+      "target": "output-1772431553406-3fmoupr0n",
+      "sourceHandle": "plan",
+      "targetHandle": "data",
+      "type": "default",
+      "animated": false,
+      "style": {
+        "stroke": "rgba(167, 139, 250, 0.6)",
+        "strokeWidth": 2
+      },
+      "data": {
+        "hoverColor": "rgba(167, 139, 250, 0.9)",
+        "baseColor": "rgba(167, 139, 250, 0.6)"
+      }
+    },
+    {
+      "id": "edge-1772431583192-2cqy0awcx",
+      "source": "plan-1772431534756-6e0fxpziy",
+      "target": "output-1772431579239-zccsf1t7y",
+      "sourceHandle": "hadQuestions",
+      "targetHandle": "data",
+      "type": "default",
+      "animated": false,
+      "style": {
+        "stroke": "rgba(167, 139, 250, 0.6)",
+        "strokeWidth": 2
+      },
+      "data": {
+        "hoverColor": "rgba(167, 139, 250, 0.9)",
+        "baseColor": "rgba(167, 139, 250, 0.6)"
+      }
+    },
+    {
+      "id": "edge-1772434297520-ulv0b6gcd",
+      "source": "plan-1772431534756-6e0fxpziy",
+      "target": "reactAgent-1772434290838-92cfk3pjc",
+      "sourceHandle": "plan",
+      "targetHandle": "input",
+      "type": "default",
+      "animated": false,
+      "style": {
+        "stroke": "rgba(167, 139, 250, 0.6)",
+        "strokeWidth": 2
+      },
+      "data": {
+        "hoverColor": "rgba(167, 139, 250, 0.9)",
+        "baseColor": "rgba(167, 139, 250, 0.6)"
+      }
+    },
+    {
+      "id": "edge-1772434310554-gx9s2hqhj",
+      "source": "reactAgent-1772434290838-92cfk3pjc",
+      "target": "output-1772434301888-s1y4r3qvl",
+      "sourceHandle": "response",
+      "targetHandle": "data",
+      "type": "default",
+      "animated": false,
+      "style": {
+        "stroke": "rgba(167, 139, 250, 0.6)",
+        "strokeWidth": 2
+      },
+      "data": {
+        "hoverColor": "rgba(167, 139, 250, 0.9)",
+        "baseColor": "rgba(167, 139, 250, 0.6)"
+      }
+    }
+  ],
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  }
+}
