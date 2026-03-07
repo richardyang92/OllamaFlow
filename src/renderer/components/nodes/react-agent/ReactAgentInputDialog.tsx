@@ -1,19 +1,21 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { MessageCircle } from 'lucide-react'
+import { MessageCircle, Loader2 } from 'lucide-react'
 
 interface Props {
   prompt: string
   context?: string
   onSubmit: (userInput: string) => void
   onCancel: () => void
+  isSubmitting?: boolean
 }
 
-export default function ReactAgentInputDialog({ 
-  prompt, 
+export default function ReactAgentInputDialog({
+  prompt,
   context,
-  onSubmit, 
-  onCancel 
+  onSubmit,
+  onCancel,
+  isSubmitting = false
 }: Props) {
   const [userInput, setUserInput] = useState('')
   const [error, setError] = useState('')
@@ -113,15 +115,18 @@ export default function ReactAgentInputDialog({
           <div className="flex items-center gap-2">
             <button
               onClick={onCancel}
-              className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-input)] rounded-lg transition-all"
+              disabled={isSubmitting}
+              className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-input)] rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               取消
             </button>
             <button
               onClick={handleSubmit}
-              className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all font-medium"
+              disabled={isSubmitting}
+              className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              发送
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isSubmitting ? '处理中...' : '发送'}
             </button>
           </div>
         </div>

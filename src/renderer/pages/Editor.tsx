@@ -17,6 +17,7 @@ import InputDialog from '@/components/workflow/InputDialog'
 import FilePreviewDialog from '@/components/workflow/FilePreviewDialog'
 import { initializeExecutors } from '@/engine/executor'
 import { executionManager } from '@/engine/execution-manager'
+import type { RecentWorkspace } from '@/types/workspace'
 
 function EditFeedback({ message }: { message: string }) {
   return (
@@ -35,7 +36,7 @@ function EditFeedback({ message }: { message: string }) {
 initializeExecutors()
 
 function EditorContent() {
-  const { currentWorkspace, clearCurrentWorkspace, setCurrentPage } = useWorkspaceStore()
+  const { currentWorkspace, clearCurrentWorkspace, setCurrentPage, updateConfig, addRecentWorkspace } = useWorkspaceStore()
   const { workflow, isDirty, markClean, syncEdgeAnimation } = useWorkflowStore()
   const resolvedTheme = useResolvedTheme()
   const {
@@ -339,10 +340,74 @@ function EditorContent() {
     }
   }, [currentWorkspace, workflow])
 
+  // Edit workspace info
+  const handleEditInfo = useCallback(async (name: string, description: string) => {
+    if (!currentWorkspace) return
+
+    const oldName = currentWorkspace.config.name
+    const oldPath = currentWorkspace.path
+
+    try {
+      // If name changed, rename the workspace directory
+      if (name !== oldName) {
+        const result = await window.electronAPI.workspace.rename(oldPath, name)
+
+        if (!result.success) {
+          setSaveFeedback(result.error || '重命名失败')
+          setTimeout(() => setSaveFeedback(null), 2000)
+          return
+        }
+
+        // Update workspace store with new path and config
+        useWorkspaceStore.getState().setCurrentWorkspace(result.newPath!, result.config!)
+
+        // Update description if changed
+        if (description !== currentWorkspace.config.description) {
+          await window.electronAPI.workspace.updateConfig(result.newPath!, { description })
+          updateConfig({ description })
+        }
+
+        // Update recent workspaces list with new path
+        addRecentWorkspace({
+          path: result.newPath!,
+          name,
+          description,
+          lastOpened: new Date().toISOString(),
+        } as RecentWorkspace)
+      } else {
+        // Only update description
+        const updatedConfig = await window.electronAPI.workspace.updateConfig(
+          oldPath,
+          { description }
+        )
+
+        if (updatedConfig) {
+          updateConfig({ description })
+
+          // Update recent workspaces list
+          addRecentWorkspace({
+            path: oldPath,
+            name,
+            description,
+            lastOpened: new Date().toISOString(),
+          } as RecentWorkspace)
+        }
+      }
+
+      setSaveFeedback('工作流信息已更新')
+      setTimeout(() => setSaveFeedback(null), 2000)
+    } catch (error) {
+      console.error('更新工作流信息失败:', error)
+      setSaveFeedback('更新失败')
+      setTimeout(() => setSaveFeedback(null), 2000)
+    }
+  }, [currentWorkspace, updateConfig, addRecentWorkspace])
+
   return (
     <div className="h-screen flex flex-col bg-[var(--color-bg-canvas)] text-[var(--color-text)] overflow-hidden">
       <FloatingToolbar
         workspaceName={currentWorkspace?.config.name || '未命名'}
+        workspaceDescription={currentWorkspace?.config.description || ''}
         isDirty={isDirty}
         executionStatus={executionStatus}
         saveActive={saveActive}
@@ -351,6 +416,7 @@ function EditorContent() {
         onExecute={handleExecute}
         onExport={handleExport}
         onImport={handleImport}
+        onEditInfo={handleEditInfo}
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">

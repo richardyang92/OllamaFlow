@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { HelpCircle } from 'lucide-react'
+import { HelpCircle, Loader2 } from 'lucide-react'
 import type { PlanQuestion } from '@/types/node'
 
 interface Props {
@@ -8,13 +8,15 @@ interface Props {
   onSubmit: (answers: Record<string, string>) => void
   onCancel: () => void
   taskDescription?: string
+  isSubmitting?: boolean
 }
 
-export default function PlanQuestionsDialog({ 
-  questions, 
-  onSubmit, 
+export default function PlanQuestionsDialog({
+  questions,
+  onSubmit,
   onCancel,
-  taskDescription 
+  taskDescription,
+  isSubmitting = false
 }: Props) {
   const [answers, setAnswers] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {}
@@ -58,9 +60,9 @@ export default function PlanQuestionsDialog({
     })
   }
   
-  const validate = (): boolean => {
+  const validate = (): Record<string, string> => {
     const newErrors: Record<string, string> = {}
-    
+
     questions.forEach(q => {
       if (q.required) {
         const value = answers[q.id]
@@ -69,18 +71,22 @@ export default function PlanQuestionsDialog({
         }
       }
     })
-    
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+
+    return newErrors
   }
-  
+
   const handleSubmit = () => {
     console.log('[PlanQuestionsDialog] handleSubmit called')
-    if (validate()) {
+    console.log('[PlanQuestionsDialog] Current answers:', answers)
+    console.log('[PlanQuestionsDialog] Questions:', questions)
+    const newErrors = validate()
+    setErrors(newErrors)
+
+    if (Object.keys(newErrors).length === 0) {
       console.log('[PlanQuestionsDialog] Validation passed, calling onSubmit')
       onSubmit(answers)
     } else {
-      console.log('[PlanQuestionsDialog] Validation failed', errors)
+      console.log('[PlanQuestionsDialog] Validation failed', newErrors)
     }
   }
   
@@ -279,15 +285,18 @@ export default function PlanQuestionsDialog({
           <div className="flex items-center gap-2">
             <button
               onClick={onCancel}
-              className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-input)] rounded-lg transition-all"
+              disabled={isSubmitting}
+              className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-input)] rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               取消
             </button>
             <button
               onClick={handleSubmit}
-              className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-all font-medium"
+              disabled={isSubmitting}
+              className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              生成计划
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isSubmitting ? '正在生成...' : '生成计划'}
             </button>
           </div>
         </div>

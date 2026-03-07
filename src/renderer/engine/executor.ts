@@ -297,6 +297,8 @@ export class WorkflowExecutor {
     this.isolatedMode = isolatedMode
     if (userInputValues) {
       this.userInputValues = new Map(Object.entries(userInputValues))
+      console.log('[WorkflowExecutor] 接收 userInputValues:', userInputValues)
+      console.log('[WorkflowExecutor] Map 内容:', Array.from(this.userInputValues.entries()))
     }
   }
 

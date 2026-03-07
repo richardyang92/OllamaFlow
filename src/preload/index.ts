@@ -217,6 +217,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     delete: (path: string): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('workspace:delete', path),
+
+    rename: (path: string, newName: string): Promise<{ success: boolean; newPath?: string; config?: WorkspaceConfig; error?: string }> =>
+      ipcRenderer.invoke('workspace:rename', path, newName),
   },
 
   // File operations
@@ -264,6 +267,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     import: (): Promise<string | null> =>
       ipcRenderer.invoke('workflow:import'),
+
+    discoverAll: (): Promise<Array<{ id: string; workspacePath: string; name: string; description?: string }>> =>
+      ipcRenderer.invoke('workflow:discoverAll'),
+
+    loadData: (workspacePath: string): Promise<WorkflowData | null> =>
+      ipcRenderer.invoke('workflow:loadData', workspacePath),
   },
 
   // Execution status
@@ -368,6 +377,92 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('openai:deleteApiKey', keyId),
   },
 
+  // Agent config storage
+  agent: {
+    getConfig: (): Promise<{
+      provider: 'ollama' | 'openai'
+      model: string
+      apiEndpoint?: string
+      apiKey?: string
+    } | null> => ipcRenderer.invoke('agent:getConfig'),
+
+    setConfig: (config: {
+      provider: 'ollama' | 'openai'
+      model: string
+      apiEndpoint?: string
+      apiKey?: string
+    }): Promise<boolean> => ipcRenderer.invoke('agent:setConfig', config),
+
+    // Conversation history
+    getConversationHistory: (): Promise<{
+      conversations: Array<{
+        id: string
+        title: string
+        createdAt: number
+        updatedAt: number
+        messageCount: number
+        preview?: string
+      }>
+      currentConversationId: string | null
+    } | null> => ipcRenderer.invoke('agent:getConversationHistory'),
+
+    saveConversationHistory: (history: {
+      conversations: Array<{
+        id: string
+        title: string
+        createdAt: number
+        updatedAt: number
+        messageCount: number
+        preview?: string
+      }>
+      currentConversationId: string | null
+    }): Promise<boolean> => ipcRenderer.invoke('agent:saveConversationHistory', history),
+
+    getConversation: (id: string): Promise<{
+      meta: {
+        id: string
+        title: string
+        createdAt: number
+        updatedAt: number
+        messageCount: number
+        preview?: string
+      }
+      messages: Array<{
+        id: string
+        role: 'user' | 'assistant'
+        content: string
+        timestamp: number
+        steps?: unknown[]
+        workflowCalls?: unknown[]
+        isStreaming?: boolean
+        responseStreaming?: boolean
+      }>
+    } | null> => ipcRenderer.invoke('agent:getConversation', id),
+
+    saveConversation: (id: string, messages: Array<{
+      id: string
+      role: 'user' | 'assistant'
+      content: string
+      timestamp: number
+      steps?: unknown[]
+      workflowCalls?: unknown[]
+      isStreaming?: boolean
+      responseStreaming?: boolean
+    }>): Promise<boolean> => ipcRenderer.invoke('agent:saveConversation', id, messages),
+
+    deleteConversation: (id: string): Promise<boolean> => ipcRenderer.invoke('agent:deleteConversation', id),
+
+    // Sandbox management
+    createSandbox: (workspacePath: string, conversationId: string): Promise<{ success: boolean; path?: string; error?: string }> =>
+      ipcRenderer.invoke('agent:createSandbox', workspacePath, conversationId),
+
+    deleteSandbox: (workspacePath: string, conversationId: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('agent:deleteSandbox', workspacePath, conversationId),
+
+    getSandboxPath: (workspacePath: string, conversationId: string): Promise<string> =>
+      ipcRenderer.invoke('agent:getSandboxPath', workspacePath, conversationId),
+  },
+
   // File Watcher
   fileWatcher: {
     start: (workspacePath: string): Promise<{ success: boolean; message?: string; error?: string }> =>
@@ -400,6 +495,7 @@ declare global {
         readWorkflow: (path: string) => Promise<WorkflowData | null>
         saveWorkflow: (path: string, workflow: WorkflowData) => Promise<boolean>
         delete: (path: string) => Promise<{ success: boolean; error?: string }>
+        rename: (path: string, newName: string) => Promise<{ success: boolean; newPath?: string; config?: WorkspaceConfig; error?: string }>
       }
       file: {
         read: (workspacePath: string, relativePath: string) => Promise<{ success: boolean; content?: string; error?: string }>
@@ -420,6 +516,8 @@ declare global {
       workflow: {
         export: (workflowData: string) => Promise<string | null>
         import: () => Promise<string | null>
+        discoverAll: () => Promise<Array<{ id: string; workspacePath: string; name: string; description?: string }>>
+        loadData: (workspacePath: string) => Promise<WorkflowData | null>
       }
       execution: {
         getAllStatuses: () => Promise<Record<string, WorkspaceExecutionStatus>>
@@ -458,6 +556,59 @@ declare global {
         getApiKey: (keyId: string) => Promise<string | null>
         setApiKey: (keyId: string, apiKey: string) => Promise<boolean>
         deleteApiKey: (keyId: string) => Promise<boolean>
+      }
+      agent: {
+        getConfig: () => Promise<{
+          provider: 'ollama' | 'openai'
+          model: string
+          apiEndpoint?: string
+          apiKey?: string
+        } | null>
+        setConfig: (config: {
+          provider: 'ollama' | 'openai'
+          model: string
+          apiEndpoint?: string
+          apiKey?: string
+        }) => Promise<boolean>
+        getConversationHistory: () => Promise<{
+          conversations: Array<{
+            id: string
+            title: string
+            createdAt: number
+            updatedAt: number
+            messageCount: number
+            preview?: string
+          }>
+          currentConversationId: string | null
+        } | null>
+        saveConversationHistory: (history: {
+          conversations: Array<{
+            id: string
+            title: string
+            createdAt: number
+            updatedAt: number
+            messageCount: number
+            preview?: string
+          }>
+          currentConversationId: string | null
+        }) => Promise<boolean>
+        getConversation: (id: string) => Promise<{
+          meta: {
+            id: string
+            title: string
+            createdAt: number
+            updatedAt: number
+            messageCount: number
+            preview?: string
+          }
+          messages: unknown[]
+        } | null>
+        saveConversation: (id: string, messages: unknown[]) => Promise<boolean>
+        deleteConversation: (id: string) => Promise<boolean>
+        // Sandbox management
+        createSandbox: (workspacePath: string, conversationId: string) => Promise<{ success: boolean; path?: string; error?: string }>
+        deleteSandbox: (workspacePath: string, conversationId: string) => Promise<{ success: boolean; error?: string }>
+        getSandboxPath: (workspacePath: string, conversationId: string) => Promise<string>
       }
       fileWatcher: {
         start: (workspacePath: string) => Promise<{ success: boolean; message?: string; error?: string }>

@@ -18,6 +18,8 @@ export function createInputExecutor(): NodeExecutor {
 
       // Check if user provided a value for this input node
       const userValue = context.userInputValues.get(node.id)
+      console.log(`[InputExecutor] node.id=${node.id}, userValue=${userValue}`)
+      console.log(`[InputExecutor] userInputValues keys:`, Array.from(context.userInputValues.keys()))
 
       // Use user-provided value, or fall back to default value
       let value: string | number | boolean = userValue || resolvedDefault

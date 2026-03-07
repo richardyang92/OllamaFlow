@@ -258,6 +258,36 @@ ipcMain.handle('workspace:delete', async (_, workspacePath: string) => {
   }
 })
 
+// Workspace: Rename workspace folder
+ipcMain.handle('workspace:rename', async (_, workspacePath: string, newName: string) => {
+  try {
+    const parentDir = path.dirname(workspacePath)
+    const newPath = path.join(parentDir, newName)
+
+    // Check if target path already exists
+    try {
+      await fs.access(newPath)
+      return { success: false, error: '目标目录已存在' }
+    } catch {
+      // Target doesn't exist, proceed
+    }
+
+    await fs.rename(workspacePath, newPath)
+
+    // Update config with new name
+    const configPath = path.join(newPath, '.ollamaflow', 'config.json')
+    const existingContent = await fs.readFile(configPath, 'utf-8')
+    const existingConfig = JSON.parse(existingContent)
+    const updatedConfig = { ...existingConfig, name: newName, lastOpened: new Date().toISOString() }
+    await fs.writeFile(configPath, JSON.stringify(updatedConfig, null, 2))
+
+    return { success: true, newPath, config: updatedConfig }
+  } catch (error) {
+    console.error('重命名工作区失败:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
 // Workflow: Export workflow to file
 ipcMain.handle('workflow:export', async (_, workflowData: string) => {
   const result = await dialog.showSaveDialog(mainWindow!, {
@@ -508,6 +538,65 @@ ipcMain.handle('recent:remove', async (_, workspacePath: string) => {
   return recent
 })
 
+// ==================== Workflow Discovery ====================
+
+// Workflow: Discover all workflows from recent workspaces
+ipcMain.handle('workflow:discoverAll', async () => {
+  try {
+    const s = await getStore()
+    const recent = s.get('recent-workspaces', []) as Array<{
+      path: string
+      name: string
+      description?: string
+      lastOpened: string
+    }>
+
+    const workflows: Array<{
+      id: string
+      workspacePath: string
+      name: string
+      description?: string
+    }> = []
+
+    for (let i = 0; i < recent.length; i++) {
+      const workspace = recent[i]
+      try {
+        // Check if workspace still exists
+        const configPath = path.join(workspace.path, '.ollamaflow', 'config.json')
+        await fs.access(configPath)
+
+        // 使用索引生成唯一 ID，避免中文命名冲突
+        const id = `wf_${i}`
+
+        workflows.push({
+          id,
+          workspacePath: workspace.path,
+          name: workspace.name,
+          description: workspace.description,
+        })
+      } catch {
+        // Workspace no longer exists, skip it
+      }
+    }
+
+    return workflows
+  } catch (error) {
+    console.error('Failed to discover workflows:', error)
+    return []
+  }
+})
+
+// Workflow: Load workflow data from a workspace
+ipcMain.handle('workflow:loadData', async (_, workspacePath: string) => {
+  try {
+    const workflowPath = path.join(workspacePath, '.ollamaflow', 'workflow.json')
+    const content = await fs.readFile(workflowPath, 'utf-8')
+    return JSON.parse(content)
+  } catch {
+    return null
+  }
+})
+
 // ==================== OpenAI API Key Storage ====================
 
 // OpenAI: Get API key
@@ -533,6 +622,130 @@ ipcMain.handle('openai:deleteApiKey', async (_, keyId: string) => {
   delete keys[keyId]
   s.set('openai-api-keys', keys)
   return true
+})
+
+// ==================== Agent Config Storage ====================
+
+// Agent: Get config
+ipcMain.handle('agent:getConfig', async () => {
+  const s = await getStore()
+  return s.get('agent-config', null) as {
+    provider: 'ollama' | 'openai'
+    model: string
+    apiEndpoint?: string
+    apiKey?: string
+  } | null
+})
+
+// Agent: Set config
+ipcMain.handle('agent:setConfig', async (_, config: {
+  provider: 'ollama' | 'openai'
+  model: string
+  apiEndpoint?: string
+  apiKey?: string
+}) => {
+  const s = await getStore()
+  s.set('agent-config', config)
+  return true
+})
+
+// Agent: Get conversation history
+ipcMain.handle('agent:getConversationHistory', async () => {
+  const s = await getStore()
+  return s.get('agent-conversation-history', null) as {
+    conversations: Array<{
+      id: string
+      title: string
+      createdAt: number
+      updatedAt: number
+      messageCount: number
+      preview?: string
+    }>
+    currentConversationId: string | null
+  } | null
+})
+
+// Agent: Save conversation history
+ipcMain.handle('agent:saveConversationHistory', async (_, history: {
+  conversations: Array<{
+    id: string
+    title: string
+    createdAt: number
+    updatedAt: number
+    messageCount: number
+    preview?: string
+  }>
+  currentConversationId: string | null
+}) => {
+  const s = await getStore()
+  s.set('agent-conversation-history', history)
+  return true
+})
+
+// Agent: Get conversation messages
+ipcMain.handle('agent:getConversation', async (_, id: string) => {
+  const s = await getStore()
+  const key = `agent-conversation-${id}`
+  return s.get(key, null) as {
+    meta: {
+      id: string
+      title: string
+      createdAt: number
+      updatedAt: number
+      messageCount: number
+      preview?: string
+    }
+    messages: unknown[]
+  } | null
+})
+
+// Agent: Save conversation messages
+ipcMain.handle('agent:saveConversation', async (_, id: string, messages: unknown[]) => {
+  const s = await getStore()
+  const key = `agent-conversation-${id}`
+  s.set(key, { messages, savedAt: Date.now() })
+  return true
+})
+
+// Agent: Delete conversation
+ipcMain.handle('agent:deleteConversation', async (_, id: string) => {
+  const s = await getStore()
+  const key = `agent-conversation-${id}`
+  s.delete(key)
+  return true
+})
+
+// ==================== Agent Sandbox ====================
+
+// 沙箱目录基础路径（工作区根目录下的独立隐藏目录）
+const getAgentSandboxBasePath = (workspacePath: string) =>
+  path.join(workspacePath, '.agent-sandbox')
+
+// Agent: Create sandbox directory for conversation
+ipcMain.handle('agent:createSandbox', async (_, workspacePath: string, conversationId: string) => {
+  const sandboxPath = path.join(getAgentSandboxBasePath(workspacePath), conversationId)
+  try {
+    await fs.mkdir(sandboxPath, { recursive: true })
+    return { success: true, path: sandboxPath }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// Agent: Delete sandbox directory for conversation
+ipcMain.handle('agent:deleteSandbox', async (_, workspacePath: string, conversationId: string) => {
+  const sandboxPath = path.join(getAgentSandboxBasePath(workspacePath), conversationId)
+  try {
+    await fs.rm(sandboxPath, { recursive: true, force: true })
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// Agent: Get sandbox path for conversation
+ipcMain.handle('agent:getSandboxPath', async (_, workspacePath: string, conversationId: string) => {
+  return path.join(getAgentSandboxBasePath(workspacePath), conversationId)
 })
 
 // HTTP: Fetch URL

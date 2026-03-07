@@ -5,7 +5,7 @@ import { useExecutionStore } from './execution-store'
 const DEBUG = true
 const log = (...args: unknown[]) => DEBUG && console.log('[WorkspaceStore]', ...args)
 
-type AppPage = 'welcome' | 'wizard' | 'editor'
+type AppPage = 'welcome' | 'wizard' | 'editor' | 'agent'
 
 interface WorkspaceState {
   currentWorkspace: {

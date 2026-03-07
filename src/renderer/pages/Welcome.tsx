@@ -9,6 +9,7 @@ import {
   WorkspaceCard,
   NewWorkspaceCard,
   WorkspaceGrid,
+  AgentFloatingButton,
 } from '@/components/dashboard'
 import { ConfirmDialog } from '@/components/common'
 
@@ -310,6 +311,8 @@ export default function WelcomePage() {
       <div className="fixed bottom-6 left-0 right-0 text-center text-[var(--color-text-muted)] text-sm">
         v0.1.0 • 由 Ollama 驱动
       </div>
+
+      <AgentFloatingButton onClick={() => setCurrentPage('agent')} />
 
       <ConfirmDialog
         isOpen={deleteConfirmWorkspace !== null}

@@ -7,6 +7,12 @@ import { Ollama } from 'ollama/browser'
 import { executeTool, TodosManager, getEnabledTools } from '../tools'
 import { useExecutionStore } from '@/store/execution-store'
 import { OpenAIClient, OpenAIMessage, parseToolCallArgs } from '../openai-client'
+import {
+  compressOpenAIContext,
+  compressOllamaContext,
+  estimateMessageTokens,
+  getContextConfig
+} from '../react-agent/context-compressor'
 
 // Tool parameter property type
 interface ToolParamProperty {
@@ -715,6 +721,10 @@ WAIT_FOR_INPUT: 我找到了两种方案：
         { role: 'user', content: userMessage }
       ]
 
+      // Get context configuration for the model
+      const contextConfig = getContextConfig(data.model)
+      const maxContextTokens = contextConfig.maxContextTokens - contextConfig.reserveTokens
+
       while (iteration < maxIterations && !finalAnswer) {
         // Check if execution was cancelled
         if (context.signal?.aborted) {
@@ -728,6 +738,40 @@ WAIT_FOR_INPUT: 我找到了两种方案：
         }
 
         iteration++
+
+        // Auto-compress context if approaching token limit
+        const currentTokens = estimateMessageTokens(messages)
+        if (currentTokens > maxContextTokens * 0.8) {
+          context.onLog?.({
+            nodeId: node.id,
+            nodeName: data.label,
+            level: 'warn',
+            message: `上下文接近限制 (${Math.round(currentTokens / 1000)}k tokens)，正在自动压缩...`,
+          })
+
+          const compressionResult = compressOllamaContext(messages, maxContextTokens, {
+            keepRecentIterations: contextConfig.keepRecentIterations,
+            maxObservationLength: contextConfig.maxObservationLength,
+            enableSummarization: contextConfig.enableSummarization,
+          })
+
+          // Replace messages with compressed version
+          messages.length = 0
+          messages.push(...compressionResult.messages)
+
+          if (compressionResult.compressed) {
+            context.onLog?.({
+              nodeId: node.id,
+              nodeName: data.label,
+              level: 'info',
+              message: `上下文已压缩: ${Math.round(compressionResult.originalTokens / 1000)}k → ${Math.round(compressionResult.newTokens / 1000)}k tokens (${Math.round(compressionResult.compressionRatio * 100)}%)`,
+            })
+
+            if (data.stream && compressionResult.summary) {
+              context.onStream?.(node.id, `\n📦 ${compressionResult.summary}\n`)
+            }
+          }
+        }
 
         // Detect loop behavior
         const loopInfo = detectLoop(messages)
@@ -1454,6 +1498,10 @@ WAIT_FOR_INPUT: 我找到了两种方案：
     { role: 'user', content: userMessage }
   ]
 
+  // Get context configuration for the model
+  const contextConfig = getContextConfig(debugMode.model)
+  const maxContextTokens = contextConfig.maxContextTokens - contextConfig.reserveTokens
+
   while (iteration < maxIterations && !finalAnswer) {
     // Check if execution was cancelled
     if (context.signal?.aborted) {
@@ -1467,6 +1515,40 @@ WAIT_FOR_INPUT: 我找到了两种方案：
     }
 
     iteration++
+
+    // Auto-compress context if approaching token limit
+    const currentTokens = estimateMessageTokens(messages)
+    if (currentTokens > maxContextTokens * 0.8) {
+      context.onLog?.({
+        nodeId: node.id,
+        nodeName: data.label,
+        level: 'warn',
+        message: `上下文接近限制 (${Math.round(currentTokens / 1000)}k tokens)，正在自动压缩...`,
+      })
+
+      const compressionResult = compressOpenAIContext(messages, maxContextTokens, {
+        keepRecentIterations: contextConfig.keepRecentIterations,
+        maxObservationLength: contextConfig.maxObservationLength,
+        enableSummarization: contextConfig.enableSummarization,
+      })
+
+      // Replace messages with compressed version
+      messages.length = 0
+      messages.push(...compressionResult.messages)
+
+      if (compressionResult.compressed) {
+        context.onLog?.({
+          nodeId: node.id,
+          nodeName: data.label,
+          level: 'info',
+          message: `上下文已压缩: ${Math.round(compressionResult.originalTokens / 1000)}k → ${Math.round(compressionResult.newTokens / 1000)}k tokens (${Math.round(compressionResult.compressionRatio * 100)}%)`,
+        })
+
+        if (data.stream && compressionResult.summary) {
+          context.onStream?.(node.id, `\n📦 ${compressionResult.summary}\n`)
+        }
+      }
+    }
 
     // Create new step in ReAct state
     const stepId = `step-${iteration}-${Date.now()}`

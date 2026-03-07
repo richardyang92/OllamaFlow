@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Play, Square, Save, ArrowLeft, Sun, Moon, Monitor, Undo2, Redo2, Download, Upload } from 'lucide-react'
+import { Play, Square, Save, ArrowLeft, Sun, Moon, Monitor, Undo2, Redo2, Download, Upload, Pencil } from 'lucide-react'
+import { WorkspaceEditDialog } from './WorkspaceEditDialog'
 import { useTheme, type ThemeMode } from '@/contexts/ThemeContext'
 import { useTemporalStore } from '@/store/workflow-store'
 import type { ExecutionStatus } from '@/types/execution'
@@ -8,6 +9,7 @@ import { cn } from '@/lib/utils'
 
 interface FloatingToolbarProps {
   workspaceName: string
+  workspaceDescription?: string
   isDirty: boolean
   executionStatus: ExecutionStatus
   saveActive: boolean
@@ -16,6 +18,7 @@ interface FloatingToolbarProps {
   onExecute: () => void
   onExport?: () => void
   onImport?: () => void
+  onEditInfo?: (name: string, description: string) => void
 }
 
 function StatusIndicator({
@@ -76,6 +79,7 @@ function StatusIndicator({
 
 export function FloatingToolbar({
   workspaceName,
+  workspaceDescription,
   isDirty,
   executionStatus,
   saveActive,
@@ -84,9 +88,11 @@ export function FloatingToolbar({
   onExecute,
   onExport,
   onImport,
+  onEditInfo,
 }: FloatingToolbarProps) {
   const { themeMode, setThemeMode, resolvedTheme } = useTheme()
   const [isHovered, setIsHovered] = useState(false)
+  const [showEditDialog, setShowEditDialog] = useState(false)
 
   // Undo/Redo state
   const { undo, redo, pastStates, futureStates } = useTemporalStore((state) => ({
@@ -155,6 +161,14 @@ export function FloatingToolbar({
           {workspaceName}
         </span>
         <StatusIndicator isDirty={isDirty} executionStatus={executionStatus} />
+        {onEditInfo && (
+          <ToolbarButton
+            icon={Pencil}
+            onClick={() => setShowEditDialog(true)}
+            tooltip="编辑工作流信息"
+            isHovered={isHovered}
+          />
+        )}
       </div>
 
       <div className={cn(
@@ -234,6 +248,19 @@ export function FloatingToolbar({
         tooltip={`主题: ${themeMode === 'system' ? '跟随系统' : themeMode === 'dark' ? '深色' : '浅色'}`}
         isHovered={isHovered}
       />
+
+      {/* Edit Dialog */}
+      {showEditDialog && onEditInfo && (
+        <WorkspaceEditDialog
+          name={workspaceName}
+          description={workspaceDescription || ''}
+          onSubmit={(name, description) => {
+            onEditInfo(name, description)
+            setShowEditDialog(false)
+          }}
+          onCancel={() => setShowEditDialog(false)}
+        />
+      )}
     </motion.div>
   )
 }
