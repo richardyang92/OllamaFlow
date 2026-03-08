@@ -155,11 +155,12 @@ export function DrawerHeader({ title, subtitle, className = '' }: DrawerHeaderPr
 interface DrawerContentProps {
   children: ReactNode
   className?: string
+  contentRef?: React.RefObject<HTMLDivElement>
 }
 
-export function DrawerContent({ children, className = '' }: DrawerContentProps) {
+export function DrawerContent({ children, className = '', contentRef }: DrawerContentProps) {
   return (
-    <div className={cn('flex-1 overflow-y-auto p-4', className)}>
+    <div ref={contentRef} className={cn('flex-1 overflow-y-auto p-4', className)}>
       {children}
     </div>
   )

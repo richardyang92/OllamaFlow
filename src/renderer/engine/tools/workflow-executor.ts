@@ -4,7 +4,7 @@
 
 import type { Node, Edge } from '@xyflow/react'
 import type { WorkflowNodeData, ReActStep } from '@/types/node'
-import type { GeneratedFileInfo } from '@/store/agent-store'
+import type { GeneratedFileInfo, ReActStepDetail } from '@/store/agent-store'
 import { useExecutionStore } from '@/store/execution-store'
 
 const DEBUG = false
@@ -24,10 +24,46 @@ export interface SubAgentProgressCallback {
     detail: {
       currentIteration: number
       maxIterations: number
+      steps: ReActStep[]           // 所有步骤（新增）
       currentStep?: ReActStep
       totalSteps: number
     }
   ) => void
+  // Ollama Chat 节点状态更新回调
+  onOllamaChatUpdate?: (
+    nodeId: string,
+    nodeName: string,
+    detail: {
+      model: string
+      reasoningContent?: string
+      reasoningStreaming?: boolean
+      responseContent?: string
+      responseStreaming?: boolean
+    }
+  ) => void
+  // 节点步骤回调（新增）- 将工作流节点执行作为步骤发送
+  onNodeStep?: (step: {
+    id: string
+    nodeId: string
+    nodeName: string
+    nodeType: string
+    status: 'pending' | 'running' | 'completed' | 'error'
+    startTime: number
+    endTime?: number
+    thought?: string
+    thoughtStreaming?: boolean
+    observation?: string
+    observationStreaming?: boolean
+    observationError?: boolean
+    reactAgentSteps?: ReActStepDetail[]
+    error?: string
+  }) => void
+  // 节点步骤更新回调（新增）
+  onNodeStepUpdate?: (nodeId: string, update: {
+    thought?: string
+    observation?: string
+    reactAgentSteps?: ReActStepDetail[]
+  }) => void
 }
 
 // 工作流执行结果
@@ -175,6 +211,8 @@ export async function executeWorkflowAsSubAgent(
     const executableNodes = nodes.filter((n) => n.type !== 'trigger')
     const totalNodesCount = executableNodes.length
     const completedNodeIds = new Set<string>() // 跟踪已完成的节点
+    const trackedNodeIds = new Set<string>() // 跟踪已发送开始事件的节点
+    const nodeStartTimes = new Map<string, number>() // 记录节点开始时间
 
     // 通知开始执行，传递总节点数
     options?.onProgress?.onStatusChange('running')
@@ -204,40 +242,133 @@ export async function executeWorkflowAsSubAgent(
       let runningNodeId: string | null = null
       currentExecution.context.nodeResults.forEach((result, nodeId) => {
         const nodeName = nodeNameMap.get(nodeId) || nodeId
+        const node = nodes.find(n => n.id === nodeId)
+        const nodeType = node?.type || 'unknown'
 
-        // 检查正在运行的节点
-        if (result.status === 'running') {
+        // 检查节点是否刚开始运行（发送节点步骤）
+        if (result.status === 'running' && !trackedNodeIds.has(nodeId)) {
+          trackedNodeIds.add(nodeId)
+          nodeStartTimes.set(nodeId, Date.now())
+
+          // 创建节点步骤
+          const stepId = `nodestep_${Date.now()}_${nodeId}`
+          const startTime = Date.now()
+
+          options?.onProgress?.onNodeStep?.({
+            id: stepId,
+            nodeId,
+            nodeName,
+            nodeType,
+            status: 'running',
+            startTime,
+            thought: typeof result.input === 'string' ? result.input : JSON.stringify(result.input),
+          })
+
           runningNodeName = nodeName
           runningNodeId = nodeId
         }
 
-        // 统计已完成的节点（success 或 error 状态）
-        if (result.status === 'success' || result.status === 'error') {
+        // 检查节点是否刚完成（更新节点步骤）
+        if ((result.status === 'success' || result.status === 'error') && !completedNodeIds.has(nodeId)) {
           completedNodeIds.add(nodeId)
+          const startTime = nodeStartTimes.get(nodeId) || Date.now()
+          const endTime = Date.now()
+
+          // 更新节点步骤为完成状态
+          options?.onProgress?.onNodeStep?.({
+            id: `nodestep_${nodeId}`,
+            nodeId,
+            nodeName,
+            nodeType,
+            status: result.status === 'success' ? 'completed' : 'error',
+            startTime,
+            endTime,
+            observation: typeof result.output === 'string' ? result.output : JSON.stringify(result.output),
+            error: result.error,
+          })
+        }
+
+        // 检查正在运行的节点（用于流式更新）
+        if (result.status === 'running') {
+          runningNodeName = nodeName
+          runningNodeId = nodeId
+
+          // 处理 ReAct Agent 节点的内部状态
+          if (nodeType === 'reactAgent') {
+            const reactState = executionStore.getReActState(executionId, nodeId)
+            if (reactState && reactState.steps.length > 0) {
+              const lastStep = reactState.steps[reactState.steps.length - 1]
+
+              // 发送思考流式更新
+              if (lastStep.thoughtStreaming && lastStep.thought) {
+                options?.onProgress?.onNodeStepUpdate?.(nodeId, {
+                  thought: lastStep.thought,
+                })
+              }
+
+              // 发送工具调用更新
+              if (lastStep.action && lastStep.observation) {
+                options?.onProgress?.onNodeStepUpdate?.(nodeId, {
+                  observation: lastStep.observation,
+                })
+              }
+            }
+
+            // 发送 ReAct Agent 状态更新（只在 reactState 存在时）
+            if (reactState) {
+              options?.onProgress?.onReactAgentUpdate?.(
+                nodeId,
+                nodeName,
+                {
+                  currentIteration: reactState.currentIteration,
+                  maxIterations: reactState.maxIterations,
+                  steps: reactState.steps,
+                  currentStep: reactState.steps[reactState.steps.length - 1],
+                  totalSteps: reactState.steps.length,
+                }
+              )
+            }
+          }
+          // 处理 Ollama Chat 节点的流式输出
+          else if (nodeType === 'ollamaChat') {
+            const reasoningContent = executionStore.getReasoningStreamOutput(executionId, nodeId)
+            const streamOutput = executionStore.getStreamOutput(executionId, nodeId)
+
+            // 发送推理流式更新
+            if (reasoningContent) {
+              options?.onProgress?.onNodeStepUpdate?.(nodeId, {
+                thought: reasoningContent,
+              })
+            }
+
+            // 发送输出流式更新
+            if (streamOutput) {
+              options?.onProgress?.onNodeStepUpdate?.(nodeId, {
+                observation: streamOutput,
+              })
+            }
+
+            const nodeData = node?.data as { model?: string; label?: string }
+
+            // 发送 Ollama Chat 状态更新
+            options?.onProgress?.onOllamaChatUpdate?.(
+              nodeId,
+              nodeName,
+              {
+                model: nodeData?.model || 'unknown',
+                reasoningContent: reasoningContent || undefined,
+                reasoningStreaming: !!reasoningContent,
+                responseContent: streamOutput || undefined,
+                responseStreaming: !!streamOutput,
+              }
+            )
+          }
         }
       })
 
       // 通知当前节点和进度
       if (runningNodeName !== null && runningNodeId !== null) {
         options?.onProgress?.onNodeStart(runningNodeName, runningNodeId)
-
-        // 检查是否是 ReAct Agent 节点，如果是则获取其内部状态
-        const runningNode = nodes.find(n => n.id === runningNodeId)
-        if (runningNode?.type === 'reactAgent') {
-          const reactState = executionStore.getReActState(executionId, runningNodeId)
-          if (reactState) {
-            options?.onProgress?.onReactAgentUpdate?.(
-              runningNodeId,
-              runningNodeName,
-              {
-                currentIteration: reactState.currentIteration,
-                maxIterations: reactState.maxIterations,
-                currentStep: reactState.steps[reactState.steps.length - 1],
-                totalSteps: reactState.steps.length,
-              }
-            )
-          }
-        }
       }
       options?.onProgress?.onProgress(completedNodeIds.size, totalNodesCount)
     }, 200) // 每200ms检查一次
@@ -322,8 +453,28 @@ export async function executeWorkflowAsSubAgent(
       }
     })
 
+    console.log('[🏖️ WORKFLOW_EXECUTOR] 收集生成的文件', {
+      workspacePath,
+      generatedFilesCount: generatedFiles.length,
+      generatedFiles,
+    })
+
     if (generatedFiles.length > 0) {
       addLog(`生成了 ${generatedFiles.length} 个文件: ${generatedFiles.map(f => f.path).join(', ')}`)
+    } else {
+      console.log('[🏖️ WORKFLOW_EXECUTOR] 没有找到 writeFile 节点或文件写入失败')
+      // 调试：打印所有 writeFile 节点的结果
+      nodeResults.forEach((result, nodeId) => {
+        const node = nodes.find((n) => n.id === nodeId)
+        if (node?.type === 'writeFile') {
+          console.log('[🏖️ WORKFLOW_EXECUTOR] writeFile 节点结果', {
+            nodeId,
+            output: result.output,
+            status: result.status,
+            error: result.error,
+          })
+        }
+      })
     }
 
     // 清理执行状态

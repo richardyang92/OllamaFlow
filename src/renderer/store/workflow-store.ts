@@ -106,6 +106,12 @@ interface WorkflowState {
 
   // Edge animation sync
   syncEdgeAnimation: (runningNodeIds: string[]) => void
+
+  // Batch update node models
+  updateAllNodeModels: (oldModel: string, newModel: string) => void
+
+  // Save workflow to file
+  saveCurrentWorkflow: () => Promise<boolean>
 }
 
 export const useWorkflowStore = create<WorkflowState>()(
@@ -277,6 +283,108 @@ export const useWorkflowStore = create<WorkflowState>()(
             edges: updatedEdges,
             workflow: { ...workflow, edges: updatedEdges }
           })
+        }
+      },
+
+      updateAllNodeModels: (oldModel: string, newModel: string) => {
+        const { nodes } = get()
+        if (!oldModel || !newModel || oldModel === newModel) return
+
+        // Node types that have model field
+        const modelNodeTypes = ['ollamaChat', 'reactAgent', 'smartRouter', 'plan']
+
+        let hasChanges = false
+        const updatedNodes = nodes.map((node) => {
+          // Check if this node type supports model field and matches old model
+          if (
+            modelNodeTypes.includes(node.data.nodeType) &&
+            'model' in node.data &&
+            node.data.model === oldModel
+          ) {
+            hasChanges = true
+            return {
+              ...node,
+              data: { ...node.data, model: newModel }
+            }
+          }
+          return node
+        }) as Node<WorkflowNodeData>[]
+
+        if (hasChanges) {
+          set({
+            nodes: updatedNodes,
+            isDirty: true
+          })
+        }
+      },
+
+      saveCurrentWorkflow: async () => {
+        const { workflow, nodes, edges } = get()
+        if (!workflow) return false
+
+        try {
+          // Serialize nodes
+          const serializedNodes = nodes.map(node => ({
+            id: node.id,
+            type: node.type,
+            position: node.position,
+            parentId: node.parentId,
+            extent: node.extent,
+            expandParent: node.expandParent,
+            width: node.width,
+            height: node.height,
+            data: node.data
+          }))
+
+          // Serialize edges
+          const serializedEdges = edges.map(edge => ({
+            id: edge.id,
+            source: edge.source,
+            target: edge.target,
+            sourceHandle: edge.sourceHandle,
+            targetHandle: edge.targetHandle,
+            type: edge.type,
+            animated: edge.animated,
+            style: edge.style,
+            data: edge.data
+          }))
+
+          const updatedWorkflow = {
+            ...workflow,
+            metadata: {
+              ...workflow.metadata,
+              updatedAt: new Date().toISOString(),
+            },
+            nodes: serializedNodes,
+            edges: serializedEdges,
+          }
+
+          // Get workspace path from workflow metadata or use a different approach
+          // We need to get the current workspace path from workspace-store
+          const { useWorkspaceStore } = await import('./workspace-store')
+          const workspacePath = useWorkspaceStore.getState().currentWorkspace?.path
+
+          if (!workspacePath) {
+            console.error('[WorkflowStore] No workspace path found')
+            return false
+          }
+
+          const success = await window.electronAPI.workspace.saveWorkflow(
+            workspacePath,
+            updatedWorkflow
+          )
+
+          if (success) {
+            set({
+              workflow: updatedWorkflow,
+              isDirty: false
+            })
+            return true
+          }
+          return false
+        } catch (error) {
+          console.error('[WorkflowStore] Failed to save workflow:', error)
+          return false
         }
       },
     }),

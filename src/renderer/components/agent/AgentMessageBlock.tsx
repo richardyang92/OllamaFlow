@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import type { AgentMessage } from '@/store/agent-store'
 import { AgentStepBlock } from './AgentStepBlock'
 import AgentMarkdown from './AgentMarkdown'
-import GeneratedFilesBlock from './GeneratedFilesBlock'
+import StreamingFlashText from '@/components/nodes/shared/StreamingFlashText'
 
 interface AgentMessageBlockProps {
   message: AgentMessage
@@ -191,6 +191,8 @@ function AssistantMessage({
   const hasContent = message.content && message.content.trim().length > 0
   const isStreaming = message.isStreaming
   const responseStreaming = message.responseStreaming
+  const hasReasoningContent = message.reasoningContent && message.reasoningContent.trim().length > 0
+  const reasoningStreaming = message.reasoningStreaming
 
   // 当执行完成（不在流式中）且有最终回复时，收起执行过程
   const shouldCollapseSteps = !isStreaming && !responseStreaming && Boolean(hasContent)
@@ -234,6 +236,46 @@ function AssistantMessage({
           )}
         </div>
 
+        {/* 推理内容快闪展示 - DeepSeek R1 等 */}
+        {(reasoningStreaming || hasReasoningContent) && isStreaming && (
+          <motion.div
+            layout
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mb-3 overflow-hidden"
+          >
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <motion.span
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                  className="text-sm"
+                >
+                  🧠
+                </motion.span>
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">推理思考中</span>
+                {reasoningStreaming && (
+                  <motion.span
+                    animate={{ opacity: [1, 0.5, 1] }}
+                    transition={{ duration: 1, repeat: Infinity }}
+                    className="text-[10px] text-amber-600/60 dark:text-amber-400/60"
+                  >
+                    ●
+                  </motion.span>
+                )}
+              </div>
+              <StreamingFlashText
+                text={message.reasoningContent || ''}
+                isStreaming={reasoningStreaming || false}
+                maxLength={reasoningStreaming ? 60 : 100}
+                prefix=""
+                textColor="text-amber-700 dark:text-amber-300"
+              />
+            </div>
+          </motion.div>
+        )}
+
         {/* 推理步骤 */}
         {hasSteps && (
           <div className="space-y-1 mb-3">
@@ -244,6 +286,7 @@ function AssistantMessage({
                 isLast={index === message.steps!.length - 1}
                 defaultExpanded={step.status === 'thinking' || step.status === 'acting'}
                 forceCollapsed={shouldCollapseSteps}
+                messageId={message.id}
               />
             ))}
           </div>
@@ -271,11 +314,6 @@ function AssistantMessage({
               )}
             </div>
           </div>
-        )}
-
-        {/* 生成的文件 - 独立于回复内容显示 */}
-        {message.generatedFiles && message.generatedFiles.length > 0 && !isStreaming && !responseStreaming && (
-          <GeneratedFilesBlock files={message.generatedFiles} />
         )}
 
         {/* 等待状态 */}

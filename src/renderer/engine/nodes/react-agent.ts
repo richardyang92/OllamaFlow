@@ -1,10 +1,11 @@
 import type { Node } from '@xyflow/react'
 import type { WorkflowNodeData, ReactAgentNodeData, ReActStep } from '@/types/node'
 import type { NodeExecutor, ExecutionContext } from '../executor'
+import type { GeneratedFileInfo } from '@/store/agent-store'
 import { interpolateVariables } from '../executor'
 import { executeTool, TodosManager, getEnabledTools } from '../tools'
 import { useExecutionStore } from '@/store/execution-store'
-import { OpenAIClient, OpenAIMessage, parseToolCallArgs } from '../openai-client'
+import { OpenAIClient, OpenAIMessage, OpenAIChatResponse, parseToolCallArgs } from '../openai-client'
 import {
   compressOpenAIContext,
   estimateMessageTokens,
@@ -219,22 +220,12 @@ function detectLoop(
     (h) => h.name === 'todos' && h.result.includes('已添加任务')
   ).length
 
-  // Check if init was already called
-  const hasInitCall = toolCallsHistory.some(
-    (h) => h.name === 'todos' && h.result.includes('已创建')
-  )
+  // Check if init was already called - no longer blocking, allow dynamic task addition
+  // const hasInitCall = toolCallsHistory.some(
+  //   (h) => h.name === 'todos' && h.result.includes('已创建')
+  // )
 
-  // Block todos 'add' if init was already called and user tries to add more
-  if (hasInitCall && todosAddCount > 0) {
-    return {
-      isLoop: true,
-      loopType: 'postInitAdding',
-      suggestion: '任务列表已创建，请开始执行任务而不是继续添加！',
-      blockedActions: ['todos']
-    }
-  }
-
-  if (todosAddCount > 2) {
+  if (todosAddCount > 4) {
     return {
       isLoop: true,
       loopType: 'overPlanning',
@@ -270,7 +261,7 @@ function detectLoop(
   // Check for repeated writeFile
   const writeFileCount = toolCallsHistory.filter(h => h.name === 'writefile').length
 
-  if (writeFileCount >= 2) {
+  if (writeFileCount >= 4) {
     return {
       isLoop: true,
       loopType: 'repeatedWriteFile',
@@ -280,8 +271,8 @@ function detectLoop(
   }
 
   // Check for repeated identical actions
-  if (toolCallsHistory.length >= 3) {
-    const recentActions = toolCallsHistory.slice(-3).map((h) => h.name)
+  if (toolCallsHistory.length >= 5) {
+    const recentActions = toolCallsHistory.slice(-5).map((h) => h.name)
     const firstAction = recentActions[0]
     const allSame = recentActions.every((a) => a === firstAction)
 
@@ -289,7 +280,7 @@ function detectLoop(
       return {
         isLoop: true,
         loopType: 'repeatedAction',
-        suggestion: `你已经连续3次执行相同的操作。请使用不同的工具或给出最终答案。`,
+        suggestion: `你已经连续5次执行相同的操作。请使用不同的工具或给出最终答案。`,
         blockedActions: [firstAction]
       }
     }
@@ -424,230 +415,83 @@ function buildFullSystemPrompt(systemPrompt: string, enableUserInput: boolean): 
   return `${systemPrompt}
 
 ## 你的能力
-你是一个 ReAct 智能体，遵循"思考-行动-观察"循环来解决问题。
+你是一个高效的 ReAct 智能体，遵循"思考-行动-观察"循环来解决问题。
 你可以调用工具来执行实际操作，不要只靠想象给出答案。
+
+## ⚡ 核心效率原则（最重要）
+
+1. **适时早停**: 确信任务完成时立即给出最终答案，不要反复验证
+2. **简化任务管理**: 简单任务（1-2步）不需要使用 todos，直接执行即可
+3. **一次性完成**: 写代码时要完整，避免多次修改；执行成功后直接回答
 
 ## 可用工具
 
-### todos - 任务规划工具
-用于规划和追踪复杂任务的执行步骤。
-- **推荐**: 一次性创建任务列表: {"action": "init", "tasks": ["任务1", "任务2", "任务3"]}
-- 添加单个任务: {"action": "add", "content": "任务描述"}
+### todos - 任务规划工具（仅用于复杂任务）
+- 初始化: {"action": "init", "tasks": ["任务1", "任务2"]}
 - 完成任务: {"action": "complete", "content": "任务关键词"}
-- 查看列表: {"action": "list"}
-- 清空列表: {"action": "clear"}
+- 添加任务: {"action": "add", "content": "新任务"}
 
 ### executeCommand - 执行命令
-执行 Shell 命令（如 python、node、curl 等）。
+执行 Shell 命令（python、node、curl 等）。
 输入: {"command": "python script.py"}
 
 ### readFile - 读取文件
-读取工作区中的文件内容。
 输入: {"filePath": "data/input.txt"}
 
 ### writeFile - 写入文件
-将内容写入工作区文件（代码、数据、结果等）。
 输入: {"filename": "output.py", "content": "print('hello')"}
 
+### writeMultipleFiles - 批量写入
+一次写入多个文件: {"files": [{"filename": "a.py", "content": "..."}, {"filename": "b.py", "content": "..."}]}
+
 ### httpRequest - HTTP请求
-发送 HTTP 请求获取网页或 API 数据。
-输入: {"url": "https://api.example.com"}
+输入: {"url": "https://api.example.com", "method": "GET"}
 
-### 浏览器自动化工具
-用于控制浏览器执行网页操作。
+### 浏览器工具
+- browser_navigate: {"url": "https://example.com"}
+- browser_click: {"selector": "button.submit"}
+- browser_type: {"selector": "input[name=q]", "text": "搜索内容"}
+- browser_scroll: {"direction": "down", "amount": 500}
+- browser_screenshot: {"fullPage": true}
+- browser_getContent: {"format": "text"} 或 {"format": "html", "selector": ".article"}
+- browser_evaluate: {"script": "document.title"}
+- browser_wait: {"selector": ".result", "timeout": 5000}
 
-#### browser_navigate - 导航到网页
-打开指定URL的网页。
-输入: {"url": "https://example.com"}
+## ⚡ 并行工具调用（提高效率）
 
-#### browser_click - 点击元素
-点击页面上的元素（按钮、链接等）。
-输入: {"selector": "button.submit"} 或 {"selector": "#login-btn"}
-CSS选择器示例: "button.primary", "a[href*=login]", ".submit-btn"
+**你可以在一次响应中返回多个 tool_calls 来并行执行独立的操作！**
 
-#### browser_type - 输入文本
-在输入框中输入文本。
-输入: {"selector": "input[name=q]", "text": "搜索内容", "clear": true}
-- clear: 可选，是否先清空输入框
+✅ 应该并行（无依赖）:
+- 读取多个不同文件
+- 调用多个独立的工作流
 
-#### browser_scroll - 滚动页面
-向上或向下滚动页面。
-输入: {"direction": "down", "amount": 500}
-- direction: "up" 或 "down"
-- amount: 可选，滚动像素数，默认300
+❌ 必须串行（有依赖）:
+- 先写文件再读取同一文件
+- 先写脚本再执行该脚本
+- 一个操作的输入依赖另一个的输出
 
-#### browser_screenshot - 截图
-截取当前页面的截图。
-输入: {"fullPage": true} 或 {"selector": ".main-content"}
+## 工作流程
 
-#### browser_getContent - 获取页面内容
-获取页面的文本或HTML内容。
-输入: {"format": "text"} 或 {"format": "html", "selector": ".article", "maxLength": 5000}
-- format: "text" 或 "html"
-- selector: 可选，获取特定元素
-- maxLength: 可选，限制内容长度
+1. **思考**: 分析任务，决定下一步
+2. **行动**: 调用工具（可并行调用多个独立工具）
+3. **观察**: 查看结果
+4. **完成**: 任务成功后立即给出最终答案
 
-#### browser_evaluate - 执行JavaScript
-在页面中执行JavaScript代码。
-输入: {"script": "document.title"}
-可以执行更复杂的脚本获取页面数据。
+## 环境提示
+- Python: Mac/Linux 用 python3，Windows 用 python
+- 代码必须包含所有 import 语句
 
-#### browser_wait - 等待元素
-等待指定元素出现在页面上。
-输入: {"selector": ".result", "timeout": 5000}
-
-## ⚡ 效率原则（必须遵守）
-
-### 1. 合并独立操作
-- **一次写入多个文件**：如果需要创建多个相关文件，可以连续调用 writeFile，不需要等待
-- **避免中间文件**：不要为了"先保存"而写临时文件，直接生成最终版本
-
-### 2. 一次性生成完整代码
-- **预先思考完整方案**：在写代码前，先在思考中规划好完整的实现
-- **包含所有依赖**：确保代码包含所有必要的 import 语句和依赖
-- **考虑边界情况**：预先处理可能的错误和异常
-
-### 3. 减少不必要的操作
-- **限制任务列表查看**：不要反复调用 todos.list，最多每 3 步查看一次
-- **任务完成即停止**：任务成功后直接给出最终答案，不要重复执行验证
-- **避免重写文件**：写文件前确保代码正确，减少修复轮次
-
-### 4. 环境感知
-- **Python 命令**：Mac/Linux 使用 python3，Windows 使用 python
-- **检查依赖**：如果命令失败，先检查是否缺少依赖
-
-### 5. 批量任务管理
-- **使用 todos.init**：一次性创建所有任务，避免多次 todos.add
-- **合并相似任务**：将强相关的步骤合并为一个任务
-
-## 工作流程（ReAct循环）
-
-1. **思考** (Think): 分析任务，决定下一步行动
-2. **行动** (Act): 调用合适的工具执行操作
-3. **观察** (Observe): 查看工具返回的结果
-4. **重复**: 直到任务完成
-
-## 任务执行指南
-
-### 何时使用 todos 规划？
-- 任务需要3个以上步骤
-- 任务包含多个子任务
-- 需要按顺序完成多个操作
-- 示例：搜索新闻 -> 阅读内容 -> 提取要点 -> 写总结
-
-### 如何使用 todos.init 一次性规划？
-**推荐做法**: 使用 init 一次性创建所有任务
-行动: {"action": "init", "tasks": ["步骤1描述", "步骤2描述", "步骤3描述", ...]}
-
-**不推荐**: 多次调用 add 添加任务（浪费迭代次数）
-行动: {"action": "add", "content": "步骤1"}  <- 不要这样做
-
-### 如何正确执行任务？
-
-**错误示范**: 直接给出答案，不调用任何工具
-你: 我无法完成这个任务...（错误！应该先尝试使用可用工具）
-
-**正确做法**: 使用工具逐步执行
-思考: 这是一个需要实际操作的任务，我应该先规划步骤，然后调用工具执行
-行动: 先用 todos.init 创建任务列表，再逐步调用合适的工具完成每一步
-
-## 🚨 核心执行流程（必须严格遵守）
-
-### 标准执行流程
-1. **规划阶段**: 用 todos.init 一次性创建所有任务
-2. **执行阶段**: 按顺序执行每个任务
-   - 调用工具完成当前任务（如 httpRequest、executeCommand、writeFile 等）
-   - **立即调用 todos.complete 标记任务完成**
-   - 再执行下一个任务
-3. **完成阶段**: 所有任务完成后给出最终答案
-
-### ⚠️ 必须遵守的规则
-1. **每完成一个任务，必须立即调用 todos.complete**
-   - 执行完工具后，观察结果如果成功，立即: {"action": "complete", "content": "任务关键词"}
-   - 然后再继续下一个任务
-2. **按顺序执行任务**，不要跳过或乱序
-3. **每个任务只能标记完成一次**
-
-### 示例执行流程
----示例开始---
-任务列表: ["获取热搜数据", "解析内容", "生成文章"]
-
-迭代1: todos.init -> 创建3个任务
-迭代2: httpRequest 获取数据 -> 观察成功 -> todos.complete "获取热搜数据"
-迭代3: 解析内容（或调用工具）-> 观察成功 -> todos.complete "解析内容"
-迭代4: writeFile 生成文章 -> 观察成功 -> todos.complete "生成文章"
-迭代5: 所有任务完成 -> 给出最终答案（不再调用工具）
----示例结束---
-
-## 重要规则
-
-1. **多步任务先用 todos 规划** - 添加任务列表后再逐步执行
-2. **必须调用工具执行实际操作** - 不要空想，要行动
-3. **完成一步立即标记** - 每完成一个任务必须调用 todos.complete
-4. **按顺序执行** - 按任务列表顺序逐个完成
-5. **写入脚本后立即执行** - 用 writeFile 写代码后，用 executeCommand 运行
-6. **每次只调用一个工具** - 等待观察结果后再决定下一步
-7. **所有任务完成后给出最终答案** - 不再调用工具，直接回答
-
-## 💬 用户交互（可选）
+## 💬 用户交互
 
 ${enableUserInput ? `
-当你在执行任务过程中需要用户确认、提供更多信息或做出选择时，可以使用用户交互功能。
-
-**何时使用**：
-- 需要用户确认是否继续执行某个操作
-- 需要用户提供额外的信息（如 API Key、配置参数等）
-- 遇到多个可行方案，需要用户选择
-- 任务执行前需要用户确认计划
-
-**如何使用**：
-在你的思考或回答中，使用以下格式：
+需要用户输入时，在回答中使用：
 \`\`\`
 WAIT_FOR_INPUT: 你的问题
 \`\`\`
-
-**示例**：
-\`\`\`
-思考: 我需要访问某个 API，但需要用户提供 API Key。
-
-WAIT_FOR_INPUT: 我需要访问天气 API，请提供您的 API Key
-\`\`\`
-
-或者：
-\`\`\`
-思考: 我找到了两种方案来完成任务，需要用户选择。
-
-WAIT_FOR_INPUT: 我找到了两种方案：
-1. 使用 Python 脚本处理（速度快，但需要安装依赖）
-2. 使用在线 API 处理（无需安装，但速度较慢）
-请选择方案（输入 1 或 2）
-\`\`\`
-
-**注意事项**：
-- 等待用户输入后，你会收到用户的回复，然后继续执行
-- 不要过度使用，仅在确实需要用户参与时使用
-- 提问要清晰明确，避免模糊不清
-- 用户输入后，你可以基于用户的回复继续执行任务
 ` : '（用户交互功能未启用）'}
 
-## 📝 代码生成检查清单
-
-生成代码时，必须确保：
-- [ ] **所有必要的 import 语句已包含**（如 matplotlib.pyplot, numpy 等）
-- [ ] **变量在使用前已定义**
-- [ ] **类和函数正确导入**（如 from matplotlib.patches import Ellipse）
-- [ ] **文件路径使用正确的分隔符**
-- [ ] **异常处理已添加**（如 try-except 块）
-- [ ] **代码不包含硬编码的敏感信息**
-
-常见错误及修复：
-- NameError: name 'Ellipse' is not defined -> 添加 from matplotlib.patches import Ellipse
-- ModuleNotFoundError: No module named 'xxx' -> 在执行前用 pip install 安装
-- python: command not found -> 使用 python3 代替 python
-
 ## JSON格式提醒
-- 代码中的反斜杠必须双写转义（\\\\cos -> \\\\\\\\cos，\\\\n -> \\\\\\\\n）
-- 确保所有字符串正确转义`
+- 代码中的反斜杠必须双写转义（\\\\cos -> \\\\\\\\cos）`
 }
 
 export function createReactAgentExecutor(): NodeExecutor {
@@ -680,12 +524,8 @@ async function executeReAct(
 
   // Get API configuration from global config
   const aiConfig = await resolveAIConfig()
-  const apiKey = aiConfig.apiKey
+  const apiKey = aiConfig.apiKey || 'ollama' // Ollama doesn't require API key, use placeholder
   const apiEndpoint = aiConfig.apiEndpoint
-
-  if (!apiKey) {
-    throw new Error('API Key 未配置。请在全局配置中设置 API Key。')
-  }
 
   const client = new OpenAIClient(apiKey, apiEndpoint)
 
@@ -713,6 +553,7 @@ async function executeReAct(
   const maxIterations = data.maxIterations || 10
   let finalAnswer: string | null = null
   let iteration = 0
+  const generatedFiles: GeneratedFileInfo[] = [] // Track generated files
 
   // Initialize ReAct state in execution store
   const executionStore = useExecutionStore.getState()
@@ -814,24 +655,93 @@ async function executeReAct(
     executionStore.updateReActStep(context.executionId, node.id, newStep)
 
     try {
-      const response = await client.chat({
-        model: data.model,
-        messages,
-        temperature: data.temperature,
-        max_tokens: data.maxTokens,
-        tools: openaiTools,
-      })
+      // Use streaming if enabled, otherwise fall back to non-streaming
+      let response: OpenAIChatResponse
+      let streamingThought = '' // Accumulate streaming content
+      let streamingReasoning = '' // Accumulate reasoning content (DeepSeek R1, etc.)
+      let pendingToolNames: string[] = [] // Track tool names as they come in
+
+      if (data.stream) {
+        // Streaming call with real-time content display
+        response = await client.chatStreamWithTools(
+          {
+            model: data.model,
+            messages,
+            temperature: data.temperature,
+            max_tokens: data.maxTokens,
+            tools: openaiTools,
+          },
+          // Content chunk callback
+          (chunk) => {
+            // Real-time streaming callback
+            context.onStream?.(node.id, chunk)
+            // Accumulate content
+            streamingThought += chunk
+            // Update step thought - prefer reasoning content if available
+            const displayThought = streamingReasoning || streamingThought
+            if (displayThought) {
+              executionStore.updateReActStep(context.executionId, node.id, {
+                id: stepId,
+                thought: displayThought,
+              })
+            }
+          },
+          // Tool call name callback - called when tool name is first received
+          (toolName) => {
+            if (!pendingToolNames.includes(toolName)) {
+              pendingToolNames.push(toolName)
+              // Update UI to show which tools are being called
+              const toolMessage = `正在调用: ${toolName}`
+              executionStore.updateReActStep(context.executionId, node.id, {
+                id: stepId,
+                thought: streamingReasoning || streamingThought || toolMessage,
+              })
+              context.onStream?.(node.id, `🔧 ${toolMessage}\n`)
+            }
+          },
+          // Reasoning chunk callback - for DeepSeek R1 and other reasoning models
+          (chunk) => {
+            streamingReasoning += chunk
+            // Store reasoning content for UI display
+            executionStore.appendReasoningStreamOutput(context.executionId, node.id, chunk)
+            // Update step thought with reasoning content
+            executionStore.updateReActStep(context.executionId, node.id, {
+              id: stepId,
+              thought: streamingReasoning,
+            })
+          }
+        )
+      } else {
+        // Non-streaming call
+        response = await client.chat({
+          model: data.model,
+          messages,
+          temperature: data.temperature,
+          max_tokens: data.maxTokens,
+          tools: openaiTools,
+        })
+      }
 
       const content = response.content || ''
+      const reasoningContent = response.reasoning_content || streamingReasoning || ''
       // DeepSeek reasoner requires reasoning_content to be preserved in message history
       const assistantMessage: OpenAIMessage = { role: 'assistant', content, tool_calls: response.tool_calls }
-      if (response.reasoning_content) {
-        assistantMessage.reasoning_content = response.reasoning_content
+      if (reasoningContent) {
+        assistantMessage.reasoning_content = reasoningContent
       }
       messages.push(assistantMessage)
 
-      // Update step with thought
-      const thought = content || '(思考中...)'
+      // Debug: Log response details
+      console.log('[ReAct] Response received:', {
+        contentLength: content.length,
+        contentPreview: content.slice(0, 100),
+        tool_calls: response.tool_calls?.map(tc => ({ id: tc.id, name: tc.function.name })),
+        finish_reason: response.finish_reason
+      })
+
+      // Update step with thought - include reasoning content if available (DeepSeek R1, etc.)
+      // For reasoning models, prefer reasoning_content as it contains the actual thought process
+      const thought = reasoningContent || content || '(思考中...)'
       executionStore.updateReActStep(context.executionId, node.id, {
         id: stepId,
         thought,
@@ -847,6 +757,7 @@ async function executeReAct(
 
       // Check if no tool calls - means final answer or waiting for user input
       if (!response.tool_calls || response.tool_calls.length === 0) {
+        console.log('[ReAct] No tool calls detected, treating as final answer')
         // Check if the response contains WAIT_FOR_INPUT marker
         if (data.enableUserInput && content.includes('WAIT_FOR_INPUT:')) {
           const promptMatch = content.match(/WAIT_FOR_INPUT:\s*(.+?)(?:\n|$)/s)
@@ -964,6 +875,17 @@ async function executeReAct(
               const filePath = fileMatch ? fileMatch[1].trim() : ''
               const ext = filePath.split('.').pop()?.toLowerCase()
               const scriptExts = ['py', 'js', 'ts', 'sh', 'bat', 'ps1', 'rb', 'php']
+
+              // Track generated file
+              if (filePath) {
+                generatedFiles.push({
+                  path: filePath,
+                  workspacePath: context.workspacePath,
+                  type: 'created',
+                  size: toolArgs?.content ? String(toolArgs.content).length : undefined,
+                })
+              }
+
               if (ext && scriptExts.includes(ext)) {
                 const runCmd = ext === 'py' ? `python ${filePath}` :
                                ext === 'js' ? `node ${filePath}` :
@@ -975,52 +897,8 @@ async function executeReAct(
               }
             }
 
-            if (tool.name.toLowerCase() === 'executecommand' && result.success) {
-              const successKeywords = ['saved', 'created', 'generated', 'success', 'complete', 'done', '完成', '成功', '保存', '生成']
-              const hasSuccessKeyword = successKeywords.some(kw => observation.toLowerCase().includes(kw))
-              if (hasSuccessKeyword) {
-                observation += `\n✅ 任务完成！可以给出最终答案了。`
-              }
-            }
-
-            // Add task status hint after tool execution (except for todos tool itself)
-            if (result.success && tool.name.toLowerCase() !== 'todos') {
-              const currentTodos = todosManager.getStatus()
-              if (currentTodos.total > 0 && currentTodos.pending > 0) {
-                const pendingTasks = currentTodos.items.filter(t => !t.completed)
-                const completedCount = currentTodos.completed
-
-                // Find the first pending task as the current task
-                const currentTask = pendingTasks[0]
-
-                observation += `\n\n📋 当前进度: ${completedCount}/${currentTodos.total} 任务完成`
-                observation += `\n📌 下一步操作: 请用 {"action": "complete", "content": "${currentTask?.content.slice(0, 30)}"} 标记任务完成，然后继续执行下一个任务`
-              }
-            }
-
-            // After todos.complete, show next task hint
-            if (tool.name.toLowerCase() === 'todos' && result.success && observation.includes('已完成任务')) {
-              const currentTodos = todosManager.getStatus()
-              if (currentTodos.pending > 0) {
-                const pendingTasks = currentTodos.items.filter(t => !t.completed)
-                const nextTask = pendingTasks[0]
-                observation += `\n\n🎯 下一个任务: ${nextTask?.content}`
-                observation += `\n💡 请立即执行此任务，完成后标记为完成`
-              } else if (currentTodos.total > 0 && currentTodos.pending === 0) {
-                observation += `\n\n✅ 所有任务已完成！现在可以给出最终答案了。`
-              }
-            }
-
-            // After todos.init, show first task hint
-            if (tool.name.toLowerCase() === 'todos' && result.success && observation.includes('已创建')) {
-              const currentTodos = todosManager.getStatus()
-              if (currentTodos.pending > 0) {
-                const pendingTasks = currentTodos.items.filter(t => !t.completed)
-                const firstTask = pendingTasks[0]
-                observation += `\n\n🎯 现在开始执行第一个任务: ${firstTask?.content}`
-                observation += `\n💡 请立即调用工具执行此任务，完成后用 todos.complete 标记`
-              }
-            }
+            // Only add completion hint for executeCommand success (simplified)
+            // Removed verbose task status hints to reduce context size and let agent think independently
 
             return {
               toolCallId: toolCall.id,
@@ -1058,6 +936,26 @@ async function executeReAct(
         // Sync todos state after each group
         const todosStatus = todosManager.getStatus()
         executionStore.updateReActTodos(context.executionId, node.id, todosStatus.items)
+
+        // Early stopping: check if all tasks are complete
+        if (todosStatus.total > 0 && todosStatus.pending === 0) {
+          // All tasks completed, can stop early
+          const allResults = results.map(r => r.observation).join('\n')
+          finalAnswer = `任务已全部完成。\n\n${allResults.slice(0, 500)}`
+          executionStore.setReActFinalAnswer(context.executionId, node.id, finalAnswer)
+
+          context.onLog?.({
+            nodeId: node.id,
+            nodeName: data.label,
+            level: 'info',
+            message: `所有任务完成，提前结束`,
+          })
+
+          if (data.stream) {
+            context.onStream?.(node.id, `\n✅ 所有任务完成\n`)
+          }
+          break
+        }
       }
 
       // Update step status after all tool calls
@@ -1103,6 +1001,7 @@ async function executeReAct(
 
   return {
     response: finalAnswer,
+    generatedFiles,
   }
 }
 
@@ -1131,12 +1030,8 @@ export async function continueReactAgentWithUserInput(
 
   // Get API configuration from global config
   const aiConfig = await resolveAIConfig()
-  const apiKey = aiConfig.apiKey
+  const apiKey = aiConfig.apiKey || 'ollama' // Ollama doesn't require API key, use placeholder
   const apiEndpoint = aiConfig.apiEndpoint
-
-  if (!apiKey) {
-    throw new Error('API Key 未配置。请在全局配置中设置 API Key。')
-  }
 
   const client = new OpenAIClient(apiKey, apiEndpoint)
 

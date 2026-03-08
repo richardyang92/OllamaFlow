@@ -3,17 +3,20 @@ import { NodeProps } from '@xyflow/react'
 import BaseNode from './BaseNode'
 import { ReactAgentNodeData, NodeStatus, AVAILABLE_TOOLS } from '@/types/node'
 import { useReActState } from '@/hooks/useReActState'
+import { useReasoningStream } from '@/hooks/useReasoningStream'
 import { useNodeStatus } from '@/hooks/useNodeStatus'
 import { useExecutionStore } from '@/store/execution-store'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { motion } from 'framer-motion'
 import ReActStepsPanel from './react-agent/ReActStepsPanel'
+import StreamingFlashText from './shared/StreamingFlashText'
 
 function ReactAgentNode(props: NodeProps) {
   const data = props.data as ReactAgentNodeData
   const id = props.id as string
   const reactState = useReActState(id)
+  const reasoningOutput = useReasoningStream(id)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
   const nodeResult = useNodeStatus(id)
 
@@ -155,6 +158,88 @@ function ReactAgentNode(props: NodeProps) {
             ▼
           </motion.span>
         </motion.div>
+
+        {/* 快闪推理状态 - 优先显示推理思考内容（DeepSeek R1 等） */}
+        {nodeStatus === 'running' && (reasoningOutput || (reactState?.steps && reactState.steps.length > 0)) && (
+          <motion.div
+            layout
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg p-2">
+              {reasoningOutput ? (
+                // 显示 OpenAI 推理内容（如 DeepSeek R1 的 reasoning_content）
+                <>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <motion.span
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                      className="text-xs"
+                    >
+                      🧠
+                    </motion.span>
+                    <span className="text-[10px] text-[var(--color-node-ai)] font-medium">深度思考中</span>
+                  </div>
+                  <StreamingFlashText
+                    text={reasoningOutput}
+                    isStreaming={true}
+                    maxLength={reasoningOutput.length > 100 ? 40 : 20}
+                    prefix=""
+                    textColor="text-[var(--color-node-ai)]"
+                  />
+                </>
+              ) : reactState?.steps && reactState.steps.length > 0 ? (
+                // 显示 ReAct 步骤状态
+                (() => {
+                  const latestStep = reactState.steps[reactState.steps.length - 1]
+                  const statusConfig = {
+                    thinking: {
+                      icon: '💭',
+                      prefix: '思考: ',
+                      color: 'text-[var(--color-node-ai)]',
+                      anim: { rotate: 360 }
+                    },
+                    acting: {
+                      icon: '🔧',
+                      prefix: '执行: ',
+                      color: 'text-[var(--color-node-logic)]',
+                      anim: { scale: [1, 1.2, 1] }
+                    },
+                    observing: {
+                      icon: '👁',
+                      prefix: '观察: ',
+                      color: 'text-[var(--color-node-input)]',
+                      anim: { opacity: [1, 0.5, 1] }
+                    }
+                  }
+                  const config = statusConfig[latestStep.status] || statusConfig.thinking
+                  const content = latestStep.thought || latestStep.action || latestStep.observation || ''
+
+                  return (
+                    <div className="flex items-center gap-1.5">
+                      <motion.span
+                        animate={config.anim}
+                        transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+                        className="text-sm"
+                      >
+                        {config.icon}
+                      </motion.span>
+                      <StreamingFlashText
+                        text={content}
+                        isStreaming={latestStep.status === 'thinking' || latestStep.observationStreaming}
+                        maxLength={30}
+                        prefix={config.prefix}
+                        textColor={config.color}
+                      />
+                    </div>
+                  )
+                })()
+              ) : null}
+            </div>
+          </motion.div>
+        )}
 
         <motion.div
           initial={{ height: 0, opacity: 0 }}

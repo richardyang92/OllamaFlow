@@ -25,7 +25,7 @@ import {
 } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { useAgentStore } from '@/store/agent-store'
-import type { AgentStep, ToolCallRecord } from '@/store/agent-store'
+import type { AgentStep, ToolCallRecord, AgentMessage } from '@/store/agent-store'
 import { IntelligentAgentExecutor } from '@/engine/agent-executor'
 import { resolveAIConfig } from '@/engine/config-resolver'
 import { useTheme, type ThemeMode } from '@/contexts/ThemeContext'
@@ -35,8 +35,11 @@ import {
   AgentSettingsPanel,
   AgentQuestionsManager,
   AgentInlineTodos,
+  AgentInlineGeneratedFiles,
 } from '@/components/agent'
 import AgentSidebar from '@/components/agent/AgentSidebar'
+// 新增
+import SubAgentDetailsDrawer from '@/components/agent/SubAgentDetailsDrawer'
 
 // 反馈提示组件
 function AgentFeedback({ message }: { message: string }) {
@@ -416,9 +419,13 @@ export default function AgentPage() {
     availableWorkflows,
     isSettingsOpen,
     showLogsPanel,
+    // 新增
+    showSubAgentDetailsPanel,
     todos,
     setSettingsOpen,
     setShowLogsPanel,
+    // 新增
+    setShowSubAgentDetailsPanel,
     addMessage,
     updateMessage,
     deleteMessage,
@@ -436,6 +443,9 @@ export default function AgentPage() {
     updateToolCall,
     addToolCalls,
     updateToolCallByIndex,
+    addTimelineEvent,
+    addNodeStep,
+    updateNodeStep,
     // 对话历史
     conversationHistory,
     createConversation,
@@ -447,6 +457,7 @@ export default function AgentPage() {
   const [input, setInput] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const currentStepIdRef = useRef<string | null>(null)
 
@@ -475,9 +486,17 @@ export default function AgentPage() {
     }
   }, [messages, conversationHistory.currentConversationId, updateCurrentConversationMeta, saveCurrentConversation])
 
-  // 滚动到底部
+  // 滚动到底部（仅当用户已在底部附近时）
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (!messagesContainerRef.current) return
+
+    const container = messagesContainerRef.current
+    // 检查用户是否在底部附近（距离底部小于100px）
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100
+
+    if (isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages])
 
   const handleBack = useCallback(() => {
@@ -489,17 +508,14 @@ export default function AgentPage() {
     setCurrentPage('welcome')
   }, [isRunning, setCurrentPage])
 
-  const handleSend = useCallback(async () => {
-    if (!input.trim() || isRunning) return
+  // 核心执行函数
+  const executeAgent = useCallback(async (userInput: string, historyMessages: AgentMessage[]) => {
     if (!model) {
       setFeedback('请先在设置中选择模型')
       setTimeout(() => setFeedback(null), 2000)
       setSettingsOpen(true)
       return
     }
-
-    const userInput = input.trim()
-    setInput('')
 
     // 添加用户消息
     addMessage({ role: 'user', content: userInput })
@@ -514,25 +530,70 @@ export default function AgentPage() {
     setRunning(true)
     abortControllerRef.current = new AbortController()
 
-    // 构建历史消息上下文（排除当前正在创建的消息）
-    const history = messages
-      .filter(m => m.id !== assistantMsgId)
-      .map(m => ({
-        role: m.role,
-        content: m.content,
-      }))
+    // 构建历史消息上下文
+    const history = historyMessages.map(m => ({
+      role: m.role,
+      content: m.content,
+    }))
 
     try {
       // 获取流式追加方法
-      const { appendThoughtChunk } = useAgentStore.getState()
+      const { appendThoughtChunk, appendReasoningChunk } = useAgentStore.getState()
 
       // 获取沙箱路径
       let sandboxPath: string | undefined
       const workspacePath = currentWorkspace?.path
       const conversationId = conversationHistory.currentConversationId
-      if (workspacePath && conversationId) {
-        sandboxPath = await window.electronAPI.agent.getSandboxPath(workspacePath, conversationId)
+
+      console.log('[🏖️ SANDBOX_INIT] 开始初始化沙箱', { workspacePath, conversationId })
+
+      if (conversationId) {
+        if (workspacePath) {
+          // 有工作区：使用工作区下的 .agent-sandbox 目录
+          console.log('[🏖️ SANDBOX_INIT] 调用 createSandbox API（工作区模式）', { workspacePath, conversationId })
+          const createResult = await window.electronAPI.agent.createSandbox(workspacePath, conversationId)
+          console.log('[🏖️ SANDBOX_INIT] createSandbox 返回结果', createResult)
+
+          if (createResult.success) {
+            sandboxPath = createResult.path
+            console.log('[🏖️ SANDBOX_INIT] ✅ 沙箱目录创建成功（工作区模式）', { sandboxPath })
+            addExecutionLog({
+              level: 'info',
+              message: `🏖️ 沙箱目录已创建: ${sandboxPath}`,
+            })
+          } else {
+            console.error('[🏖️ SANDBOX_INIT] ❌ 沙箱目录创建失败（工作区模式）', createResult.error)
+            addExecutionLog({
+              level: 'warn',
+              message: `🏖️ 创建沙箱目录失败: ${createResult.error}`,
+            })
+          }
+        } else {
+          // 无工作区：使用用户数据目录下的 agent-sandbox 目录
+          console.log('[🏖️ SANDBOX_INIT] 调用 createDefaultSandbox API（默认模式）', { conversationId })
+          const createResult = await window.electronAPI.agent.createDefaultSandbox(conversationId)
+          console.log('[🏖️ SANDBOX_INIT] createDefaultSandbox 返回结果', createResult)
+
+          if (createResult.success) {
+            sandboxPath = createResult.path
+            console.log('[🏖️ SANDBOX_INIT] ✅ 沙箱目录创建成功（默认模式）', { sandboxPath })
+            addExecutionLog({
+              level: 'info',
+              message: `🏖️ 沙箱目录已创建（默认）: ${sandboxPath}`,
+            })
+          } else {
+            console.error('[🏖️ SANDBOX_INIT] ❌ 沙箱目录创建失败（默认模式）', createResult.error)
+            addExecutionLog({
+              level: 'warn',
+              message: `🏖️ 创建默认沙箱目录失败: ${createResult.error}`,
+            })
+          }
+        }
+      } else {
+        console.warn('[🏖️ SANDBOX_INIT] ⚠️ 跳过沙箱创建 - conversationId 为空', { workspacePath, conversationId })
       }
+
+      console.log('[🏖️ SANDBOX_INIT] 最终沙箱路径', { sandboxPath })
 
       // 解析 AI 配置：如果没有指定 apiEndpoint/apiKey，尝试从全局配置获取
       let resolvedApiEndpoint = apiEndpoint
@@ -563,6 +624,12 @@ export default function AgentPage() {
           onThoughtChunk: (chunk) => {
             // 实时追加思考内容到当前步骤
             appendThoughtChunk(assistantMsgId, chunk)
+          },
+
+          // 流式推理内容（DeepSeek R1 等）
+          onReasoningChunk: (chunk) => {
+            // 实时追加推理内容
+            appendReasoningChunk(assistantMsgId, chunk)
           },
 
           // 步骤开始
@@ -677,6 +744,87 @@ export default function AgentPage() {
             }
           },
 
+          // 时间线事件（新增）
+          onSubAgentTimelineEvent: (toolCallId: string, event) => {
+            const stepId = currentStepIdRef.current
+            if (stepId) {
+              addTimelineEvent(assistantMsgId, stepId, toolCallId, event)
+            }
+          },
+
+          // 节点步骤回调（新增）
+          onSubAgentNodeStep: (toolCallId: string, nodeStep) => {
+            const stepId = currentStepIdRef.current
+            if (stepId) {
+              addNodeStep(assistantMsgId, stepId, toolCallId, nodeStep)
+            }
+          },
+
+          onSubAgentNodeStepUpdate: (toolCallId: string, nodeId: string, update) => {
+            const stepId = currentStepIdRef.current
+            if (stepId) {
+              updateNodeStep(assistantMsgId, stepId, toolCallId, nodeId, update)
+            }
+          },
+
+          // 节点流式更新（新增）
+          onSubAgentStreamUpdate: (toolCallId: string, nodeId: string, nodeName: string, update) => {
+            const stepId = currentStepIdRef.current
+            if (stepId) {
+              // 为流式更新创建或更新时间线事件
+              if (update.reasoningChunk) {
+                // 使用特定的 event ID 来标识这个节点的思考流
+                const eventId = `thinking_${nodeId}`
+                addTimelineEvent(assistantMsgId, stepId, toolCallId, {
+                  id: eventId,
+                  nodeId,
+                  nodeName,
+                  nodeType: 'reactAgent', // 默认为 reactAgent，实际应根据节点类型
+                  eventType: 'thinking_stream',
+                  timestamp: Date.now(),
+                  data: {
+                    reasoning: update.reasoningChunk,
+                    reasoningStreaming: true,
+                  },
+                })
+              }
+              if (update.outputChunk) {
+                const eventId = `output_${nodeId}`
+                addTimelineEvent(assistantMsgId, stepId, toolCallId, {
+                  id: eventId,
+                  nodeId,
+                  nodeName,
+                  nodeType: 'ollamaChat',
+                  eventType: 'output_stream',
+                  timestamp: Date.now(),
+                  data: {
+                    output: update.outputChunk,
+                    outputStreaming: true,
+                  },
+                })
+              }
+              if (update.toolUpdate) {
+                const eventId = `tool_${nodeId}_${Date.now()}`
+                addTimelineEvent(assistantMsgId, stepId, toolCallId, {
+                  id: eventId,
+                  nodeId,
+                  nodeName,
+                  nodeType: 'reactAgent',
+                  eventType: 'tool_call_complete',
+                  timestamp: Date.now(),
+                  data: {
+                    toolCall: {
+                      toolName: update.toolUpdate.toolName,
+                      input: null,
+                      output: update.toolUpdate.output,
+                      error: update.toolUpdate.error,
+                    },
+                  },
+                })
+              }
+            }
+          },
+
           // 任务更新
           onTodosUpdate: (items) => {
             updateTodos(items)
@@ -684,15 +832,21 @@ export default function AgentPage() {
 
           // 完成
           onComplete: (response, generatedFiles) => {
+            console.log('[🏖️ AGENT_PAGE] onComplete 回调', {
+              responseLength: response?.length,
+              generatedFilesCount: generatedFiles?.length || 0,
+              generatedFiles,
+            })
             updateMessage(assistantMsgId, {
               content: response,
               isStreaming: false,
               responseStreaming: false,
+              reasoningStreaming: false, // 停止推理流式状态
               generatedFiles,
             })
             addExecutionLog({
               level: 'info',
-              message: '任务完成',
+              message: `任务完成${generatedFiles?.length ? `，生成了 ${generatedFiles.length} 个文件` : ''}`,
             })
 
             // 检查所有任务是否都已完成，如果是则自动清空任务列表
@@ -738,8 +892,6 @@ export default function AgentPage() {
       setRunning(false)
     }
   }, [
-    input,
-    isRunning,
     model,
     provider,
     apiEndpoint,
@@ -757,6 +909,33 @@ export default function AgentPage() {
     currentWorkspace,
     conversationHistory.currentConversationId,
   ])
+
+  // 发送消息（从输入框）
+  const handleSend = useCallback(() => {
+    if (!input.trim() || isRunning) return
+    const userInput = input.trim()
+    setInput('')
+    executeAgent(userInput, messages)
+  }, [input, isRunning, messages, executeAgent])
+
+  // 重试（重新生成）
+  const handleRetry = useCallback((assistantMsgId: string) => {
+    if (isRunning) return
+    // 找到该助手消息之前的用户消息
+    const msgIndex = messages.findIndex(m => m.id === assistantMsgId)
+    if (msgIndex > 0) {
+      for (let i = msgIndex - 1; i >= 0; i--) {
+        if (messages[i].role === 'user') {
+          const userInput = messages[i].content
+          // 删除该用户消息及其后面的所有消息
+          deleteMessagesAfter(messages[i].id)
+          // 重新发送
+          executeAgent(userInput, messages.slice(0, i))
+          break
+        }
+      }
+    }
+  }, [isRunning, messages, deleteMessagesAfter, executeAgent])
 
   const handleStop = useCallback(() => {
     abortControllerRef.current?.abort()
@@ -790,7 +969,7 @@ export default function AgentPage() {
         </div>
 
         {/* 消息区域 */}
-        <main className="flex-1 overflow-y-auto">
+        <main ref={messagesContainerRef} className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto px-4">
             {messages.length === 0 && (
               <motion.div
@@ -846,30 +1025,21 @@ export default function AgentPage() {
                 message={msg}
                 isLast={index === messages.length - 1}
                 isRunning={isRunning}
-                onRetry={() => {
-                  // 删除该消息及其后面的所有消息，                  deleteMessagesAfter(msg.id)
-                  // 重新执行（如果是用户消息，重新发送）
-                  if (msg.role === 'user') {
-                    // 设置输入框内容并触发发送
-                    setInput(msg.content)
-                    // 这里不能直接发送，需要用户确认
-                    setFeedback('已删除后续消息，可重新发送')
-                    setTimeout(() => setFeedback(null), 2000)
-                  }
-                }}
+                onRetry={() => handleRetry(msg.id)}
                 onDelete={() => {
                   if (confirm('确定要删除这条消息吗？')) {
                     deleteMessage(msg.id)
                   }
                 }}
                 onEdit={(newContent) => {
+                  // 找到该消息在列表中的索引
+                  const msgIndex = messages.findIndex(m => m.id === msg.id)
                   // 更新用户消息内容
                   updateMessage(msg.id, { content: newContent })
                   // 删除该消息后面的所有消息
                   deleteMessagesAfter(msg.id)
-                  // 提示用户可以重新发送
-                  setFeedback('已更新消息，可重新发送')
-                  setTimeout(() => setFeedback(null), 2000)
+                  // 自动重新执行
+                  executeAgent(newContent, messages.slice(0, msgIndex))
                 }}
               />
             ))}
@@ -883,6 +1053,9 @@ export default function AgentPage() {
           <div className="max-w-3xl mx-auto">
             {/* 内联任务列表 */}
             <AgentInlineTodos todos={todos.items} isRunning={isRunning} />
+
+            {/* 生成的文件列表 - 聚合所有消息中的生成文件 */}
+            <AgentInlineGeneratedFiles messages={messages} />
 
             {/* 状态栏 */}
             <div className="flex items-center justify-between mb-2 px-1 text-xs text-[var(--color-text-muted)]">
@@ -923,6 +1096,12 @@ export default function AgentPage() {
       <SidePanel show={showLogsPanel} side="right">
         <ExecutionLogPanel />
       </SidePanel>
+
+      {/* 新增：SubAgent 详情抽屉 */}
+      <SubAgentDetailsDrawer
+        isOpen={showSubAgentDetailsPanel}
+        onClose={() => setShowSubAgentDetailsPanel(false)}
+      />
 
       {/* 设置面板 */}
       <AgentSettingsPanel

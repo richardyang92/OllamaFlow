@@ -208,6 +208,7 @@ export interface ExecutionContext {
   edges?: Edge[]
   signal?: AbortSignal
   onStream?: (nodeId: string, chunk: string) => void
+  onReasoningStream?: (nodeId: string, chunk: string) => void  // For reasoning/thinking content
   onLog?: (log: Omit<ExecutionLog, 'id' | 'timestamp' | 'executionId'>) => void
 }
 
@@ -359,10 +360,33 @@ export class WorkflowExecutor {
       edges: this.edges,
       signal: this.abortController.signal,
       onStream: (nodeId, chunk) => {
-        const currentWorkflowStore = useWorkflowStore.getState();
-        const workflowNodes = currentWorkflowStore.nodes;
-        if (workflowNodes.some(n => n.id === nodeId)) {
+        // 在隔离模式（subagent）下，使用 executor 自己的节点列表
+        // 在普通模式下，使用 workflowStore 的节点列表（用于 UI 更新）
+        if (this.isolatedMode) {
+          // 隔离模式：直接追加输出，因为节点一定属于当前工作流
           executionStore.appendStreamOutput(this.executionId, nodeId, chunk)
+        } else {
+          // 普通模式：检查节点是否在当前编辑器的工作流中
+          const currentWorkflowStore = useWorkflowStore.getState();
+          const workflowNodes = currentWorkflowStore.nodes;
+          if (workflowNodes.some(n => n.id === nodeId)) {
+            executionStore.appendStreamOutput(this.executionId, nodeId, chunk)
+          }
+        }
+      },
+      onReasoningStream: (nodeId, chunk) => {
+        // 在隔离模式（subagent）下，使用 executor 自己的节点列表
+        // 在普通模式下，使用 workflowStore 的节点列表（用于 UI 更新）
+        if (this.isolatedMode) {
+          // 隔离模式：直接追加输出，因为节点一定属于当前工作流
+          executionStore.appendReasoningStreamOutput(this.executionId, nodeId, chunk)
+        } else {
+          // 普通模式：检查节点是否在当前编辑器的工作流中
+          const currentWorkflowStore = useWorkflowStore.getState();
+          const workflowNodes = currentWorkflowStore.nodes;
+          if (workflowNodes.some(n => n.id === nodeId)) {
+            executionStore.appendReasoningStreamOutput(this.executionId, nodeId, chunk)
+          }
         }
       },
       onLog: (log) => {

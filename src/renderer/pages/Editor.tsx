@@ -230,15 +230,16 @@ function EditorContent() {
     if (!currentWorkspace) return
 
     // Smart context: auto-open execution panel if not manually closed
-    if (!isPanelManuallyClosed('execution')) {
-      toggleExecutionPanel()
-    }
+    // Disabled: don't auto-open execution panel when executing workflow
+    // if (!isPanelManuallyClosed('execution')) {
+    //   toggleExecutionPanel()
+    // }
 
     executionManager.startExecution(
       currentWorkspace.path,
       nodes,
       edges,
-      currentWorkspace.config.apiEndpoint || 'http://127.0.0.1:11434',
+      'http://127.0.0.1:11434', // API endpoint is now managed via global AI config
       inputValues || undefined
     ).catch((error: Error) => {
       const executionId = useExecutionStore.getState().getActiveExecution(currentWorkspace.path)

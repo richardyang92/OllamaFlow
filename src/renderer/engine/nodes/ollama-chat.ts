@@ -49,30 +49,43 @@ export function createOllamaChatExecutor(): NodeExecutor {
 
       try {
         if (data.stream) {
-          // Handle streaming response
-          let fullResponse = ''
+          // Handle streaming response with reasoning content support
           let chunkCount = 0
 
-          for await (const chunk of client.chatStream({
-            model: data.model,
-            messages,
-            temperature: data.temperature,
-            max_tokens: data.maxTokens,
-          })) {
-            // Check if execution was cancelled
-            if (context.signal?.aborted) {
-              context.onLog?.({
-                nodeId: node.id,
-                nodeName: data.label,
-                level: 'info',
-                message: '响应已取消',
-              })
-              break
+          const result = await client.chatStreamWithTools(
+            {
+              model: data.model,
+              messages,
+              temperature: data.temperature,
+              max_tokens: data.maxTokens,
+              stream: true,
+            },
+            // onContentChunk - normal response content
+            (chunk) => {
+              chunkCount++
+              context.onStream?.(node.id, chunk)
+            },
+            // onToolCallName - not used for basic chat, but required by API
+            undefined,
+            // onReasoningChunk - reasoning content for DeepSeek R1, etc.
+            (chunk) => {
+              console.log('[OllamaChatExecutor] Reasoning chunk received:', chunk.substring(0, 50) + '...')
+              context.onReasoningStream?.(node.id, chunk)
             }
+          )
 
-            chunkCount++
-            fullResponse += chunk
-            context.onStream?.(node.id, chunk)
+          const content = result.content || ''
+          const reasoningContent = result.reasoning_content || ''
+
+          // Log reasoning content if present
+          if (reasoningContent) {
+            context.onLog?.({
+              nodeId: node.id,
+              nodeName: data.label,
+              level: 'debug',
+              message: '推理内容已接收',
+              data: { reasoningLength: reasoningContent.length },
+            })
           }
 
           context.onLog?.({
@@ -80,12 +93,13 @@ export function createOllamaChatExecutor(): NodeExecutor {
             nodeName: data.label,
             level: 'info',
             message: 'AI 响应完成',
-            data: { fullResponse, chunkCount },
+            data: { contentLength: content.length, chunkCount },
           })
 
           return {
-            response: fullResponse,
+            response: content,
             model: data.model,
+            reasoning_content: reasoningContent,
           }
         } else {
           // Handle non-streaming response
@@ -97,18 +111,33 @@ export function createOllamaChatExecutor(): NodeExecutor {
           })
 
           const content = result.content || ''
+          const reasoningContent = result.reasoning_content || ''
+
+          console.log('[OllamaChatExecutor] Non-streaming result:', {
+            contentLength: content.length,
+            hasReasoning: !!reasoningContent,
+            reasoningLength: reasoningContent?.length || 0,
+            reasoningPreview: reasoningContent?.substring(0, 100) || 'none'
+          })
+
+          // For non-streaming, output the full reasoning content at once
+          if (reasoningContent) {
+            console.log('[OllamaChatExecutor] Calling onReasoningStream with:', reasoningContent.substring(0, 50) + '...')
+            context.onReasoningStream?.(node.id, reasoningContent)
+          }
 
           context.onLog?.({
             nodeId: node.id,
             nodeName: data.label,
             level: 'info',
             message: 'AI 响应已接收',
-            data: { content, hasContent: !!content },
+            data: { contentLength: content.length, hasReasoning: !!reasoningContent },
           })
 
           return {
             response: content,
             model: data.model,
+            reasoning_content: reasoningContent,
           }
         }
       } catch (error) {

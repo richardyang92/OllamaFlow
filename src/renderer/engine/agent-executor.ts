@@ -4,8 +4,6 @@
  */
 
 import path from 'path'
-import { Ollama } from 'ollama/browser'
-import type { Message, Tool } from 'ollama'
 import type { LLMProvider } from './react-agent/llm/types'
 import type { WorkflowInfo } from './workflow-registry'
 import { getWorkflowAsTool } from './workflow-registry'
@@ -18,12 +16,14 @@ import type {
   WorkflowCallRecord,
   SubAgentProgress,
   GeneratedFileInfo,
+  ReActStepDetail,
+  ReActToolCallInfo,
+  NodeExecutionEvent,
 } from '@/store/agent-store'
 import { generateStepId } from '@/store/agent-store'
 import { OpenAIClient, type OpenAIMessage, type OpenAITool, type OpenAIToolCall } from './openai-client'
-import type { TodoItem } from '@/types/node'
+import type { TodoItem, ReActStep } from '@/types/node'
 import {
-  compressOllamaContext,
   compressOpenAIContext,
   getContextConfig,
   estimateMessageTokens,
@@ -56,6 +56,7 @@ export interface AgentCallbacks {
   // 流式回调
   onThoughtChunk?: (chunk: string) => void
   onResponseChunk?: (chunk: string) => void
+  onReasoningChunk?: (chunk: string) => void // 推理内容流式回调（DeepSeek R1 等）
 
   // 步骤回调
   onStepStart?: (step: AgentStep) => void
@@ -72,6 +73,25 @@ export interface AgentCallbacks {
   // SubAgent 进度回调
   onSubAgentProgress?: (toolCallId: string, progress: Partial<SubAgentProgress>) => void
   onSubAgentLog?: (toolCallId: string, log: { message: string; type: 'info' | 'node_start' | 'node_complete' | 'node_error' | 'error'; nodeName?: string }) => void
+  // 节点步骤回调（新增 - 用于 SubAgent 工作流节点执行展示）
+  onSubAgentNodeStep?: (toolCallId: string, step: SubAgentProgress['nodeSteps'][0]) => void
+  onSubAgentNodeStepUpdate?: (toolCallId: string, nodeId: string, update: {
+    thought?: string
+    observation?: string
+    reactAgentSteps?: ReActStepDetail[]
+  }) => void
+  // 时间线事件回调（新增 - 保留兼容性）
+  onSubAgentTimelineEvent?: (toolCallId: string, event: NodeExecutionEvent) => void
+  // 节点流式更新回调（新增 - 保留兼容性）
+  onSubAgentStreamUpdate?: (toolCallId: string, nodeId: string, nodeName: string, update: {
+    reasoningChunk?: string
+    outputChunk?: string
+    toolUpdate?: {
+      toolName: string
+      output: string
+      error?: string
+    }
+  }) => void
 
   // 任务回调
   onTodosUpdate?: (items: TodoItem[]) => void
@@ -99,13 +119,6 @@ interface LLMResponse {
   toolCalls?: OpenAIToolCall[]
 }
 
-// 流式工具调用累加器
-interface StreamingToolCall {
-  id: string
-  name: string
-  arguments: string
-}
-
 // 最大迭代次数
 const MAX_ITERATIONS = 10
 
@@ -115,7 +128,6 @@ const MAX_ITERATIONS = 10
 export class IntelligentAgentExecutor {
   private config: AgentConfig
   private callbacks: AgentCallbacks
-  private ollamaClient: Ollama | null = null
   private openaiClient: OpenAIClient | null = null
   private todosManager: TodosManager
   private workflowCallIndex = 0
@@ -128,6 +140,12 @@ export class IntelligentAgentExecutor {
     this.config = config
     this.callbacks = callbacks
     this.todosManager = new TodosManager()
+
+    // 添加沙箱配置的调试日志
+    console.log('[🏖️ AGENT_EXECUTOR] 构造函数 - 沙箱配置', {
+      sandboxPath: config.sandboxPath,
+      hasSandbox: !!config.sandboxPath,
+    })
   }
 
   /**
@@ -138,6 +156,11 @@ export class IntelligentAgentExecutor {
     this.currentIteration = 0
     this.generatedFiles = []  // 重置生成的文件列表
 
+    console.log('[🏖️ AGENT_EXECUTOR] execute 开始', {
+      sandboxPath: this.config.sandboxPath,
+      hasSandbox: !!this.config.sandboxPath,
+    })
+
     try {
       // 初始化客户端
       this.initializeClients()
@@ -146,7 +169,7 @@ export class IntelligentAgentExecutor {
       const systemPrompt = this.buildSystemPrompt()
 
       // 构建消息数组（包含历史上下文）
-      const messages: Message[] | OpenAIMessage[] = [
+      const messages: OpenAIMessage[] = [
         { role: 'system', content: systemPrompt },
       ]
 
@@ -184,12 +207,10 @@ export class IntelligentAgentExecutor {
         this.callbacks.onStepStart?.(thinkingStep)
 
         // 上下文压缩：检查并在需要时压缩消息历史
-        const compressedMessages = this.compressMessagesIfNeeded(messages as Message[] | OpenAIMessage[])
+        const compressedMessages = this.compressMessagesIfNeeded(messages)
 
-        // 调用LLM（流式）
-        const response = this.config.provider === 'ollama'
-          ? await this.callOllamaStream(compressedMessages as Message[])
-          : await this.callOpenAIStream(compressedMessages as OpenAIMessage[])
+        // 调用LLM（流式）- 统一使用 OpenAI 兼容 API
+        const response = await this.callOpenAIStream(compressedMessages)
 
         // 更新思考步骤状态
         this.callbacks.onStepUpdate?.(this.currentStepId, {
@@ -204,7 +225,7 @@ export class IntelligentAgentExecutor {
             role: 'assistant',
             content: response.content,
             tool_calls: response.toolCalls,
-          } as Message & OpenAIMessage)
+          })
 
           // 更新步骤状态为 acting
           this.callbacks.onStepUpdate?.(this.currentStepId, {
@@ -257,34 +278,20 @@ export class IntelligentAgentExecutor {
               const { toolCall } = group[i]
 
               if (result.status === 'fulfilled') {
-                // 添加工具响应
-                if (this.config.provider === 'ollama') {
-                  (messages as Message[]).push({
-                    role: 'tool',
-                    content: result.value,
-                  })
-                } else {
-                  (messages as OpenAIMessage[]).push({
-                    role: 'tool',
-                    tool_call_id: toolCall.id,
-                    content: result.value,
-                  })
-                }
+                // 添加工具响应 - 统一使用 OpenAI 格式
+                messages.push({
+                  role: 'tool',
+                  tool_call_id: toolCall.id,
+                  content: result.value,
+                })
               } else {
                 // 错误处理
                 const errorMsg = `执行错误: ${result.reason}`
-                if (this.config.provider === 'ollama') {
-                  (messages as Message[]).push({
-                    role: 'tool',
-                    content: errorMsg,
-                  })
-                } else {
-                  (messages as OpenAIMessage[]).push({
-                    role: 'tool',
-                    tool_call_id: toolCall.id,
-                    content: errorMsg,
-                  })
-                }
+                messages.push({
+                  role: 'tool',
+                  tool_call_id: toolCall.id,
+                  content: errorMsg,
+                })
               }
             }
           }
@@ -296,12 +303,21 @@ export class IntelligentAgentExecutor {
           })
           this.callbacks.onStepComplete?.(this.currentStepId)
           this.callbacks.onComplete?.(response.content, this.generatedFiles)
+          console.log('[🏖️ AGENT_EXECUTOR] onComplete 调用', {
+            responseLength: response.content?.length,
+            generatedFilesCount: this.generatedFiles.length,
+            generatedFiles: this.generatedFiles,
+          })
           return response.content
         }
       }
 
       // 达到最大迭代次数
       const finalResponse = '抱歉，我无法在有限的步骤内完成您的请求。请尝试简化您的问题。'
+      console.log('[🏖️ AGENT_EXECUTOR] 达到最大迭代，onComplete 调用', {
+        generatedFilesCount: this.generatedFiles.length,
+        generatedFiles: this.generatedFiles,
+      })
       this.callbacks.onComplete?.(finalResponse, this.generatedFiles)
       return finalResponse
 
@@ -315,93 +331,19 @@ export class IntelligentAgentExecutor {
 
   /**
    * 初始化客户端
+   * 统一使用 OpenAI 兼容 API
    */
   private initializeClients() {
-    if (this.config.provider === 'ollama') {
-      this.ollamaClient = new Ollama({
-        host: this.config.apiEndpoint || 'http://127.0.0.1:11434',
-      })
-    } else {
-      this.openaiClient = new OpenAIClient(
-        this.config.apiKey || '',
-        this.config.apiEndpoint || 'https://api.openai.com/v1'
-      )
-    }
+    // 统一使用 OpenAI 兼容 API
+    this.openaiClient = new OpenAIClient(
+      this.config.apiKey || '',
+      this.config.apiEndpoint || 'https://api.openai.com/v1'
+    )
   }
 
   /**
-   * Ollama 流式调用
-   */
-  private async callOllamaStream(messages: Message[]): Promise<LLMResponse> {
-    if (!this.ollamaClient) {
-      throw new Error('Ollama客户端未初始化')
-    }
-
-    const tools = this.getOllamaTools()
-    let fullContent = ''
-    const toolCallsMap = new Map<string, StreamingToolCall>()
-
-    const stream = await this.ollamaClient.chat({
-      model: this.config.model,
-      messages,
-      tools,
-      stream: true,
-    })
-
-    for await (const chunk of stream) {
-      if (this.signal?.aborted) {
-        throw new Error('执行已取消')
-      }
-
-      // 处理内容流
-      if (chunk.message.content) {
-        fullContent += chunk.message.content
-        // 回调流式内容
-        this.callbacks.onThoughtChunk?.(chunk.message.content)
-        this.callbacks.onThought?.(chunk.message.content)
-      }
-
-      // 处理工具调用流
-      if (chunk.message.tool_calls) {
-        for (const tc of chunk.message.tool_calls) {
-          const id = tc.function?.name || `tc_${Date.now()}`
-          if (!toolCallsMap.has(id)) {
-            toolCallsMap.set(id, {
-              id,
-              name: tc.function.name,
-              arguments: '',
-            })
-          }
-          // 累加参数
-          const existing = toolCallsMap.get(id)!
-          if (tc.function.arguments) {
-            const argsStr = typeof tc.function.arguments === 'string'
-              ? tc.function.arguments
-              : JSON.stringify(tc.function.arguments)
-            existing.arguments += argsStr
-          }
-        }
-      }
-    }
-
-    // 组装完整的工具调用
-    const toolCalls: OpenAIToolCall[] = Array.from(toolCallsMap.values()).map((tc) => ({
-      id: tc.id,
-      type: 'function' as const,
-      function: {
-        name: tc.name,
-        arguments: tc.arguments,
-      },
-    }))
-
-    return {
-      content: fullContent,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-    }
-  }
-
-  /**
-   * OpenAI 流式调用
+   * OpenAI 流式调用（使用新的 chatStreamWithTools 方法）
+   * 统一用于所有 provider
    */
   private async callOpenAIStream(messages: OpenAIMessage[]): Promise<LLMResponse> {
     if (!this.openaiClient) {
@@ -409,26 +351,34 @@ export class IntelligentAgentExecutor {
     }
 
     const tools = this.getOpenAITools()
-    let fullContent = ''
 
     try {
-      for await (const chunk of this.openaiClient.chatStream({
-        model: this.config.model,
-        messages,
-        tools,
-        stream: true,
-      })) {
-        if (this.signal?.aborted) {
-          throw new Error('执行已取消')
-        }
-
-        // 处理内容流
-        if (chunk) {
-          fullContent += chunk
+      // 使用新的流式方法，一次调用获取内容和工具调用
+      const response = await this.openaiClient.chatStreamWithTools(
+        {
+          model: this.config.model,
+          messages,
+          tools,
+          stream: true,
+        },
+        (chunk) => {
+          if (this.signal?.aborted) {
+            throw new Error('执行已取消')
+          }
           // 回调流式内容
           this.callbacks.onThoughtChunk?.(chunk)
           this.callbacks.onThought?.(chunk)
+        },
+        undefined, // onToolCallName
+        (chunk) => {
+          // 回调推理内容（DeepSeek R1 等）
+          this.callbacks.onReasoningChunk?.(chunk)
         }
+      )
+
+      return {
+        content: response.content || '',
+        toolCalls: response.tool_calls,
       }
     } catch (error) {
       // 如果流式失败，尝试非流式（某些API不支持流式+工具调用）
@@ -446,167 +396,16 @@ export class IntelligentAgentExecutor {
         this.callbacks.onThought?.(response.content)
       }
 
+      // 一次性回调推理内容
+      if (response.reasoning_content) {
+        this.callbacks.onReasoningChunk?.(response.reasoning_content)
+      }
+
       return {
         content: response.content || '',
         toolCalls: response.tool_calls,
       }
     }
-
-    // 注意：当前 OpenAI chatStream 不返回工具调用
-    // 需要使用非流式方式获取工具调用
-    const fullResponse = await this.openaiClient.chat({
-      model: this.config.model,
-      messages,
-      tools,
-      stream: false,
-    })
-
-    return {
-      content: fullContent || fullResponse.content || '',
-      toolCalls: fullResponse.tool_calls,
-    }
-  }
-
-  /**
-   * 获取Ollama工具格式
-   */
-  private getOllamaTools(): Tool[] {
-    const tools: Tool[] = []
-
-    // 添加工作流工具
-    for (const workflow of this.config.workflows) {
-      const toolDef = getWorkflowAsTool(workflow)
-      tools.push({
-        type: 'function',
-        function: {
-          name: toolDef.name,
-          description: toolDef.description,
-          parameters: toolDef.parameters as Tool['function']['parameters'],
-        },
-      })
-    }
-
-    // 添加内置工具
-    tools.push({
-      type: 'function',
-      function: {
-        name: 'todos',
-        description: '管理待办事项列表，用于规划和跟踪任务进度',
-        parameters: {
-          type: 'object',
-          properties: {
-            action: { type: 'string', description: '操作类型: init, add, complete, list, remove, clear' },
-            content: { type: 'string', description: '任务内容' },
-            tasks: { type: 'array', items: { type: 'string' }, description: '任务列表' },
-          },
-          required: ['action'],
-        },
-      },
-    })
-
-    tools.push({
-      type: 'function',
-      function: {
-        name: 'getCurrentDate',
-        description: '获取当前日期和时间',
-        parameters: {
-          type: 'object',
-          properties: {
-            format: { type: 'string', description: '格式: full, date, time, timestamp' },
-          },
-          required: [],
-        },
-      },
-    })
-
-    // 文件操作工具（仅在沙箱目录中操作）
-    tools.push({
-      type: 'function',
-      function: {
-        name: 'readFile',
-        description: '读取沙箱目录中的文件内容',
-        parameters: {
-          type: 'object',
-          properties: {
-            filePath: { type: 'string', description: '相对于沙箱目录的文件路径' },
-          },
-          required: ['filePath'],
-        },
-      },
-    })
-
-    tools.push({
-      type: 'function',
-      function: {
-        name: 'writeFile',
-        description: '将内容写入沙箱目录中的文件，自动创建所需的子目录',
-        parameters: {
-          type: 'object',
-          properties: {
-            filename: { type: 'string', description: '相对于沙箱目录的文件路径' },
-            content: { type: 'string', description: '文件内容' },
-          },
-          required: ['filename', 'content'],
-        },
-      },
-    })
-
-    tools.push({
-      type: 'function',
-      function: {
-        name: 'writeMultipleFiles',
-        description: '批量写入多个文件到沙箱目录',
-        parameters: {
-          type: 'object',
-          properties: {
-            files: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  filename: { type: 'string' },
-                  content: { type: 'string' },
-                },
-                required: ['filename', 'content'],
-              },
-            },
-          },
-          required: ['files'],
-        },
-      },
-    })
-
-    tools.push({
-      type: 'function',
-      function: {
-        name: 'listFiles',
-        description: '列出沙箱目录中的文件和子目录',
-        parameters: {
-          type: 'object',
-          properties: {
-            path: { type: 'string', description: '相对于沙箱目录的路径，默认为根目录' },
-          },
-          required: [],
-        },
-      },
-    })
-
-    tools.push({
-      type: 'function',
-      function: {
-        name: 'executeCommand',
-        description: '在沙箱目录中执行 Shell 命令，有30秒超时限制',
-        parameters: {
-          type: 'object',
-          properties: {
-            command: { type: 'string', description: '要执行的命令' },
-          },
-          required: ['command'],
-        },
-      },
-    })
-
-    return tools
   }
 
   /**
@@ -1068,8 +867,15 @@ tool_calls: [
       }
 
       case 'writeFile': {
+        console.log('[🏖️ AGENT_TOOL] writeFile 调用', {
+          hasSandbox: !!this.config.sandboxPath,
+          sandboxPath: this.config.sandboxPath,
+          args,
+        })
+
         if (!this.config.sandboxPath) {
           const error = '错误: 沙箱未配置，无法写入文件'
+          console.error('[🏖️ AGENT_TOOL] ❌ writeFile 失败 - 沙箱未配置')
           this.callbacks.onObservation?.(error)
           return error
         }
@@ -1087,12 +893,30 @@ tool_calls: [
           return error
         }
         try {
-          const result = await window.electronAPI.file.write(this.config.sandboxPath, filename.replace(/^\/+/, ''), content || '')
+          const normalizedPath = filename.replace(/^\/+/, '')
+          console.log('[🏖️ AGENT_TOOL] 📝 准备写入文件', {
+            workspacePath: this.config.sandboxPath,
+            relativePath: normalizedPath,
+            contentLength: content?.length,
+          })
+          const result = await window.electronAPI.file.write(this.config.sandboxPath, normalizedPath, content || '')
+          console.log('[🏖️ AGENT_TOOL] 文件写入结果', result)
           if (!result.success) {
             const error = `写入文件失败: ${result.error}`
             this.callbacks.onObservation?.(error)
             return error
           }
+          // 收集生成的文件信息
+          this.generatedFiles.push({
+            path: normalizedPath,
+            workspacePath: this.config.sandboxPath,
+            type: 'created',
+            size: content?.length,
+          })
+          console.log('[🏖️ AGENT_TOOL] ✅ 文件已写入并添加到生成列表', {
+            path: normalizedPath,
+            totalGeneratedFiles: this.generatedFiles.length,
+          })
           const successMsg = `文件已写入: ${filename}`
           this.callbacks.onObservation?.(successMsg)
           return successMsg
@@ -1130,8 +954,16 @@ tool_calls: [
             continue
           }
           try {
-            const result = await window.electronAPI.file.write(this.config.sandboxPath, filename.replace(/^\/+/, ''), content)
+            const normalizedPath = filename.replace(/^\/+/, '')
+            const result = await window.electronAPI.file.write(this.config.sandboxPath, normalizedPath, content)
             if (result.success) {
+              // 收集生成的文件信息
+              this.generatedFiles.push({
+                path: normalizedPath,
+                workspacePath: this.config.sandboxPath,
+                type: 'created',
+                size: content?.length,
+              })
               results.push(`✅ ${filename}`)
               successCount++
             } else {
@@ -1287,6 +1119,7 @@ tool_calls: [
       logs: [],
       startedAt: Date.now(),
       updatedAt: Date.now(),
+      nodeSteps: [], // 初始化空节点步骤列表
     }
     log('初始化 SubAgent 进度:', toolCallId, initialProgress)
     this.callbacks.onSubAgentProgress?.(toolCallId, initialProgress)
@@ -1348,20 +1181,99 @@ tool_calls: [
               })
             },
             onReactAgentUpdate: (nodeId, nodeName, detail) => {
+              // 辅助函数：将 ReActStep 映射为 ReActStepDetail
+              const mapReActStepToDetail = (step: ReActStep): ReActStepDetail => {
+                let toolCallInfo: ReActToolCallInfo | undefined
+
+                if (step.action) {
+                  // 解析输入参数
+                  let parsedInput: unknown = null
+                  try {
+                    parsedInput = step.actionInput ? JSON.parse(step.actionInput) : null
+                  } catch {
+                    parsedInput = step.actionInput
+                  }
+
+                  toolCallInfo = {
+                    toolName: step.action,
+                    input: parsedInput,
+                    output: step.observation,
+                    error: step.observationError ? step.observation || undefined : undefined,
+                  }
+                }
+
+                // 截取过长内容（性能优化）
+                const maxLen = 500
+                const truncate = (s: string | null): string | undefined =>
+                  s && s.length > maxLen ? s.slice(0, maxLen) + '...' : (s || undefined)
+
+                return {
+                  id: step.id,
+                  iteration: step.iteration,
+                  status: step.status,
+                  thought: truncate(step.thought),
+                  thoughtStreaming: step.thoughtStreaming,
+                  toolCall: toolCallInfo,
+                  observation: truncate(step.observation),
+                  observationStreaming: step.observationStreaming,
+                  observationError: step.observationError,
+                  startedAt: step.startedAt,
+                  completedAt: step.completedAt,
+                }
+              }
+
+              // 映射所有历史步骤（不包括当前步骤）
+              const historySteps = detail.steps
+                .slice(0, -1)
+                .map(step => mapReActStepToDetail(step))
+                .slice(-5)  // 只保留最近 5 个历史步骤
+
+              // 映射当前步骤
+              const currentStep = detail.currentStep
+                ? mapReActStepToDetail(detail.currentStep)
+                : undefined
+
               this.callbacks.onSubAgentProgress?.(toolCallId, {
                 reactAgentDetail: {
                   nodeId,
                   nodeName,
                   currentIteration: detail.currentIteration,
                   maxIterations: detail.maxIterations,
-                  currentStep: detail.currentStep ? {
-                    status: detail.currentStep.status,
-                    thought: detail.currentStep.thought?.slice(0, 100),
-                    action: detail.currentStep.action,
-                  } : undefined,
+                  currentStep,
+                  historySteps,
                   totalSteps: detail.totalSteps,
                 },
               })
+            },
+            onOllamaChatUpdate: (nodeId, nodeName, detail) => {
+              this.callbacks.onSubAgentProgress?.(toolCallId, {
+                ollamaChatDetail: {
+                  nodeId,
+                  nodeName,
+                  model: detail.model,
+                  reasoningContent: detail.reasoningContent,
+                  reasoningStreaming: detail.reasoningStreaming,
+                  responseContent: detail.responseContent,
+                  responseStreaming: detail.responseStreaming,
+                },
+              })
+            },
+            // 节点步骤回调（新增）
+            onNodeStep: (step) => {
+              log('onNodeStep', step)
+              this.callbacks.onSubAgentNodeStep?.(toolCallId, step)
+            },
+            onNodeStepUpdate: (nodeId, update) => {
+              log('onNodeStepUpdate', nodeId, update)
+              this.callbacks.onSubAgentNodeStepUpdate?.(toolCallId, nodeId, update)
+            },
+            // 时间线事件回调（保留兼容性）
+            onTimelineEvent: (event) => {
+              this.callbacks.onSubAgentTimelineEvent?.(toolCallId, event)
+            },
+            // 节点流式更新回调（保留兼容性）
+            onNodeStreamUpdate: (nodeId, nodeName, update) => {
+              this.callbacks.onSubAgentStreamUpdate?.(toolCallId, nodeId, nodeName, update)
             },
           },
         }
@@ -1370,8 +1282,18 @@ tool_calls: [
       if (result.success) {
         // 收集生成的文件
         if (result.generatedFiles && result.generatedFiles.length > 0) {
+          console.log('[🏖️ AGENT_WORKFLOW] 收集工作流生成的文件', {
+            count: result.generatedFiles.length,
+            files: result.generatedFiles,
+          })
           this.generatedFiles.push(...result.generatedFiles)
+          console.log('[🏖️ AGENT_WORKFLOW] 当前 collectedFiles 总数', {
+            count: this.generatedFiles.length,
+            files: this.generatedFiles,
+          })
           this.callbacks.onFilesGenerated?.(result.generatedFiles)
+        } else {
+          console.log('[🏖️ AGENT_WORKFLOW] 工作流没有生成文件')
         }
 
         // 更新 SubAgent 状态为完成，确保进度为 100%
@@ -1381,6 +1303,7 @@ tool_calls: [
           completedNodes: result.totalNodes,
           totalNodes: result.totalNodes,
           reactAgentDetail: undefined, // 清除 ReAct Agent 详情
+          ollamaChatDetail: undefined, // 清除 Ollama Chat 详情
         })
 
         // 更新状态为完成
@@ -1403,6 +1326,7 @@ tool_calls: [
           completedNodes: result.totalNodes,
           totalNodes: result.totalNodes,
           reactAgentDetail: undefined, // 清除 ReAct Agent 详情
+          ollamaChatDetail: undefined, // 清除 Ollama Chat 详情
         })
         this.callbacks.onSubAgentLog?.(toolCallId, {
           message: result.error || '未知错误',
@@ -1448,7 +1372,7 @@ tool_calls: [
    * 压缩消息历史（如果需要）
    * 根据模型配置自动压缩过长的上下文
    */
-  private compressMessagesIfNeeded(messages: Message[] | OpenAIMessage[]): Message[] | OpenAIMessage[] {
+  private compressMessagesIfNeeded(messages: OpenAIMessage[]): OpenAIMessage[] {
     // 获取模型的上下文配置
     const contextConfig = getContextConfig(this.config.model)
     const maxTokens = contextConfig.maxContextTokens - contextConfig.reserveTokens
@@ -1463,35 +1387,20 @@ tool_calls: [
       return messages
     }
 
-    // 执行压缩
+    // 执行压缩 - 统一使用 OpenAI 格式压缩
     log(`触发上下文压缩: ${currentTokens} > ${maxTokens}`)
 
-    if (this.config.provider === 'ollama') {
-      const result = compressOllamaContext(messages as Message[], maxTokens, {
-        keepRecentIterations: contextConfig.keepRecentIterations,
-        maxObservationLength: contextConfig.maxObservationLength,
-        enableSummarization: contextConfig.enableSummarization,
-      })
+    const result = compressOpenAIContext(messages, maxTokens, {
+      keepRecentIterations: contextConfig.keepRecentIterations,
+      maxObservationLength: contextConfig.maxObservationLength,
+      enableSummarization: contextConfig.enableSummarization,
+    })
 
-      log(`压缩完成: ${result.originalTokens} -> ${result.newTokens} tokens (${Math.round(result.compressionRatio * 100)}%)`)
-      if (result.summary) {
-        log(`压缩摘要: ${result.summary}`)
-      }
-
-      return result.messages
-    } else {
-      const result = compressOpenAIContext(messages as OpenAIMessage[], maxTokens, {
-        keepRecentIterations: contextConfig.keepRecentIterations,
-        maxObservationLength: contextConfig.maxObservationLength,
-        enableSummarization: contextConfig.enableSummarization,
-      })
-
-      log(`压缩完成: ${result.originalTokens} -> ${result.newTokens} tokens (${Math.round(result.compressionRatio * 100)}%)`)
-      if (result.summary) {
-        log(`压缩摘要: ${result.summary}`)
-      }
-
-      return result.messages
+    log(`压缩完成: ${result.originalTokens} -> ${result.newTokens} tokens (${Math.round(result.compressionRatio * 100)}%)`)
+    if (result.summary) {
+      log(`压缩摘要: ${result.summary}`)
     }
+
+    return result.messages
   }
 }

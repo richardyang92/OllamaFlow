@@ -404,10 +404,40 @@ ipcMain.handle('workflow:import', async () => {
 // File: Read file
 ipcMain.handle('file:read', async (_, workspacePath: string, relativePath: string) => {
   const fullPath = path.join(workspacePath, relativePath)
+  console.log('[🏖️ FILE_READ] file:read 调用', {
+    workspacePath,
+    relativePath,
+    fullPath,
+  })
+
   try {
+    // 先检查文件是否存在
+    try {
+      const stats = await fs.stat(fullPath)
+      console.log('[🏖️ FILE_READ] 文件存在', {
+        path: fullPath,
+        isFile: stats.isFile(),
+        size: stats.size,
+      })
+    } catch (statError) {
+      console.error('[🏖️ FILE_READ] ❌ 文件不存在或无法访问', {
+        path: fullPath,
+        error: (statError as Error).message,
+      })
+    }
+
     const content = await fs.readFile(fullPath, 'utf-8')
+    console.log('[🏖️ FILE_READ] ✅ 文件读取成功', {
+      path: fullPath,
+      contentLength: content?.length,
+    })
     return { success: true, content }
   } catch (error) {
+    console.error('[🏖️ FILE_READ] ❌ 文件读取失败', {
+      path: fullPath,
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+    })
     return { success: false, error: (error as Error).message }
   }
 })
@@ -415,11 +445,36 @@ ipcMain.handle('file:read', async (_, workspacePath: string, relativePath: strin
 // File: Write file
 ipcMain.handle('file:write', async (_, workspacePath: string, relativePath: string, content: string) => {
   const fullPath = path.join(workspacePath, relativePath)
+  console.log('[🏖️ FILE_WRITE] file:write 调用', {
+    workspacePath,
+    relativePath,
+    fullPath,
+    contentLength: content?.length,
+  })
+
   try {
-    await fs.mkdir(path.dirname(fullPath), { recursive: true })
+    const dirToCreate = path.dirname(fullPath)
+    console.log('[🏖️ FILE_WRITE] 创建父目录', { dirToCreate })
+    await fs.mkdir(dirToCreate, { recursive: true })
+
+    console.log('[🏖️ FILE_WRITE] 写入文件内容', { fullPath })
     await fs.writeFile(fullPath, content, 'utf-8')
+
+    // 验证文件是否真的写入成功
+    const stats = await fs.stat(fullPath)
+    console.log('[🏖️ FILE_WRITE] ✅ 文件写入成功并已验证', {
+      path: fullPath,
+      size: stats.size,
+      isFile: stats.isFile(),
+    })
+
     return { success: true }
   } catch (error) {
+    console.error('[🏖️ FILE_WRITE] ❌ 文件写入失败', {
+      path: fullPath,
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+    })
     return { success: false, error: (error as Error).message }
   }
 })
@@ -808,11 +863,37 @@ const getAgentSandboxBasePath = (workspacePath: string) =>
 
 // Agent: Create sandbox directory for conversation
 ipcMain.handle('agent:createSandbox', async (_, workspacePath: string, conversationId: string) => {
-  const sandboxPath = path.join(getAgentSandboxBasePath(workspacePath), conversationId)
+  const basePath = getAgentSandboxBasePath(workspacePath)
+  const sandboxPath = path.join(basePath, conversationId)
+
+  console.log('[🏖️ MAIN_PROCESS] agent:createSandbox 调用', {
+    workspacePath,
+    conversationId,
+    basePath,
+    sandboxPath,
+  })
+
   try {
     await fs.mkdir(sandboxPath, { recursive: true })
+
+    // 验证目录是否真的创建了
+    try {
+      const stats = await fs.stat(sandboxPath)
+      console.log('[🏖️ MAIN_PROCESS] ✅ 目录创建成功并已验证', {
+        path: sandboxPath,
+        isDirectory: stats.isDirectory(),
+      })
+    } catch (verifyError) {
+      console.error('[🏖️ MAIN_PROCESS] ⚠️ 目录创建后验证失败', verifyError)
+    }
+
     return { success: true, path: sandboxPath }
   } catch (error) {
+    console.error('[🏖️ MAIN_PROCESS] ❌ 目录创建失败', {
+      path: sandboxPath,
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+    })
     return { success: false, error: (error as Error).message }
   }
 })
@@ -831,6 +912,49 @@ ipcMain.handle('agent:deleteSandbox', async (_, workspacePath: string, conversat
 // Agent: Get sandbox path for conversation
 ipcMain.handle('agent:getSandboxPath', async (_, workspacePath: string, conversationId: string) => {
   return path.join(getAgentSandboxBasePath(workspacePath), conversationId)
+})
+
+// Agent: Get default sandbox path (when no workspace is open)
+ipcMain.handle('agent:getDefaultSandboxPath', async (_, conversationId: string) => {
+  const basePath = path.join(app.getPath('userData'), 'agent-sandbox')
+  return path.join(basePath, conversationId)
+})
+
+// Agent: Create default sandbox directory
+ipcMain.handle('agent:createDefaultSandbox', async (_, conversationId: string) => {
+  const basePath = path.join(app.getPath('userData'), 'agent-sandbox')
+  const sandboxPath = path.join(basePath, conversationId)
+
+  console.log('[🏖️ MAIN_PROCESS] agent:createDefaultSandbox 调用', {
+    conversationId,
+    basePath,
+    sandboxPath,
+    userDataPath: app.getPath('userData'),
+  })
+
+  try {
+    await fs.mkdir(sandboxPath, { recursive: true })
+
+    // 验证目录是否真的创建了
+    try {
+      const stats = await fs.stat(sandboxPath)
+      console.log('[🏖️ MAIN_PROCESS] ✅ 默认沙箱目录创建成功并已验证', {
+        path: sandboxPath,
+        isDirectory: stats.isDirectory(),
+      })
+    } catch (verifyError) {
+      console.error('[🏖️ MAIN_PROCESS] ⚠️ 默认沙箱目录创建后验证失败', verifyError)
+    }
+
+    return { success: true, path: sandboxPath }
+  } catch (error) {
+    console.error('[🏖️ MAIN_PROCESS] ❌ 默认沙箱目录创建失败', {
+      path: sandboxPath,
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+    })
+    return { success: false, error: (error as Error).message }
+  }
 })
 
 // HTTP: Fetch URL

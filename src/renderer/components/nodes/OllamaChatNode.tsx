@@ -4,9 +4,11 @@ import { Bot, Microscope, ChevronDown, Loader2, CheckCircle, XCircle, Circle } f
 import BaseNode from './BaseNode'
 import { OllamaChatNodeData, NodeStatus } from '@/types/node'
 import { useStreamOutput } from '@/hooks/useStreamOutput'
+import { useReasoningStream } from '@/hooks/useReasoningStream'
 import { useNodeStatus } from '@/hooks/useNodeStatus'
 import { useSettingsStore } from '@/store/settings-store'
 import { motion } from 'framer-motion'
+import StreamingFlashText from './shared/StreamingFlashText'
 
 // 推理状态信息接口
 interface InferenceStatus {
@@ -31,6 +33,15 @@ function OllamaChatNode(props: NodeProps) {
   const data = props.data as OllamaChatNodeData
   const id = props.id as string
   const streamOutput = useStreamOutput(id)
+  const reasoningOutput = useReasoningStream(id)
+
+  // Debug: log reasoning output changes
+  useEffect(() => {
+    if (reasoningOutput) {
+      console.log('[OllamaChatNode] reasoningOutput updated:', { id, length: reasoningOutput.length, preview: reasoningOutput.substring(0, 50) + '...' })
+    }
+  }, [reasoningOutput, id])
+
   const outputRef = useRef<HTMLDivElement>(null)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
   const [nodeStatus, setNodeStatus] = useState<NodeStatus>('idle')
@@ -247,6 +258,48 @@ function OllamaChatNode(props: NodeProps) {
             <ChevronDown className="w-3.5 h-3.5" />
           </motion.span>
         </motion.div>
+
+        {/* 快闪推理内容预览 - 优先显示推理思考内容 */}
+        {nodeStatus === 'running' && (reasoningOutput || streamOutput) && (
+          <motion.div
+            layout
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg p-2">
+              {reasoningOutput ? (
+                <>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <motion.span
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                      className="text-xs"
+                    >
+                      🧠
+                    </motion.span>
+                    <span className="text-[10px] text-[var(--color-node-ai)] font-medium">思考中</span>
+                  </div>
+                  <StreamingFlashText
+                    text={reasoningOutput}
+                    isStreaming={true}
+                    maxLength={reasoningOutput.length > 100 ? 40 : 20}
+                    prefix=""
+                    textColor="text-[var(--color-node-ai)]"
+                  />
+                </>
+              ) : (
+                <StreamingFlashText
+                  text={streamOutput}
+                  isStreaming={true}
+                  maxLength={streamOutput.length > 100 ? 40 : 20}
+                  prefix="生成中: "
+                />
+              )}
+            </div>
+          </motion.div>
+        )}
 
         {/* Inference Details */}
         <motion.div

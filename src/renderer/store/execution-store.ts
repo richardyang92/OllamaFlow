@@ -28,6 +28,7 @@ interface ExecutionInstanceState {
   context: ExecutionContext | null
   logs: ExecutionLog[]
   streamingOutput: Map<string, string>
+  reasoningOutput: Map<string, string> // For reasoning/thinking content (e.g., DeepSeek R1)
   reactAgentStates: Map<string, ReActExecutionState>
   planStates: Map<string, PlanExecutionState>
   queueStates: Map<string, unknown[]>
@@ -68,6 +69,7 @@ interface ExecutionState {
   getNodeResultsForWorkspace: (workspacePath: string) => Map<string, NodeExecutionResult> | undefined
   clearLogsForWorkspace: (workspacePath: string) => void
   getStreamOutputForWorkspace: (workspacePath: string, nodeId: string) => string
+  getReasoningStreamOutputForWorkspace: (workspacePath: string, nodeId: string) => string
 
   updateNodeStatus: (executionId: string, nodeId: string, result: NodeExecutionResult) => void
   getNodeStatus: (executionId: string, nodeId: string) => NodeExecutionResult | undefined
@@ -76,6 +78,10 @@ interface ExecutionState {
   appendStreamOutput: (executionId: string, nodeId: string, chunk: string) => void
   getStreamOutput: (executionId: string, nodeId: string) => string
   clearStreamOutput: (executionId: string, nodeId: string) => void
+
+  appendReasoningStreamOutput: (executionId: string, nodeId: string, chunk: string) => void
+  getReasoningStreamOutput: (executionId: string, nodeId: string) => string
+  clearReasoningStreamOutput: (executionId: string, nodeId: string) => void
 
   addLog: (executionId: string, log: Omit<ExecutionLog, 'id' | 'timestamp' | 'executionId'>) => void
   clearLogs: (executionId: string) => void
@@ -124,6 +130,7 @@ const createEmptyExecutionState = (executionId: string, workspacePath: string, w
   context: null,
   logs: [],
   streamingOutput: new Map(),
+  reasoningOutput: new Map(),
   reactAgentStates: new Map(),
   planStates: new Map(),
   queueStates: new Map(),
@@ -334,6 +341,46 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
 
     const executions = new Map(get().executions)
     executions.set(executionId, { ...execution, streamingOutput: newStreamingOutput })
+
+    set({ executions })
+  },
+
+  // Reasoning stream output operations (for DeepSeek R1, etc.)
+  appendReasoningStreamOutput: (executionId, nodeId, chunk) => {
+    console.log('[ExecutionStore] appendReasoningStreamOutput:', { executionId, nodeId, chunk: chunk.substring(0, 50) + '...' })
+    const execution = get().executions.get(executionId)
+    if (!execution) {
+      console.log('[ExecutionStore] Execution not found:', executionId)
+      return
+    }
+
+    const newReasoningOutput = new Map(execution.reasoningOutput || new Map())
+    const current = newReasoningOutput.get(nodeId) || ''
+    newReasoningOutput.set(nodeId, current + chunk)
+
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, reasoningOutput: newReasoningOutput })
+
+    console.log('[ExecutionStore] Setting reasoning output for node:', nodeId, 'total length:', newReasoningOutput.get(nodeId)?.length || 0)
+    set({ executions })
+  },
+
+  getReasoningStreamOutput: (executionId, nodeId) => {
+    const execution = get().executions.get(executionId)
+    const output = execution?.reasoningOutput?.get(nodeId) || ''
+    console.log('[ExecutionStore] getReasoningStreamOutput:', { executionId, nodeId, length: output.length })
+    return output
+  },
+
+  clearReasoningStreamOutput: (executionId, nodeId) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
+
+    const newReasoningOutput = new Map(execution.reasoningOutput || new Map())
+    newReasoningOutput.delete(nodeId)
+
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, reasoningOutput: newReasoningOutput })
 
     set({ executions })
   },
@@ -771,6 +818,18 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     const activeExecutionId = get().getActiveExecution(workspacePath)
     if (!activeExecutionId) return ''
     return get().getStreamOutput(activeExecutionId, nodeId)
+  },
+
+  getReasoningStreamOutputForWorkspace: (workspacePath, nodeId) => {
+    const activeExecutionId = get().getActiveExecution(workspacePath)
+    console.log('[ExecutionStore] getReasoningStreamOutputForWorkspace:', { workspacePath, nodeId, activeExecutionId })
+    if (!activeExecutionId) {
+      console.log('[ExecutionStore] No active execution found')
+      return ''
+    }
+    const result = get().getReasoningStreamOutput(activeExecutionId, nodeId)
+    console.log('[ExecutionStore] getReasoningStreamOutputForWorkspace result:', { length: result.length })
+    return result
   },
 
   // Plan state operations

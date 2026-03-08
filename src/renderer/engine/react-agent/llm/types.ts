@@ -4,6 +4,12 @@
  */
 
 /**
+ * LLM Provider type
+ * Note: All providers now use OpenAI-compatible API
+ */
+export type LLMProvider = 'ollama' | 'openai'
+
+/**
  * Unified tool call representation
  */
 export interface StandardToolCall {

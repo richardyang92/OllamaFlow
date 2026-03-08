@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { GlobalAIConfig, ModelInfo, ResolvedAIConfig } from '@/types/global-config'
+import { useWorkflowStore } from './workflow-store'
 
 interface OllamaConnection {
   id: string
@@ -110,6 +111,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setGlobalAIConfig: async (config, apiKey) => {
     try {
+      // Get old model before update
+      const oldModel = get().globalAIConfig?.defaultModel
+      const newModel = config.defaultModel
+
       await window.electronAPI.globalAI.setConfig(config)
       if (apiKey !== undefined) {
         if (apiKey) {
@@ -123,6 +128,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         globalAIConfig: config,
         isGlobalAIEnabled: config.enabled,
       })
+
+      // Sync all workflow nodes with old model to new model
+      if (oldModel && newModel && oldModel !== newModel) {
+        useWorkflowStore.getState().updateAllNodeModels(oldModel, newModel)
+        // Auto-save the workflow to persist changes to file
+        await useWorkflowStore.getState().saveCurrentWorkflow()
+      }
     } catch (error) {
       console.error('[SettingsStore] Failed to save global AI config:', error)
       throw error

@@ -501,6 +501,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     getSandboxPath: (workspacePath: string, conversationId: string): Promise<string> =>
       ipcRenderer.invoke('agent:getSandboxPath', workspacePath, conversationId),
+
+    // 默认沙箱（无工作区时使用）
+    createDefaultSandbox: (conversationId: string): Promise<{ success: boolean; path?: string; error?: string }> =>
+      ipcRenderer.invoke('agent:createDefaultSandbox', conversationId),
+
+    getDefaultSandboxPath: (conversationId: string): Promise<string> =>
+      ipcRenderer.invoke('agent:getDefaultSandboxPath', conversationId),
   },
 
   // File Watcher
@@ -675,6 +682,9 @@ declare global {
         createSandbox: (workspacePath: string, conversationId: string) => Promise<{ success: boolean; path?: string; error?: string }>
         deleteSandbox: (workspacePath: string, conversationId: string) => Promise<{ success: boolean; error?: string }>
         getSandboxPath: (workspacePath: string, conversationId: string) => Promise<string>
+        // 默认沙箱（无工作区时使用）
+        createDefaultSandbox: (conversationId: string) => Promise<{ success: boolean; path?: string; error?: string }>
+        getDefaultSandboxPath: (conversationId: string) => Promise<string>
       }
       fileWatcher: {
         start: (workspacePath: string) => Promise<{ success: boolean; message?: string; error?: string }>
