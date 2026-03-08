@@ -2,9 +2,20 @@ import type { Node } from '@xyflow/react'
 import type { WorkflowNodeData, PlanNodeData } from '@/types/node'
 import type { NodeExecutor, ExecutionContext } from '../executor'
 import { interpolateVariables } from '../executor'
-import { Ollama } from 'ollama/browser'
 import { OpenAIClient } from '../openai-client'
 import { useExecutionStore } from '@/store/execution-store'
+import { resolveAIConfig } from '../config-resolver'
+
+/**
+ * Get API configuration from global config
+ */
+async function getAPIConfig(): Promise<{ apiKey: string; apiEndpoint: string }> {
+  const config = await resolveAIConfig()
+  return {
+    apiKey: config.apiKey || '',
+    apiEndpoint: config.apiEndpoint,
+  }
+}
 
 /**
  * Call AI with prompt and return response
@@ -13,80 +24,25 @@ async function callAI(
   prompt: string,
   model: string,
   temperature: number,
-  maxTokens: number,
-  ollamaHost: string,
-  debugMode?: PlanNodeData['debugMode']
+  maxTokens: number
 ): Promise<string> {
-  if (debugMode?.enabled) {
-    return callOpenAI(prompt, model, temperature, maxTokens, debugMode)
-  } else {
-    return callOllama(prompt, model, temperature, maxTokens, ollamaHost)
-  }
-}
+  const { apiKey, apiEndpoint } = await getAPIConfig()
+  const client = new OpenAIClient(apiKey, apiEndpoint)
 
-async function callOllama(
-  prompt: string,
-  model: string,
-  temperature: number,
-  maxTokens: number,
-  ollamaHost: string
-): Promise<string> {
-  const ollama = new Ollama({ host: ollamaHost })
-  
-  const response = await ollama.chat({
-    model,
-    messages: [{ role: 'user', content: prompt }],
-    stream: false,
-    options: {
-      temperature,
-      num_predict: maxTokens,
-    },
-  })
-  
-  return response.message.content
-}
-
-async function callOpenAI(
-  prompt: string,
-  model: string,
-  temperature: number,
-  maxTokens: number,
-  debugMode: NonNullable<PlanNodeData['debugMode']>
-): Promise<string> {
-  let apiKey = debugMode.apiKey
-  
-  if (!apiKey) {
-    const storedKey = await window.electronAPI.openai.getApiKey(`plan-${model}`)
-    if (storedKey) {
-      apiKey = storedKey
-    } else {
-      const workspaceKey = await window.electronAPI.openai.getApiKey('workspace-default')
-      if (workspaceKey) {
-        apiKey = workspaceKey
-      }
-    }
-  }
-  
-  if (!apiKey) {
-    throw new Error('OpenAI API Key 未配置。请在调试模式设置中输入 API Key。')
-  }
-  
-  const client = new OpenAIClient(apiKey, debugMode.apiEndpoint)
-  
   const result = await client.chat({
-    model: debugMode.model,
+    model,
     messages: [{ role: 'user', content: prompt }],
     temperature,
     max_tokens: maxTokens,
   })
-  
-  return result.content
+
+  return result.content || ''
 }
 
 /**
  * Parse JSON from AI response
  */
-function parseJSONResponse(response: string): any {
+function parseJSONResponse(response: string): unknown {
   try {
     const jsonMatch = response.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
@@ -110,13 +66,13 @@ export const planExecutor: NodeExecutor = {
   ): Promise<unknown> {
     const data = node.data as PlanNodeData
     const executionStore = useExecutionStore.getState()
-    
+
     const userTask = String(input.task || input.input || '')
-    
+
     if (!userTask.trim()) {
       throw new Error('任务描述不能为空')
     }
-    
+
     context.onLog?.({
       nodeId: node.id,
       nodeName: data.label,
@@ -126,10 +82,10 @@ export const planExecutor: NodeExecutor = {
 
     executionStore.initPlanState(context.executionId, node.id)
     executionStore.updatePlanPhase(context.executionId, node.id, 'analyzing')
-    
+
     try {
       const systemPrompt = interpolateVariables(data.systemPrompt, { ...context.variables, ...input })
-      
+
       const analysisPrompt = `${systemPrompt}
 
 用户任务：${userTask}
@@ -165,50 +121,59 @@ export const planExecutor: NodeExecutor = {
 - 只有在确实无法执行任务时才提问，如果任务已经足够清晰，直接返回 needsQuestions: false
 
 请只返回 JSON，不要有其他说明文字。`
-      
+
       const analysisResponse = await callAI(
         analysisPrompt,
         data.model,
         data.temperature,
-        data.maxTokens,
-        context.ollamaHost,
-        data.debugMode
+        data.maxTokens
       )
-      
-      const analysisData = parseJSONResponse(analysisResponse)
-      
+
+      const analysisData = parseJSONResponse(analysisResponse) as {
+        needsQuestions?: boolean
+        analysis?: string
+        questions?: Array<{
+          id: string
+          question: string
+          type: string
+          options?: string[]
+          required?: boolean
+          placeholder?: string
+        }>
+      } | null
+
       if (!analysisData) {
         throw new Error('无法解析AI分析结果')
       }
-      
+
       executionStore.updatePlanPhase(context.executionId, node.id, 'analyzing', {
         analysisResult: analysisData.analysis
       })
-      
+
       context.onLog?.({
         nodeId: node.id,
         nodeName: data.label,
         level: 'info',
         message: `分析完成: ${analysisData.analysis}`,
       })
-      
+
       if (analysisData.needsQuestions && analysisData.questions?.length > 0) {
-        executionStore.setPlanQuestions(context.executionId, node.id, analysisData.questions, analysisData.analysis)
-        
+        executionStore.setPlanQuestions(context.executionId, node.id, analysisData.questions, analysisData.analysis || '')
+
         context.onLog?.({
           nodeId: node.id,
           nodeName: data.label,
           level: 'info',
           message: `需要用户回答 ${analysisData.questions.length} 个问题`,
         })
-        
+
         return {
           status: 'waiting',
           questions: analysisData.questions,
           analysis: analysisData.analysis,
         }
       }
-      
+
       const planPrompt = `${systemPrompt}
 
 用户任务：${userTask}
@@ -223,42 +188,40 @@ export const planExecutor: NodeExecutor = {
 5. 预期结果
 
 请以清晰的Markdown格式输出计划。`
-      
+
       const plan = await callAI(
         planPrompt,
         data.model,
         data.temperature,
-        data.maxTokens,
-        context.ollamaHost,
-        data.debugMode
+        data.maxTokens
       )
-      
+
       executionStore.setPlanResult(context.executionId, node.id, plan)
-      
+
       context.onLog?.({
         nodeId: node.id,
         nodeName: data.label,
         level: 'info',
         message: '计划生成完成',
       })
-      
+
       return {
         plan,
         analysis: analysisData.analysis,
         hadQuestions: false,
       }
-      
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '未知错误'
       executionStore.setPlanError(context.executionId, node.id, errorMessage)
-      
+
       context.onLog?.({
         nodeId: node.id,
         nodeName: data.label,
         level: 'error',
         message: `执行失败: ${errorMessage}`,
       })
-      
+
       throw error
     }
   },
@@ -276,18 +239,17 @@ export async function generatePlanFromAnswers(
   model: string,
   temperature: number,
   maxTokens: number,
-  ollamaHost: string,
-  debugMode?: PlanNodeData['debugMode']
+  context: ExecutionContext
 ): Promise<string> {
   const executionStore = useExecutionStore.getState()
 
   executionStore.updatePlanPhase(executionId, nodeId, 'generating')
   executionStore.setPlanAnswers(executionId, nodeId, answers)
-  
+
   const answersText = Object.entries(answers)
     .map(([id, value]) => `${id}: ${value}`)
     .join('\n')
-  
+
   const prompt = `${systemPrompt}
 
 用户任务：${userTask}
@@ -305,9 +267,9 @@ ${answersText}
 5. 预期结果
 
 请以清晰的Markdown格式输出计划。`
-  
+
   try {
-    const plan = await callAI(prompt, model, temperature, maxTokens, ollamaHost, debugMode)
+    const plan = await callAI(prompt, model, temperature, maxTokens, context)
 
     executionStore.setPlanResult(executionId, nodeId, plan)
 

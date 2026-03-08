@@ -288,8 +288,12 @@ export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeCl
         snapGrid={[15, 15]}
         deleteKeyCode={['Delete', 'Backspace']}
         selectionMode={SelectionMode.Partial}
+        panOnDrag={true}
         selectionOnDrag={true}
-        panOnDrag={[1, 2]}
+        selectionKeyCode="Shift"
+        panOnScroll={false}
+        minZoom={0.5}
+        maxZoom={2}
         defaultEdgeOptions={{
           type: 'default',
           animated: false,

@@ -4,7 +4,6 @@
  */
 
 import type {
-  LLMProvider,
   LLMClientConfig,
   StandardMessage,
   StandardLLMResponse,
@@ -15,11 +14,6 @@ import type {
  * Defines the contract that all LLM providers must implement
  */
 export interface ILLMClient {
-  /**
-   * Get the provider type identifier
-   */
-  readonly provider: LLMProvider
-
   /**
    * Get the current model name
    */

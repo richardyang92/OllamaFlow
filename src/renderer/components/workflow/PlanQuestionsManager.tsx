@@ -8,6 +8,7 @@ import ReactAgentInputDialog from '../nodes/react-agent/ReactAgentInputDialog'
 import { generatePlanFromAnswers } from '@/engine/nodes/plan'
 import { continueReactAgentWithUserInput } from '@/engine/nodes/react-agent'
 import type { PlanNodeData, ReactAgentNodeData } from '@/types/node'
+import type { ExecutionContext } from '@/engine/executor'
 
 export default function PlanQuestionsManager() {
   const workspacePath = useWorkspaceStore((state) => state.currentWorkspace?.path)
@@ -71,6 +72,20 @@ export default function PlanQuestionsManager() {
 
     try {
       console.log('[PlanQuestionsManager] Calling generatePlanFromAnswers')
+
+      // Get API key if available
+      const apiKey = await window.electronAPI.openai.getApiKey('workspace-default')
+
+      // Build execution context for the plan generation
+      const context: ExecutionContext = {
+        executionId: capturedExecutionId,
+        workspacePath: workspacePath || '',
+        apiEndpoint: workspaceConfig?.apiEndpoint || 'http://127.0.0.1:11434',
+        apiKey: apiKey || undefined,
+        variables: {},
+        userInputValues: new Map(),
+      }
+
       const plan = await generatePlanFromAnswers(
         capturedExecutionId,
         questionData.nodeId,
@@ -80,8 +95,7 @@ export default function PlanQuestionsManager() {
         nodeData.model,
         nodeData.temperature,
         nodeData.maxTokens,
-        workspaceConfig?.ollamaHost || 'http://127.0.0.1:11434',
-        nodeData.debugMode
+        context
       )
 
       console.log('[PlanQuestionsManager] Plan generated successfully, updating node status')
@@ -129,6 +143,9 @@ export default function PlanQuestionsManager() {
         throw new Error('Execution context not found')
       }
 
+      // Get API key for workspace
+      const apiKey = await window.electronAPI.openai.getApiKey('workspace-default')
+
       const result = await continueReactAgentWithUserInput(
         questionData.nodeId,
         userInput,
@@ -136,7 +153,8 @@ export default function PlanQuestionsManager() {
         {
           ...executionContext,
           workspacePath,
-          ollamaHost: workspaceConfig?.ollamaHost || 'http://127.0.0.1:11434',
+          apiEndpoint: workspaceConfig?.apiEndpoint || 'http://127.0.0.1:11434',
+          apiKey: apiKey || undefined,
           variables: executionContext.variables || {},
           userInputValues: new Map(),
           onLog: (log) => {

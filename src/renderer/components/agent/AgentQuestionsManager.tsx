@@ -10,6 +10,7 @@ import ReactAgentInputDialog from '../nodes/react-agent/ReactAgentInputDialog'
 import { generatePlanFromAnswers } from '@/engine/nodes/plan'
 import { continueReactAgentWithUserInput } from '@/engine/nodes/react-agent'
 import type { PlanQuestion, ReactAgentNodeData, PlanNodeData } from '@/types/node'
+import type { ExecutionContext } from '@/engine/executor'
 
 export default function AgentQuestionsManager() {
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -62,6 +63,19 @@ export default function AgentQuestionsManager() {
         throw new Error('无法获取节点数据')
       }
 
+      // Get API key for workspace
+      const apiKey = await window.electronAPI.openai.getApiKey('workspace-default')
+
+      // Build execution context for the plan generation
+      const context: ExecutionContext = {
+        executionId,
+        workspacePath,
+        apiEndpoint: config?.apiEndpoint || 'http://127.0.0.1:11434',
+        apiKey: apiKey || undefined,
+        variables: {},
+        userInputValues: new Map(),
+      }
+
       // 生成计划
       const plan = await generatePlanFromAnswers(
         executionId,
@@ -72,8 +86,7 @@ export default function AgentQuestionsManager() {
         nodeData.model,
         nodeData.temperature,
         nodeData.maxTokens,
-        config?.ollamaHost || 'http://127.0.0.1:11434',
-        nodeData.debugMode
+        context
       )
 
       // 更新节点状态
@@ -130,6 +143,9 @@ export default function AgentQuestionsManager() {
         throw new Error('无法获取节点数据')
       }
 
+      // Get API key for workspace
+      const apiKey = await window.electronAPI.openai.getApiKey('workspace-default')
+
       const result = await continueReactAgentWithUserInput(
         nodeId,
         userInput,
@@ -137,7 +153,8 @@ export default function AgentQuestionsManager() {
         {
           ...execution.context,
           workspacePath,
-          ollamaHost: config?.ollamaHost || 'http://127.0.0.1:11434',
+          apiEndpoint: config?.apiEndpoint || 'http://127.0.0.1:11434',
+          apiKey: apiKey || undefined,
           variables: execution.context.variables || {},
           userInputValues: new Map(),
           onLog: (log) => {

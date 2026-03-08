@@ -80,7 +80,22 @@ export function createJsonExecutor(): NodeExecutor {
             }
 
             if (typeof inputValue === 'string') {
-              result = JSON.parse(inputValue)
+              // Clean up Markdown code blocks that AI models often wrap JSON in
+              let cleanedValue = inputValue.trim()
+
+              // Remove ```json or ``` at the start
+              if (cleanedValue.startsWith('```json')) {
+                cleanedValue = cleanedValue.slice(7).trimStart()
+              } else if (cleanedValue.startsWith('```')) {
+                cleanedValue = cleanedValue.slice(3).trimStart()
+              }
+
+              // Remove ``` at the end
+              if (cleanedValue.endsWith('```')) {
+                cleanedValue = cleanedValue.slice(0, -3).trimEnd()
+              }
+
+              result = JSON.parse(cleanedValue)
             } else if (typeof inputValue === 'object') {
               // Already an object, return as-is
               result = inputValue

@@ -162,6 +162,54 @@ function SubAgentProgressPanel({ progress }: { progress: SubAgentProgress }) {
           </div>
         </div>
       )}
+
+      {/* ReAct Agent 详情 */}
+      {progress.reactAgentDetail && (
+        <div className="px-3 py-2 border-t border-[var(--color-border-subtle)] bg-purple-500/5">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-xs">🧠</span>
+            <span className="text-xs font-medium text-purple-400">
+              {progress.reactAgentDetail.nodeName}
+            </span>
+            <span className="text-xs text-[var(--color-text-muted)]">
+              ({progress.reactAgentDetail.currentIteration}/{progress.reactAgentDetail.maxIterations} 迭代)
+            </span>
+            {isRunning && (
+              <Loader2 className="w-3 h-3 text-purple-400 animate-spin ml-auto" />
+            )}
+          </div>
+
+          {/* 当前步骤状态 */}
+          {progress.reactAgentDetail.currentStep && (
+            <div className="flex items-center gap-2 text-xs flex-wrap">
+              <span className={cn(
+                'px-1.5 py-0.5 rounded',
+                progress.reactAgentDetail.currentStep.status === 'thinking' && 'bg-yellow-500/10 text-yellow-400',
+                progress.reactAgentDetail.currentStep.status === 'acting' && 'bg-blue-500/10 text-blue-400',
+                progress.reactAgentDetail.currentStep.status === 'observing' && 'bg-cyan-500/10 text-cyan-400',
+                progress.reactAgentDetail.currentStep.status === 'completed' && 'bg-green-500/10 text-green-400',
+              )}>
+                {progress.reactAgentDetail.currentStep.status === 'thinking' && '思考中'}
+                {progress.reactAgentDetail.currentStep.status === 'acting' && '执行工具'}
+                {progress.reactAgentDetail.currentStep.status === 'observing' && '观察结果'}
+                {progress.reactAgentDetail.currentStep.status === 'completed' && '已完成'}
+              </span>
+              {progress.reactAgentDetail.currentStep.action && (
+                <span className="text-[var(--color-text-muted)] truncate max-w-[200px]">
+                  → {progress.reactAgentDetail.currentStep.action}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* 思考内容预览 */}
+          {progress.reactAgentDetail.currentStep?.thought && (
+            <div className="mt-1.5 text-xs text-[var(--color-text-muted)] italic truncate">
+              "{progress.reactAgentDetail.currentStep.thought}"
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -9,9 +9,25 @@ import type { NodeExecutionResult } from '@/types/execution'
 export function useNodeStatus(nodeId: string): NodeExecutionResult | undefined {
   const workspacePath = useWorkspaceStore((state) => state.currentWorkspace?.path)
 
-  // Use stable selector - Zustand will only re-render when the returned reference changes
-  return useExecutionStore((state) => {
-    if (!workspacePath) return undefined
-    return state.getNodeStatusForWorkspace(workspacePath, nodeId)
-  })
+  // Subscribe to executions map changes and extract the specific node's status
+  // Using JSON.stringify for comparison ensures we detect object content changes
+  return useExecutionStore(
+    (state) => {
+      if (!workspacePath) return undefined
+
+      const activeExecutionId = state.getActiveExecution(workspacePath)
+      if (!activeExecutionId) return undefined
+
+      const execution = state.executions.get(activeExecutionId)
+      return execution?.context?.nodeResults.get(nodeId)
+    },
+    (a, b) => {
+      // Custom equality function to detect status changes
+      if (a === b) return true
+      if (!a || !b) return a === b
+      return a.status === b.status &&
+             a.nodeId === b.nodeId &&
+             a.timestamp === b.timestamp
+    }
+  )
 }

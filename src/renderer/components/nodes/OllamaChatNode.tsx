@@ -5,6 +5,7 @@ import BaseNode from './BaseNode'
 import { OllamaChatNodeData, NodeStatus } from '@/types/node'
 import { useStreamOutput } from '@/hooks/useStreamOutput'
 import { useNodeStatus } from '@/hooks/useNodeStatus'
+import { useSettingsStore } from '@/store/settings-store'
 import { motion } from 'framer-motion'
 
 // 推理状态信息接口
@@ -13,6 +14,17 @@ interface InferenceStatus {
   currentStep: string
   tokensProcessed: number
   tokensPerSecond: number
+}
+
+// 简单估算 token 数量（中文约 1.5 字符/token，英文约 4 字符/token）
+function estimateTokens(text: string): number {
+  if (!text) return 0
+  // 统计中文字符数
+  const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length
+  // 非中文字符数
+  const otherChars = text.length - chineseChars
+  // 估算 token 数
+  return Math.ceil(chineseChars / 1.5 + otherChars / 4)
 }
 
 function OllamaChatNode(props: NodeProps) {
@@ -29,6 +41,9 @@ function OllamaChatNode(props: NodeProps) {
     tokensPerSecond: 0
   })
 
+  // 用于计算 token 速度的状态
+  const tokenHistoryRef = useRef<{ time: number; count: number }[]>([])
+
   // Get node result using the hook
   const nodeResult = useNodeStatus(id)
 
@@ -38,6 +53,39 @@ function OllamaChatNode(props: NodeProps) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight
     }
   }, [streamOutput])
+
+  // 根据流式输出更新 token 统计
+  useEffect(() => {
+    if (nodeStatus !== 'running' || !streamOutput) return
+
+    const currentTokens = estimateTokens(streamOutput)
+    const now = Date.now()
+
+    // 记录当前 token 数和时间
+    tokenHistoryRef.current.push({ time: now, count: currentTokens })
+
+    // 只保留最近 5 秒的数据
+    const fiveSecondsAgo = now - 5000
+    tokenHistoryRef.current = tokenHistoryRef.current.filter(
+      entry => entry.time > fiveSecondsAgo
+    )
+
+    // 计算速度（需要至少两个数据点）
+    let tokensPerSecond = 0
+    if (tokenHistoryRef.current.length >= 2) {
+      const oldest = tokenHistoryRef.current[0]
+      const timeDiff = (now - oldest.time) / 1000 // 秒
+      if (timeDiff > 0) {
+        tokensPerSecond = (currentTokens - oldest.count) / timeDiff
+      }
+    }
+
+    setInferenceStatus(prev => ({
+      ...prev,
+      tokensProcessed: currentTokens,
+      tokensPerSecond: Math.max(0, tokensPerSecond)
+    }))
+  }, [streamOutput, nodeStatus])
 
   // Update status when nodeResult changes
   useEffect(() => {
@@ -58,27 +106,39 @@ function OllamaChatNode(props: NodeProps) {
       if (isInferring) {
         // 第一次进入运行状态时初始化
         if (!prev.isInferring) {
+          tokenHistoryRef.current = [] // 重置历史记录
           return {
             isInferring: true,
             currentStep: '生成响应中...',
             tokensProcessed: 0,
-            tokensPerSecond: 2.5
+            tokensPerSecond: 0
           }
         }
-        // 正常运行时的状态更新
+        // 保持当前状态（token 更新由 streamOutput effect 处理）
         return {
           ...prev,
           isInferring: true,
-          currentStep: '生成响应中...',
-          tokensProcessed: prev.tokensProcessed + 1,
-          tokensPerSecond: 2.5
+          currentStep: '生成响应中...'
         }
       } else {
-        // 非运行状态时重置
+        // 非运行状态时更新
+        tokenHistoryRef.current = []
+
+        // 成功完成时保留最终的 token 统计数据
+        if (status === 'success') {
+          return {
+            ...prev,
+            isInferring: false,
+            currentStep: '已完成',
+            // 保留 tokensProcessed 和 tokensPerSecond，不清零
+          }
+        }
+
+        // 错误或空闲状态时重置统计数据
         return {
           ...prev,
           isInferring: false,
-          currentStep: status === 'success' ? '已完成' : status === 'error' ? '错误' : '空闲',
+          currentStep: status === 'error' ? '错误' : '空闲',
           tokensProcessed: 0,
           tokensPerSecond: 0
         }
@@ -132,13 +192,19 @@ function OllamaChatNode(props: NodeProps) {
 
   const statusStyle = getStatusStyle()
 
+  // Get global config for display
+  const { globalAIConfig } = useSettingsStore()
+  const displayModel = data.debugMode?.enabled
+    ? data.debugMode.model
+    : data.model || globalAIConfig?.defaultModel || '(未选择模型)'
+
   return (
     <BaseNode {...props} icon={data.debugMode?.enabled ? <Microscope className="w-4 h-4" /> : <Bot className="w-4 h-4" />}>
       <div className="space-y-3 w-full">
         <div className="node-primary-badge ai">
           {data.debugMode?.enabled ? <Microscope className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
           <span className="font-semibold truncate">
-            {data.debugMode?.enabled ? data.debugMode.model : data.model}
+            {displayModel}
           </span>
         </div>
 

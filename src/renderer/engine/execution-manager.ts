@@ -19,8 +19,9 @@ class ExecutionManager {
     workspacePath: string,
     nodes: Node<WorkflowNodeData>[],
     edges: Edge[],
-    ollamaHost: string = 'http://127.0.0.1:11434',
-    userInputValues?: Record<string, string>
+    apiEndpoint: string = 'http://127.0.0.1:11434',
+    userInputValues?: Record<string, string>,
+    apiKey?: string
   ): Promise<boolean> {
     if (this.instances.has(workspacePath)) {
       const existing = this.instances.get(workspacePath)!
@@ -39,9 +40,10 @@ class ExecutionManager {
       edges,
       workspacePath,
       executionId,
-      ollamaHost,
+      apiEndpoint,
       userInputValues,
-      true
+      true,
+      apiKey
     )
 
     const abortController = new AbortController()

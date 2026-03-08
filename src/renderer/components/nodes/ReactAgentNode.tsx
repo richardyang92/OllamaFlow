@@ -6,6 +6,7 @@ import { useReActState } from '@/hooks/useReActState'
 import { useNodeStatus } from '@/hooks/useNodeStatus'
 import { useExecutionStore } from '@/store/execution-store'
 import { useWorkspaceStore } from '@/store/workspace-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { motion } from 'framer-motion'
 import ReActStepsPanel from './react-agent/ReActStepsPanel'
 
@@ -86,13 +87,19 @@ function ReactAgentNode(props: NodeProps) {
   )
   const totalToolsCount = enabledTools.length
 
+  // Get global config for display
+  const { globalAIConfig } = useSettingsStore()
+  const displayModel = data.debugMode?.enabled
+    ? data.debugMode.model
+    : data.model || globalAIConfig?.defaultModel || '(未选择模型)'
+
   return (
     <BaseNode {...props} icon={data.debugMode?.enabled ? "🔬" : "🧠"}>
       <div className="space-y-3 w-full">
         <div className="node-primary-badge ai">
           <span className="text-lg">{data.debugMode?.enabled ? "🔬" : "🧠"}</span>
           <span className="font-semibold truncate">
-            {data.debugMode?.enabled ? data.debugMode.model : data.model}
+            {displayModel}
           </span>
         </div>
 

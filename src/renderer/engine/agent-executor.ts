@@ -813,20 +813,27 @@ ${workflowDescriptions || '（暂无可用工作流）'}
 
 ## ⚡ 核心能力：并行工具调用
 
-**你可以在一次响应中同时返回多个 tool_calls 来并行执行独立的操作。这是提高效率的关键能力！**
+**你可以在一次响应中同时返回多个 tool_calls 来并行执行独立的操作。但必须确保这些操作之间没有依赖关系！**
 
 ### 并行调用规则
 
 **✅ 应该并行执行（无依赖关系）：**
 - 读取多个不同的文件：一次返回多个 readFile 调用
-- 调用多个不同的工作流：一次返回多个 workflow_xxx 调用
-- 文件操作和工作流调用同时进行
-- 获取日期等无状态操作与其他操作同时进行
+- 调用多个工作流处理**独立的**任务（如同时查询北京和上海的天气）
+- 文件操作和工作流调用同时进行（如果工作流不依赖文件操作的结果）
 
 **❌ 必须串行执行（有依赖关系）：**
 - 先写入文件再读取同一文件
 - 先写入脚本再执行该脚本
 - todos 操作需要按顺序执行
+- **一个工作流的输入依赖另一个工作流的输出**（如：先获取数据，再基于数据绘图）
+- **任务之间存在因果顺序**（如：先分析需求，再基于分析结果执行操作）
+
+### 判断依赖的关键
+在返回多个 tool_calls 之前，问自己：
+- 这些操作之间是否有先后顺序？
+- 后面的操作是否需要前面操作的结果？
+- 如果答案是"是"，则必须分多次响应，串行执行
 
 ### 并行调用示例
 
@@ -840,9 +847,7 @@ tool_calls: [
 ]
 \`\`\`
 
-**错误做法（串行）：** 先调用一个 readFile，等结果返回后再调用第二个。
-
-**用户请求：** "同时调用天气工作流查询北京和上海的天气"
+**用户请求：** "同时查询北京和上海的天气"
 
 **正确做法（并行）：** 一次返回两个 workflow 调用：
 \`\`\`
@@ -851,6 +856,17 @@ tool_calls: [
   { function: { name: "workflow_weather", arguments: '{"input": "上海天气"}' } }
 ]
 \`\`\`
+
+### 串行调用示例
+
+**用户请求：** "帮我查看武汉的天气信息并绘制成图表"
+
+**正确做法（串行）：** 分两步执行，因为绘图需要天气数据作为输入
+- 第一步：返回 \`tool_calls: [{ name: "workflow_weather", arguments: '{"input": "武汉天气"}' }]\`
+- 等待天气数据返回后
+- 第二步：返回 \`tool_calls: [{ name: "workflow_chart", arguments: '{"input": "根据以下天气数据绘制图表: ..."}' }]\`
+
+**错误做法（并行）：** 一次返回两个 tool_calls，因为绘图依赖天气数据的结果
 
 ---
 
@@ -1281,7 +1297,8 @@ tool_calls: [
         workflow.workspacePath,
         workflowInput,
         {
-          ollamaHost: this.config.apiEndpoint,
+          apiEndpoint: this.config.apiEndpoint,
+          apiKey: this.config.apiKey,
           onLog: (msg) => {
             log(`[${workflow.name}] ${msg}`)
             // 添加日志到进度
@@ -1309,6 +1326,8 @@ tool_calls: [
             onNodeComplete: (nodeName, _nodeId, success) => {
               this.callbacks.onSubAgentProgress?.(toolCallId, {
                 nodeStatus: success ? 'completed' : 'error',
+                // 清除 ReAct Agent 详情，因为节点已完成
+                reactAgentDetail: undefined,
               })
               this.callbacks.onSubAgentLog?.(toolCallId, {
                 message: success ? `节点执行完成: ${nodeName}` : `节点执行失败: ${nodeName}`,
@@ -1328,6 +1347,22 @@ tool_calls: [
                 type: 'info',
               })
             },
+            onReactAgentUpdate: (nodeId, nodeName, detail) => {
+              this.callbacks.onSubAgentProgress?.(toolCallId, {
+                reactAgentDetail: {
+                  nodeId,
+                  nodeName,
+                  currentIteration: detail.currentIteration,
+                  maxIterations: detail.maxIterations,
+                  currentStep: detail.currentStep ? {
+                    status: detail.currentStep.status,
+                    thought: detail.currentStep.thought?.slice(0, 100),
+                    action: detail.currentStep.action,
+                  } : undefined,
+                  totalSteps: detail.totalSteps,
+                },
+              })
+            },
           },
         }
       )
@@ -1345,6 +1380,7 @@ tool_calls: [
           nodeStatus: 'completed',
           completedNodes: result.totalNodes,
           totalNodes: result.totalNodes,
+          reactAgentDetail: undefined, // 清除 ReAct Agent 详情
         })
 
         // 更新状态为完成
@@ -1366,6 +1402,7 @@ tool_calls: [
           nodeStatus: 'error',
           completedNodes: result.totalNodes,
           totalNodes: result.totalNodes,
+          reactAgentDetail: undefined, // 清除 ReAct Agent 详情
         })
         this.callbacks.onSubAgentLog?.(toolCallId, {
           message: result.error || '未知错误',
@@ -1389,6 +1426,7 @@ tool_calls: [
       this.callbacks.onSubAgentProgress?.(toolCallId, {
         status: 'error',
         nodeStatus: 'error',
+        reactAgentDetail: undefined, // 清除 ReAct Agent 详情
       })
       this.callbacks.onSubAgentLog?.(toolCallId, {
         message: errorMsg,

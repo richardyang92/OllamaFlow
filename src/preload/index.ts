@@ -4,7 +4,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 export interface WorkspaceConfig {
   name: string
   description?: string
-  ollamaHost: string
+  apiEndpoint: string  // OpenAI-compatible endpoint, e.g., "http://localhost:11434/v1" or "https://api.openai.com/v1"
   defaultModel: string
   created: string
   lastOpened: string
@@ -13,7 +13,7 @@ export interface WorkspaceConfig {
 export interface WorkspaceInitOptions {
   name: string
   description?: string
-  ollamaHost?: string
+  apiEndpoint?: string
   defaultModel?: string
   initialWorkflow?: WorkflowData
 }
@@ -220,6 +220,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     rename: (path: string, newName: string): Promise<{ success: boolean; newPath?: string; config?: WorkspaceConfig; error?: string }> =>
       ipcRenderer.invoke('workspace:rename', path, newName),
+
+    exists: (absolutePath: string): Promise<boolean> =>
+      ipcRenderer.invoke('workspace:exists', absolutePath),
   },
 
   // File operations
@@ -377,6 +380,43 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('openai:deleteApiKey', keyId),
   },
 
+  // Global AI Config
+  globalAI: {
+    getConfig: (): Promise<{
+      enabled: boolean
+      apiEndpoint: string
+      defaultModel?: string
+      provider: 'ollama' | 'openai' | 'deepseek' | 'vllm' | 'custom'
+      name?: string
+    } | null> => ipcRenderer.invoke('globalAI:getConfig'),
+
+    setConfig: (config: {
+      enabled: boolean
+      apiEndpoint: string
+      defaultModel?: string
+      provider: 'ollama' | 'openai' | 'deepseek' | 'vllm' | 'custom'
+      name?: string
+    }): Promise<boolean> => ipcRenderer.invoke('globalAI:setConfig', config),
+
+    getApiKey: (): Promise<string | null> =>
+      ipcRenderer.invoke('globalAI:getApiKey'),
+
+    setApiKey: (apiKey: string): Promise<boolean> =>
+      ipcRenderer.invoke('globalAI:setApiKey', apiKey),
+
+    deleteApiKey: (): Promise<boolean> =>
+      ipcRenderer.invoke('globalAI:deleteApiKey'),
+
+    clearConfig: (): Promise<boolean> =>
+      ipcRenderer.invoke('globalAI:clearConfig'),
+
+    testConnection: (config: { apiEndpoint: string; apiKey?: string }): Promise<{
+      success: boolean
+      models?: Array<{ id: string; name?: string; owned_by?: string }>
+      error?: string
+    }> => ipcRenderer.invoke('globalAI:testConnection', config),
+  },
+
   // Agent config storage
   agent: {
     getConfig: (): Promise<{
@@ -496,6 +536,7 @@ declare global {
         saveWorkflow: (path: string, workflow: WorkflowData) => Promise<boolean>
         delete: (path: string) => Promise<{ success: boolean; error?: string }>
         rename: (path: string, newName: string) => Promise<{ success: boolean; newPath?: string; config?: WorkspaceConfig; error?: string }>
+        exists: (absolutePath: string) => Promise<boolean>
       }
       file: {
         read: (workspacePath: string, relativePath: string) => Promise<{ success: boolean; content?: string; error?: string }>
@@ -556,6 +597,31 @@ declare global {
         getApiKey: (keyId: string) => Promise<string | null>
         setApiKey: (keyId: string, apiKey: string) => Promise<boolean>
         deleteApiKey: (keyId: string) => Promise<boolean>
+      }
+      globalAI: {
+        getConfig: () => Promise<{
+          enabled: boolean
+          apiEndpoint: string
+          defaultModel?: string
+          provider: 'ollama' | 'openai' | 'deepseek' | 'vllm' | 'custom'
+          name?: string
+        } | null>
+        setConfig: (config: {
+          enabled: boolean
+          apiEndpoint: string
+          defaultModel?: string
+          provider: 'ollama' | 'openai' | 'deepseek' | 'vllm' | 'custom'
+          name?: string
+        }) => Promise<boolean>
+        getApiKey: () => Promise<string | null>
+        setApiKey: (apiKey: string) => Promise<boolean>
+        deleteApiKey: () => Promise<boolean>
+        clearConfig: () => Promise<boolean>
+        testConnection: (config: { apiEndpoint: string; apiKey?: string }) => Promise<{
+          success: boolean
+          models?: Array<{ id: string; name?: string; owned_by?: string }>
+          error?: string
+        }>
       }
       agent: {
         getConfig: () => Promise<{

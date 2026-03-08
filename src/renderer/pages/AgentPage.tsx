@@ -27,6 +27,7 @@ import { useWorkspaceStore } from '@/store/workspace-store'
 import { useAgentStore } from '@/store/agent-store'
 import type { AgentStep, ToolCallRecord } from '@/store/agent-store'
 import { IntelligentAgentExecutor } from '@/engine/agent-executor'
+import { resolveAIConfig } from '@/engine/config-resolver'
 import { useTheme, type ThemeMode } from '@/contexts/ThemeContext'
 import { cn } from '@/lib/utils'
 import {
@@ -533,13 +534,26 @@ export default function AgentPage() {
         sandboxPath = await window.electronAPI.agent.getSandboxPath(workspacePath, conversationId)
       }
 
+      // 解析 AI 配置：如果没有指定 apiEndpoint/apiKey，尝试从全局配置获取
+      let resolvedApiEndpoint = apiEndpoint
+      let resolvedApiKey = apiKey
+      if (!apiEndpoint || !apiKey) {
+        try {
+          const resolvedConfig = await resolveAIConfig()
+          resolvedApiEndpoint = apiEndpoint || resolvedConfig.apiEndpoint
+          resolvedApiKey = apiKey || resolvedConfig.apiKey
+        } catch {
+          // 全局配置未启用，使用原有值
+        }
+      }
+
       // 创建执行器
       const agentExecutor = new IntelligentAgentExecutor(
         {
           provider,
           model,
-          apiEndpoint,
-          apiKey,
+          apiEndpoint: resolvedApiEndpoint,
+          apiKey: resolvedApiKey,
           workflows: availableWorkflows,
           history,  // 传递对话历史
           sandboxPath,  // 传递沙箱路径

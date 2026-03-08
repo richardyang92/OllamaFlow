@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { WorkflowNode, SmartRouterNodeData, SmartRouterBranch } from '@/types/node'
 import { cn } from '@/lib/utils'
-import { useWorkspaceStore } from '@/store/workspace-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { useUpdateNodeInternals } from '@xyflow/react'
 import { useWorkflowStore } from '@/store/workflow-store'
 
@@ -10,43 +10,20 @@ interface Props {
   updateNodeData: (nodeId: string, data: Partial<SmartRouterNodeData>) => void
 }
 
-interface ModelInfo {
-  name: string
-}
-
-function isStandardOllamaHost(host: string): boolean {
-  try {
-    const url = new URL(host)
-    return url.hostname === 'localhost' || url.hostname === '127.0.0.1'
-  } catch {
-    return false
-  }
-}
-
 export default function SmartRouterProperties({ node, updateNodeData }: Props) {
   const data = node.data as SmartRouterNodeData
-  const [models, setModels] = useState<ModelInfo[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [isDebugExpanded, setIsDebugExpanded] = useState(false)
-  const [hasWorkspaceApiKey, setHasWorkspaceApiKey] = useState(false)
 
   const updateNodeInternals = useUpdateNodeInternals()
   const { edges, onEdgesChange } = useWorkflowStore()
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const workspaceConfig = useWorkspaceStore((state) => state.currentWorkspace?.config)
+  // Get global AI config
+  const { isGlobalAIEnabled, globalAIConfig, availableModels, isLoadingModels, fetchModels } = useSettingsStore()
 
-  const workspaceHost = workspaceConfig?.ollamaHost || 'http://127.0.0.1:11434'
-  const workspaceModel = workspaceConfig?.defaultModel || ''
-  const isOpenAICompatible = !isStandardOllamaHost(workspaceHost)
-
-  useEffect(() => {
-    const checkWorkspaceApiKey = async () => {
-      const key = await window.electronAPI.openai.getApiKey('workspace-default')
-      setHasWorkspaceApiKey(!!key)
-    }
-    checkWorkspaceApiKey()
-  }, [])
+  // Use global models
+  const effectiveModels = isGlobalAIEnabled ? availableModels : []
+  const effectiveLoading = isGlobalAIEnabled ? isLoadingModels : false
+  const defaultModel = isGlobalAIEnabled && globalAIConfig ? globalAIConfig.defaultModel || '' : ''
 
   // 清理定时器
   useEffect(() => {
@@ -58,45 +35,15 @@ export default function SmartRouterProperties({ node, updateNodeData }: Props) {
   }, [])
 
   useEffect(() => {
-    if (isOpenAICompatible && !data.debugMode?.enabled && workspaceModel) {
-      updateNodeData(node.id, {
-        debugMode: {
-          enabled: true,
-          apiEndpoint: workspaceHost,
-          apiKey: '',
-          model: workspaceModel,
-        },
-      })
+    // If global config is enabled, fetch global models
+    if (isGlobalAIEnabled) {
+      fetchModels()
     }
-  }, [isOpenAICompatible, data.debugMode?.enabled, workspaceHost, workspaceModel])
+  }, [isGlobalAIEnabled, fetchModels])
 
-  useEffect(() => {
-    loadModels()
-  }, [workspaceHost])
-
-  const loadModels = async () => {
-    setIsLoading(true)
-    try {
-      if (isOpenAICompatible) {
-        const apiKey = await window.electronAPI.openai.getApiKey('workspace-default')
-        const response = await fetch(`${workspaceHost}/v1/models`, {
-          headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
-        })
-        if (response.ok) {
-          const json = await response.json()
-          setModels((json.data || []).map((m: { id: string }) => ({ name: m.id })))
-        }
-      } else {
-        const response = await fetch(`${workspaceHost}/api/tags`)
-        if (response.ok) {
-          const json = await response.json()
-          setModels(json.models || [])
-        }
-      }
-    } catch (error) {
-      console.error('加载模型失败:', error)
-    } finally {
-      setIsLoading(false)
+  const handleRefreshModels = () => {
+    if (isGlobalAIEnabled) {
+      fetchModels()
     }
   }
 
@@ -129,7 +76,7 @@ export default function SmartRouterProperties({ node, updateNodeData }: Props) {
     const edgesToRemove = edges.filter(
       edge => edge.source === node.id && edge.sourceHandle === branchId
     )
-    
+
     if (edgesToRemove.length > 0) {
       onEdgesChange(edgesToRemove.map(edge => ({
         type: 'remove',
@@ -222,15 +169,19 @@ export default function SmartRouterProperties({ node, updateNodeData }: Props) {
     }
   }
 
-  const handleSaveApiKey = async (apiKey: string) => {
-    if (!apiKey) return
-    await window.electronAPI.openai.setApiKey(`router-${node.id}`, apiKey)
-  }
-
   const defaultBranch = data.branches.find(b => b.isDefault)
 
   return (
     <div className="space-y-4">
+      {/* 全局配置提示 */}
+      {isGlobalAIEnabled && (
+        <div className="px-3 py-2 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+          <p className="text-xs text-purple-400">
+            使用全局配置: {globalAIConfig?.name || '未命名'}
+          </p>
+        </div>
+      )}
+
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="block text-xs font-medium text-[var(--color-text-muted)]">
@@ -307,51 +258,49 @@ export default function SmartRouterProperties({ node, updateNodeData }: Props) {
 
       <div>
         <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">
-          {data.debugMode?.enabled ? '模型 (Debug Mode)' : '模型'}
+          模型
         </label>
-        {data.debugMode?.enabled ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/30 rounded-lg">
-              <span className="text-green-400">🔬</span>
-              <span className="text-sm text-[var(--color-text)]">{data.debugMode?.model || 'gpt-4o'}</span>
-              <span className="text-xs text-[var(--color-text-muted)] ml-auto">OpenAI</span>
-            </div>
-          </div>
-        ) : (
-          <>
-            <select
-              value={data.model}
-              onChange={(e) => updateNodeData(node.id, { model: e.target.value })}
-              className={cn(
-                'w-full px-3 py-2 rounded-lg',
-                'bg-[var(--color-bg-input)]',
-                'border border-[var(--color-border-subtle)]',
-                'text-[var(--color-text)] text-sm',
-                'focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)]',
-                'transition-all duration-200'
-              )}
-            >
-              {isLoading ? (
-                <option>加载中...</option>
-              ) : models.length === 0 ? (
-                <option>未找到模型</option>
-              ) : (
-                models.map((model) => (
-                  <option key={model.name} value={model.name}>
-                    {model.name}
-                  </option>
-                ))
-              )}
-            </select>
-            <button
-              onClick={loadModels}
-              className="btn-sci-fi btn-ghost btn-sm mt-2 w-full"
-            >
-              🔄 刷新模型列表
-            </button>
-          </>
-        )}
+        <select
+          value={data.model || defaultModel}
+          onChange={(e) => updateNodeData(node.id, { model: e.target.value })}
+          className={cn(
+            'w-full px-3 py-2 rounded-lg',
+            'bg-[var(--color-bg-input)]',
+            'border border-[var(--color-border-subtle)]',
+            'text-[var(--color-text)] text-sm',
+            'focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)]',
+            'transition-all duration-200'
+          )}
+        >
+          {effectiveLoading ? (
+            <option>加载中...</option>
+          ) : effectiveModels.length === 0 ? (
+            <option>未找到模型</option>
+          ) : (
+            effectiveModels.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.name || model.id}
+              </option>
+            ))
+          )}
+        </select>
+        <button
+          onClick={handleRefreshModels}
+          disabled={effectiveLoading || !isGlobalAIEnabled}
+          className="btn-sci-fi btn-ghost btn-sm mt-2 w-full"
+        >
+          刷新模型列表
+        </button>
       </div>
+
+      {/* 警告提示 */}
+      {!isGlobalAIEnabled && (
+        <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+          <p className="text-xs text-amber-400">
+            请先在设置中配置全局 AI
+          </p>
+        </div>
+      )}
 
       <div>
         <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">
@@ -383,112 +332,6 @@ export default function SmartRouterProperties({ node, updateNodeData }: Props) {
         <p className="text-xs text-[var(--color-text-muted)] mt-1">
           值越低越确定，值越高越随机
         </p>
-      </div>
-
-      <div className="border-t border-[var(--color-border-subtle)] pt-4">
-        <button
-          type="button"
-          onClick={() => setIsDebugExpanded(!isDebugExpanded)}
-          className="flex items-center justify-between w-full text-left"
-        >
-          <span className="text-xs font-medium text-[var(--color-text-muted)] flex items-center gap-2">
-            <span>🔬</span> Debug Mode (OpenAI)
-            {data.debugMode?.enabled && (
-              <span className="text-[10px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded">
-                已启用
-              </span>
-            )}
-          </span>
-          <span
-            className={cn(
-              'text-[var(--color-text-muted)] transition-transform',
-              isDebugExpanded && 'rotate-180'
-            )}
-          >
-            ▼
-          </span>
-        </button>
-
-        {isDebugExpanded && (
-          <div className="mt-3 space-y-3">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id={`debugModeRouter-${node.id}`}
-                checked={data.debugMode?.enabled || false}
-                onChange={(e) =>
-                  updateNodeData(node.id, {
-                    debugMode: {
-                      enabled: e.target.checked,
-                      apiEndpoint: data.debugMode?.apiEndpoint || 'https://api.openai.com/v1',
-                      apiKey: data.debugMode?.apiKey || '',
-                      model: data.debugMode?.model || 'gpt-4o',
-                    },
-                  })
-                }
-                className="rounded border-[var(--color-border-subtle)] bg-[var(--color-bg-input)]"
-              />
-              <label htmlFor={`debugModeRouter-${node.id}`} className="text-sm text-[var(--color-text)]">
-                启用 Debug Mode
-              </label>
-            </div>
-
-            {data.debugMode?.enabled && (
-              <>
-                <div>
-                  <label className="block text-xs text-[var(--color-text-muted)] mb-1">API Endpoint</label>
-                  <input
-                    type="text"
-                    value={data.debugMode?.apiEndpoint || ''}
-                    onChange={(e) =>
-                      updateNodeData(node.id, {
-                        debugMode: { ...data.debugMode!, apiEndpoint: e.target.value },
-                      })
-                    }
-                    placeholder="https://api.openai.com/v1"
-                    className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs text-[var(--color-text-muted)] mb-1">API Key</label>
-                  <input
-                    type="password"
-                    placeholder={hasWorkspaceApiKey ? "使用工作区默认 Key（留空）" : "sk-..."}
-                    onBlur={(e) => handleSaveApiKey(e.target.value)}
-                    className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all"
-                  />
-                  {hasWorkspaceApiKey ? (
-                    <p className="text-xs text-green-500 mt-1">✓ 已有工作区默认 API Key，可留空使用</p>
-                  ) : (
-                    <p className="text-xs text-[var(--color-text-muted)] mt-1">安全存储于本地，不会保存到工作流文件</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs text-[var(--color-text-muted)] mb-1">模型名称</label>
-                  <input
-                    type="text"
-                    value={data.debugMode?.model || ''}
-                    onChange={(e) =>
-                      updateNodeData(node.id, {
-                        debugMode: { ...data.debugMode!, model: e.target.value },
-                      })
-                    }
-                    placeholder="gpt-4o, deepseek-chat, etc."
-                    className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all"
-                  />
-                </div>
-
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
-                  <p className="text-xs text-amber-400">
-                    ⚠️ Debug Mode 将使用配置的 API 端点而非本地 Ollama。可能产生 API 费用。
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
-        )}
       </div>
 
       <div className="bg-[var(--color-bg-input)] rounded-lg p-3 text-xs text-[var(--color-text-muted)] border border-[var(--color-border-subtle)]">

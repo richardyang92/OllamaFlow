@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs/promises'
 import * as fsSync from 'fs'
@@ -50,6 +50,72 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
+
+  // 设置精简的应用菜单
+  const template: (Electron.MenuItemConstructorOptions | Electron.MenuItem)[] = [
+    {
+      label: '文件',
+      submenu: [
+        { role: 'close', label: '关闭窗口' }
+      ]
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo', label: '撤销' },
+        { role: 'redo', label: '重做' },
+        { type: 'separator' },
+        { role: 'cut', label: '剪切' },
+        { role: 'copy', label: '复制' },
+        { role: 'paste', label: '粘贴' },
+        { role: 'selectAll', label: '全选' }
+      ]
+    },
+    {
+      label: '视图',
+      submenu: [
+        { role: 'reload', label: '重新加载' },
+        { role: 'forceReload', label: '强制重新加载' },
+        { type: 'separator' },
+        { role: 'resetZoom', label: '实际大小' },
+        { role: 'zoomIn', label: '放大' },
+        { role: 'zoomOut', label: '缩小' },
+        { type: 'separator' },
+        { role: 'togglefullscreen', label: '全屏' }
+      ]
+    },
+    {
+      label: '帮助',
+      submenu: [
+        {
+          label: '关于 OllamaFlow',
+          click: async () => {
+            const { dialog } = await import('electron')
+            dialog.showMessageBox(mainWindow!, {
+              type: 'info',
+              title: '关于 OllamaFlow',
+              message: 'OllamaFlow',
+              detail: '版本: 1.0.0\n可视化工作流构建工具\n\n基于 Ollama 的 AI 工作流编辑器'
+            })
+          }
+        }
+      ]
+    }
+  ]
+
+  // 开发环境添加开发者工具菜单
+  if (process.env.NODE_ENV === 'development') {
+    const viewMenu = template.find(item => item.label === '视图')
+    if (viewMenu && 'submenu' in viewMenu && Array.isArray(viewMenu.submenu)) {
+      viewMenu.submenu.push(
+        { type: 'separator' },
+        { role: 'toggleDevTools', label: '开发者工具' }
+      )
+    }
+  }
+
+  const menu = Menu.buildFromTemplate(template)
+  Menu.setApplicationMenu(menu)
 }
 
 app.commandLine.appendSwitch('ignore-gpu-blacklist')
@@ -148,8 +214,6 @@ ipcMain.handle('workspace:selectCustomProjectsPath', async () => {
 interface WorkspaceInitOptions {
   name: string
   description?: string
-  ollamaHost?: string
-  defaultModel?: string
   initialWorkflow?: {
     metadata: {
       id: string
@@ -164,6 +228,16 @@ interface WorkspaceInitOptions {
   }
 }
 
+// Workspace: Check if path exists
+ipcMain.handle('workspace:exists', async (_, absolutePath: string) => {
+  try {
+    await fs.access(absolutePath)
+    return true
+  } catch {
+    return false
+  }
+})
+
 ipcMain.handle('workspace:init', async (_, workspacePath: string, options: WorkspaceInitOptions) => {
   const ollamaflowDir = path.join(workspacePath, '.ollamaflow')
   const configPath = path.join(ollamaflowDir, 'config.json')
@@ -174,11 +248,10 @@ ipcMain.handle('workspace:init', async (_, workspacePath: string, options: Works
   await fs.mkdir(path.join(ollamaflowDir, 'cache'), { recursive: true })
 
   // Create config.json with provided options
+  // Note: AI config is now stored globally, not per-workspace
   const configData = {
     name: options.name,
     description: options.description || '',
-    ollamaHost: options.ollamaHost || 'http://127.0.0.1:11434',
-    defaultModel: options.defaultModel || 'llama3.1',
     created: new Date().toISOString(),
     lastOpened: new Date().toISOString(),
   }
@@ -207,7 +280,19 @@ ipcMain.handle('workspace:readConfig', async (_, workspacePath: string) => {
   const configPath = path.join(workspacePath, '.ollamaflow', 'config.json')
   try {
     const content = await fs.readFile(configPath, 'utf-8')
-    return JSON.parse(content)
+    let config = JSON.parse(content)
+
+    // Migration: Convert old ollamaHost to apiEndpoint
+    if (config.ollamaHost && !config.apiEndpoint) {
+      // Convert Ollama host to OpenAI-compatible endpoint
+      config.apiEndpoint = config.ollamaHost.replace(/\/$/, '') + '/v1'
+      delete config.ollamaHost
+
+      // Save migrated config
+      await fs.writeFile(configPath, JSON.stringify(config, null, 2))
+    }
+
+    return config
   } catch {
     return null
   }
@@ -1035,4 +1120,88 @@ ipcMain.handle('execution:cancel', async (_, workspacePath: string) => {
     s.set('execution-statuses', statuses)
   }
   return status || null
+})
+
+// ==================== Global AI Config ====================
+
+// GlobalAI: Get config
+ipcMain.handle('globalAI:getConfig', async () => {
+  const s = await getStore()
+  return s.get('global-ai-config', null) as {
+    enabled: boolean
+    apiEndpoint: string
+    defaultModel?: string
+    provider: 'ollama' | 'openai' | 'deepseek' | 'vllm' | 'custom'
+    name?: string
+  } | null
+})
+
+// GlobalAI: Set config (without API key)
+ipcMain.handle('globalAI:setConfig', async (_, config: {
+  enabled: boolean
+  apiEndpoint: string
+  defaultModel?: string
+  provider: 'ollama' | 'openai' | 'deepseek' | 'vllm' | 'custom'
+  name?: string
+}) => {
+  const s = await getStore()
+  s.set('global-ai-config', config)
+  return true
+})
+
+// GlobalAI: Get API key
+ipcMain.handle('globalAI:getApiKey', async () => {
+  const s = await getStore()
+  return s.get('global-api-key', null) as string | null
+})
+
+// GlobalAI: Set API key
+ipcMain.handle('globalAI:setApiKey', async (_, apiKey: string) => {
+  const s = await getStore()
+  s.set('global-api-key', apiKey)
+  return true
+})
+
+// GlobalAI: Delete API key
+ipcMain.handle('globalAI:deleteApiKey', async () => {
+  const s = await getStore()
+  s.delete('global-api-key')
+  return true
+})
+
+// GlobalAI: Clear all config
+ipcMain.handle('globalAI:clearConfig', async () => {
+  const s = await getStore()
+  s.delete('global-ai-config')
+  s.delete('global-api-key')
+  return true
+})
+
+// GlobalAI: Test connection and fetch models
+ipcMain.handle('globalAI:testConnection', async (_, config: { apiEndpoint: string; apiKey?: string }) => {
+  try {
+    const response = await fetch(`${config.apiEndpoint}/models`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(config.apiKey ? { 'Authorization': `Bearer ${config.apiKey}` } : {}),
+      },
+      signal: AbortSignal.timeout(15000)
+    })
+
+    if (response.ok) {
+      const json = await response.json()
+      return {
+        success: true,
+        models: (json.data || []).map((m: { id: string; name?: string; owned_by?: string }) => ({
+          id: m.id,
+          name: m.name || m.id,
+          owned_by: m.owned_by
+        }))
+      }
+    }
+    return { success: false, error: `HTTP ${response.status}: ${response.statusText}` }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
 })

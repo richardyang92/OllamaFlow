@@ -1,7 +1,7 @@
 {
   "name": "ollamaflow",
   "version": "0.1.0",
-  "description": "A visual workflow builder for Ollama models",
+  "description": "A visual workflow builder for AI models with OpenAI-compatible API",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "node scripts/dev.js",
@@ -27,7 +27,6 @@
     "katex": "^0.16.33",
     "lucide-react": "^0.575.0",
     "mermaid": "^11.12.3",
-    "ollama": "^0.6.3",
     "playwright-core": "^1.58.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

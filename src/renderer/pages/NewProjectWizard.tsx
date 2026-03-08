@@ -1,31 +1,24 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, ArrowRight, Loader2, FileText, Bot, Check, Sun, Moon, Monitor } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, FileText, Check, Sun, Moon, Monitor } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { useWorkflowStore } from '@/store/workflow-store'
 import { useTheme, type ThemeMode } from '@/contexts/ThemeContext'
+import { useSettingsStore } from '@/store/settings-store'
 import { cn } from '@/lib/utils'
 import BasicInfoStep from '@/components/wizard/steps/BasicInfoStep'
-import AIConfigStep from '@/components/wizard/steps/AIConfigStep'
 import ConfirmStep from '@/components/wizard/steps/ConfirmStep'
 import { generateTemplateWorkflow } from '@/components/wizard/templates'
-
-type AIBackend = 'ollama' | 'openai'
 
 interface WizardState {
   currentStep: number
   projectName: string
   description: string
-  aiBackend: AIBackend
-  apiEndpoint: string
-  apiKey: string
-  defaultModel: string
   selectedTemplate: string
 }
 
 const steps = [
   { id: 'basic', title: '基本信息', icon: FileText },
-  { id: 'ai', title: 'AI 配置', icon: Bot },
   { id: 'confirm', title: '确认创建', icon: Check },
 ]
 
@@ -33,15 +26,12 @@ export default function NewProjectWizard() {
   const { setCurrentWorkspace, setCurrentPage, setRecentWorkspaces } = useWorkspaceStore()
   const { setWorkflow } = useWorkflowStore()
   const { themeMode, setThemeMode, resolvedTheme } = useTheme()
+  const { isGlobalAIEnabled, globalAIConfig } = useSettingsStore()
 
   const [state, setState] = useState<WizardState>({
     currentStep: 0,
     projectName: '',
     description: '',
-    aiBackend: 'ollama',
-    apiEndpoint: 'http://127.0.0.1:11434',
-    apiKey: '',
-    defaultModel: '',
     selectedTemplate: 'empty',
   })
 
@@ -68,8 +58,6 @@ export default function NewProjectWizard() {
       case 0:
         return !!state.projectName.trim()
       case 1:
-        return !!state.defaultModel.trim()
-      case 2:
         return true
       default:
         return false
@@ -93,8 +81,13 @@ export default function NewProjectWizard() {
   }
 
   const handleCreate = async () => {
-    if (!state.projectName.trim() || !state.defaultModel.trim()) {
-      setError('请填写所有必填项')
+    if (!state.projectName.trim()) {
+      setError('请填写项目名称')
+      return
+    }
+
+    if (!isGlobalAIEnabled) {
+      setError('请先在设置中配置全局 AI')
       return
     }
 
@@ -105,23 +98,18 @@ export default function NewProjectWizard() {
       // Auto-generate project path from project name
       const projectPath = `${defaultProjectsPath}/${state.projectName.trim()}`
 
+      const defaultModel = globalAIConfig?.defaultModel || ''
       const workflow = generateTemplateWorkflow(
         state.selectedTemplate,
         state.projectName,
-        state.defaultModel
+        defaultModel
       )
 
       const result = await window.electronAPI.workspace.init(projectPath, {
         name: state.projectName,
         description: state.description,
-        ollamaHost: state.apiEndpoint,
-        defaultModel: state.defaultModel,
         initialWorkflow: workflow,
       })
-
-      if (state.apiKey && state.aiBackend === 'openai') {
-        await window.electronAPI.openai.setApiKey('workspace-default', state.apiKey)
-      }
 
       await window.electronAPI.recent.add(projectPath, result.config.name, result.config.description)
       setCurrentWorkspace(projectPath, result.config)
@@ -155,26 +143,10 @@ export default function NewProjectWizard() {
         )
       case 1:
         return (
-          <AIConfigStep
-            aiBackend={state.aiBackend}
-            apiEndpoint={state.apiEndpoint}
-            apiKey={state.apiKey}
-            defaultModel={state.defaultModel}
-            onBackendChange={(backend) => setState((s) => ({ ...s, aiBackend: backend }))}
-            onEndpointChange={(endpoint) => setState((s) => ({ ...s, apiEndpoint: endpoint }))}
-            onApiKeyChange={(key) => setState((s) => ({ ...s, apiKey: key }))}
-            onModelChange={(model) => setState((s) => ({ ...s, defaultModel: model }))}
-          />
-        )
-      case 2:
-        return (
           <ConfirmStep
             projectPath={projectPath}
             projectName={state.projectName}
             description={state.description}
-            aiBackend={state.aiBackend}
-            apiEndpoint={state.apiEndpoint}
-            defaultModel={state.defaultModel}
             selectedTemplate={state.selectedTemplate}
             onTemplateChange={(template) => setState((s) => ({ ...s, selectedTemplate: template }))}
           />
@@ -213,7 +185,7 @@ export default function NewProjectWizard() {
           <h1 className="text-3xl font-bold text-[var(--color-text)] mb-2 bg-gradient-to-r from-purple-500 to-blue-500 bg-clip-text text-transparent">
             新建项目
           </h1>
-          <p className="text-[var(--color-text-muted)]">创建一个新的 OllamaFlow 工作区</p>
+          <p className="text-[var(--color-text-muted)]">创建一个新的工作区</p>
         </div>
 
         <div className="flex items-center justify-center gap-2 mb-8">
@@ -254,6 +226,19 @@ export default function NewProjectWizard() {
             {renderStep()}
           </AnimatePresence>
         </div>
+
+        {/* Global AI Status Warning */}
+        {!isGlobalAIEnabled && state.currentStep === 1 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg"
+          >
+            <p className="text-sm text-amber-400">
+              ⚠️ 请先在设置中配置全局 AI，否则节点将无法正常工作
+            </p>
+          </motion.div>
+        )}
 
         {error && (
           <motion.div

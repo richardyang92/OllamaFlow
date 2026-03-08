@@ -1,8 +1,7 @@
 export interface WorkspaceConfig {
   name: string
   description?: string
-  ollamaHost: string
-  defaultModel: string
+  // AI 配置已移至全局配置，不再在工作区级别存储
   created: string
   lastOpened: string
 }

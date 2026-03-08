@@ -179,20 +179,18 @@ export const AgentStepBlock = memo(function AgentStepBlock({
                 {hasToolCalls && (
                   <div className="space-y-2">
                     {step.toolCalls!.map((tc, index) => (
-                      <div key={tc.id} className="relative">
+                      <div key={tc.id} className="relative pl-6">
                         {step.toolCalls!.length > 1 && (
-                          <div className="absolute -left-1 top-2 w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] flex items-center justify-center font-medium">
+                          <div className="absolute left-0 top-2 w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] flex items-center justify-center font-medium">
                             {index + 1}
                           </div>
                         )}
-                        <div className={step.toolCalls!.length > 1 ? 'ml-6' : ''}>
-                          <ToolCallBlock
-                            toolCall={tc}
-                            defaultExpanded={tc.status === 'error' || step.toolCalls!.length === 1}
-                            showParallelBadge={step.toolCalls!.length > 1}
-                            parallelIndex={index + 1}
-                          />
-                        </div>
+                        <ToolCallBlock
+                          toolCall={tc}
+                          defaultExpanded={tc.status === 'error' || step.toolCalls!.length === 1}
+                          showParallelBadge={step.toolCalls!.length > 1}
+                          parallelIndex={index + 1}
+                        />
                       </div>
                     ))}
                   </div>

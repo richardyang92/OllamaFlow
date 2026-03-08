@@ -4,10 +4,9 @@
  */
 
 import type { OpenAIMessage } from '../openai-client'
-import type { Message } from 'ollama'
 
 /**
- * Generic message type that works with both OpenAI and Ollama message formats
+ * Generic message type that works with OpenAI-compatible API format
  */
 export type GenericMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
@@ -20,40 +19,6 @@ export type GenericMessage = {
   }>
   tool_call_id?: string
   reasoning_content?: string
-}
-
-/**
- * Convert Ollama Message to GenericMessage
- */
-export function ollamaToGeneric(messages: Message[]): GenericMessage[] {
-  return messages.map(msg => ({
-    role: msg.role as GenericMessage['role'],
-    content: msg.content,
-    tool_calls: msg.tool_calls?.map(tc => ({
-      function: {
-        name: tc.function.name,
-        arguments: typeof tc.function.arguments === 'string'
-          ? tc.function.arguments
-          : JSON.stringify(tc.function.arguments)
-      }
-    })),
-  }))
-}
-
-/**
- * Convert GenericMessage back to Ollama Message
- */
-export function genericToOllama(messages: GenericMessage[]): Message[] {
-  return messages.map(msg => ({
-    role: msg.role,
-    content: msg.content || '',
-    tool_calls: msg.tool_calls?.map(tc => ({
-      function: {
-        name: tc.function.name,
-        arguments: JSON.parse(tc.function.arguments)
-      }
-    })),
-  })) as Message[]
 }
 
 /**
@@ -108,7 +73,7 @@ function estimateTokens(text: string): number {
 /**
  * Estimate total tokens in message array
  */
-export function estimateMessageTokens(messages: GenericMessage[] | OpenAIMessage[] | Message[]): number {
+export function estimateMessageTokens(messages: GenericMessage[] | OpenAIMessage[]): number {
   let total = 0
 
   for (const msg of messages) {
@@ -373,27 +338,7 @@ ${compressedSteps.join('\n\n')}
 }
 
 /**
- * Compress Ollama messages
- */
-export function compressOllamaContext(
-  messages: Message[],
-  maxTokens: number,
-  options: {
-    keepRecentIterations?: number
-    maxObservationLength?: number
-    enableSummarization?: boolean
-  } = {}
-): CompressionResult<Message> {
-  const genericMessages = ollamaToGeneric(messages)
-  const result = compressContext(genericMessages, maxTokens, options)
-  return {
-    ...result,
-    messages: genericToOllama(result.messages),
-  }
-}
-
-/**
- * Compress OpenAI messages
+ * Compress OpenAI messages (main export)
  */
 export function compressOpenAIContext(
   messages: OpenAIMessage[],
@@ -411,6 +356,11 @@ export function compressOpenAIContext(
     messages: genericToOpenai(result.messages),
   }
 }
+
+/**
+ * Compress Ollama messages (alias for compressOpenAIContext since Ollama uses OpenAI-compatible format)
+ */
+export const compressOllamaContext = compressOpenAIContext
 
 /**
  * Truncate long tool observations in place

@@ -200,7 +200,8 @@ export interface NodeExecutor {
 export interface ExecutionContext {
   executionId: string
   workspacePath: string
-  ollamaHost: string
+  apiEndpoint: string  // OpenAI-compatible endpoint
+  apiKey?: string      // Optional API key for authentication
   variables: Record<string, unknown>
   userInputValues: Map<string, string>
   nodes?: Node<WorkflowNodeData>[]
@@ -273,7 +274,8 @@ export class WorkflowExecutor {
   private edges: Edge[]
   private workspacePath: string
   private executionId: string
-  private ollamaHost: string
+  private apiEndpoint: string
+  private apiKey?: string
   private abortController: AbortController | null = null
   private userInputValues: Map<string, string> = new Map()
   private isPaused: boolean = false
@@ -285,15 +287,17 @@ export class WorkflowExecutor {
     edges: Edge[],
     workspacePath: string,
     executionId: string,
-    ollamaHost: string = 'http://127.0.0.1:11434',
+    apiEndpoint: string = 'http://127.0.0.1:11434',
     userInputValues?: Record<string, string>,
-    isolatedMode: boolean = false
+    isolatedMode: boolean = false,
+    apiKey?: string
   ) {
     this.nodes = nodes
     this.edges = edges
     this.workspacePath = workspacePath
     this.executionId = executionId
-    this.ollamaHost = ollamaHost
+    this.apiEndpoint = apiEndpoint
+    this.apiKey = apiKey
     this.isolatedMode = isolatedMode
     if (userInputValues) {
       this.userInputValues = new Map(Object.entries(userInputValues))
@@ -347,7 +351,8 @@ export class WorkflowExecutor {
     const context: ExecutionContext = {
       executionId: this.executionId,
       workspacePath: this.workspacePath,
-      ollamaHost: this.ollamaHost,
+      apiEndpoint: this.apiEndpoint,
+      apiKey: this.apiKey,
       variables,
       userInputValues: this.userInputValues,
       nodes: this.nodes,
@@ -1004,6 +1009,9 @@ export async function executeWorkflow(): Promise<boolean> {
     return false
   }
 
+  // Get API key for workspace
+  const apiKey = await window.electronAPI.openai.getApiKey('workspace-default')
+
   // Create execution instance
   const executionId = executionStore.createExecution(workspace.path, 'workflow')
 
@@ -1012,7 +1020,10 @@ export async function executeWorkflow(): Promise<boolean> {
     workflowStore.edges,
     workspace.path,
     executionId,
-    workspace.config.ollamaHost
+    workspace.config.apiEndpoint || 'http://127.0.0.1:11434',
+    undefined,
+    false,
+    apiKey || undefined
   )
 
   return executor.execute()

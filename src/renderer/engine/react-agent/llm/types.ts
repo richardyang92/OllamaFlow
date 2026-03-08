@@ -1,16 +1,10 @@
 /**
  * Unified LLM types for ReAct agent
- * Abstracts differences between Ollama and OpenAI (and potentially other providers)
+ * Uses OpenAI-compatible API format (works with Ollama, OpenAI, DeepSeek, etc.)
  */
-
-/**
- * Supported LLM providers
- */
-export type LLMProvider = 'ollama' | 'openai'
 
 /**
  * Unified tool call representation
- * Used internally to represent tool calls from any provider
  */
 export interface StandardToolCall {
   id: string
@@ -19,14 +13,13 @@ export interface StandardToolCall {
 }
 
 /**
- * Unified message format (internal use)
- * Converts between provider-specific formats
+ * Unified message format
  */
 export interface StandardMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string | null
   tool_calls?: StandardToolCall[]
-  tool_call_id?: string // Required by OpenAI for tool responses
+  tool_call_id?: string // Required for tool responses
   metadata?: Record<string, unknown> // Store provider-specific fields (e.g., reasoning_content)
 }
 
@@ -69,8 +62,7 @@ export interface LLMChatConfig {
  * LLM client configuration
  */
 export interface LLMClientConfig {
-  provider: LLMProvider
   model: string
-  apiEndpoint?: string
+  apiEndpoint: string
   apiKey?: string
 }

@@ -238,7 +238,7 @@ function EditorContent() {
       currentWorkspace.path,
       nodes,
       edges,
-      currentWorkspace.config.ollamaHost,
+      currentWorkspace.config.apiEndpoint || 'http://127.0.0.1:11434',
       inputValues || undefined
     ).catch((error: Error) => {
       const executionId = useExecutionStore.getState().getActiveExecution(currentWorkspace.path)

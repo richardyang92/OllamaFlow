@@ -212,14 +212,6 @@ export type AvailableToolId = (typeof AVAILABLE_TOOLS)[number]['id']
 // Node status
 export type NodeStatus = 'idle' | 'running' | 'success' | 'error'
 
-// Debug Mode Configuration for OpenAI API
-export interface DebugModeConfig {
-  enabled: boolean
-  apiEndpoint: string  // e.g., "https://api.openai.com/v1"
-  apiKey: string       // Runtime only, not persisted to workflow
-  model: string        // e.g., "gpt-4o"
-}
-
 // ReAct Agent Step Status
 export type ReActStepStatus = 'thinking' | 'acting' | 'observing' | 'completed' | 'error'
 
@@ -309,7 +301,6 @@ export interface OllamaChatNodeData extends BaseNodeData {
   topP: number
   maxTokens: number
   stream: boolean
-  debugMode?: DebugModeConfig
 }
 
 // Set Node
@@ -355,7 +346,6 @@ export interface SmartRouterNodeData extends BaseNodeData {
   model: string
   routingPrompt: string
   temperature: number
-  debugMode?: DebugModeConfig
 }
 
 // Output Node
@@ -412,7 +402,6 @@ export interface ReactAgentNodeData extends BaseNodeData {
   maxIterations: number
   enabledTools: AvailableToolId[]
   stream: boolean
-  debugMode?: DebugModeConfig
   enableUserInput?: boolean
 }
 
@@ -423,7 +412,6 @@ export interface PlanNodeData extends BaseNodeData {
   systemPrompt: string
   temperature: number
   maxTokens: number
-  debugMode?: DebugModeConfig
 }
 
 // Queue Node - collects multiple inputs into an array
@@ -540,7 +528,7 @@ export const nodeTemplates: NodeTemplate[] = [
       nodeType: 'ollamaChat',
       label: 'Ollama 对话',
       category: 'AI',
-      model: 'glm-4.7-flash:latest',
+      model: '',
       systemPrompt: '你是一个有用的助手。',
       userMessage: '{{input}}',
       temperature: 0.7,
@@ -651,7 +639,7 @@ export const nodeTemplates: NodeTemplate[] = [
           isDefault: true,
         },
       ],
-      model: 'glm-4.7-flash:latest',
+      model: '',
       routingPrompt: '根据输入内容，选择最合适的分支。',
       temperature: 0.3,
       inputs: [{ id: 'input', name: 'input', label: '输入', dataType: 'any' }],
@@ -772,7 +760,7 @@ export const nodeTemplates: NodeTemplate[] = [
       nodeType: 'reactAgent',
       label: 'ReAct 智能体',
       category: 'AI',
-      model: 'glm-4.7-flash:latest',
+      model: '',
       systemPrompt: '你是一个善于分析和执行任务的智能助手。',
       userMessage: '{{input}}',
       temperature: 0.7,
@@ -795,7 +783,7 @@ export const nodeTemplates: NodeTemplate[] = [
       nodeType: 'plan',
       label: '智能规划',
       category: 'AI',
-      model: 'glm-4.7-flash:latest',
+      model: '',
       systemPrompt: '你是一个专业的任务规划助手。根据用户的任务描述，分析任务需求，如果信息不足则提出相关问题，最后生成详细的执行计划。',
       temperature: 0.7,
       maxTokens: 4096,

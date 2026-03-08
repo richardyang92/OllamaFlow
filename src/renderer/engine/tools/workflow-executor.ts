@@ -3,7 +3,7 @@
  */
 
 import type { Node, Edge } from '@xyflow/react'
-import type { WorkflowNodeData } from '@/types/node'
+import type { WorkflowNodeData, ReActStep } from '@/types/node'
 import type { GeneratedFileInfo } from '@/store/agent-store'
 import { useExecutionStore } from '@/store/execution-store'
 
@@ -17,6 +17,17 @@ export interface SubAgentProgressCallback {
   onNodeComplete: (nodeName: string, nodeId: string, success: boolean) => void
   onProgress: (completedNodes: number, totalNodes: number) => void
   onLog: (message: string) => void
+  // ReAct Agent 状态更新回调
+  onReactAgentUpdate?: (
+    nodeId: string,
+    nodeName: string,
+    detail: {
+      currentIteration: number
+      maxIterations: number
+      currentStep?: ReActStep
+      totalSteps: number
+    }
+  ) => void
 }
 
 // 工作流执行结果
@@ -36,7 +47,8 @@ export async function executeWorkflowAsSubAgent(
   workspacePath: string,
   inputValues: Record<string, unknown>,
   options?: {
-    ollamaHost?: string
+    apiEndpoint?: string
+    apiKey?: string
     onLog?: (message: string) => void
     // 进度回调
     onProgress?: SubAgentProgressCallback
@@ -174,9 +186,10 @@ export async function executeWorkflowAsSubAgent(
       edges,
       workspacePath,
       executionId,
-      options?.ollamaHost || config.ollamaHost || 'http://127.0.0.1:11434',
+      options?.apiEndpoint || config.apiEndpoint || 'http://127.0.0.1:11434',
       nodeInputValues, // 键是节点 ID，值是输入值
-      true // isolatedMode
+      true, // isolatedMode
+      options?.apiKey
     )
 
     addLog('开始执行工作流...')
@@ -207,6 +220,24 @@ export async function executeWorkflowAsSubAgent(
       // 通知当前节点和进度
       if (runningNodeName !== null && runningNodeId !== null) {
         options?.onProgress?.onNodeStart(runningNodeName, runningNodeId)
+
+        // 检查是否是 ReAct Agent 节点，如果是则获取其内部状态
+        const runningNode = nodes.find(n => n.id === runningNodeId)
+        if (runningNode?.type === 'reactAgent') {
+          const reactState = executionStore.getReActState(executionId, runningNodeId)
+          if (reactState) {
+            options?.onProgress?.onReactAgentUpdate?.(
+              runningNodeId,
+              runningNodeName,
+              {
+                currentIteration: reactState.currentIteration,
+                maxIterations: reactState.maxIterations,
+                currentStep: reactState.steps[reactState.steps.length - 1],
+                totalSteps: reactState.steps.length,
+              }
+            )
+          }
+        }
       }
       options?.onProgress?.onProgress(completedNodeIds.size, totalNodesCount)
     }, 200) // 每200ms检查一次

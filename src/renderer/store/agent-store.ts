@@ -32,6 +32,20 @@ export type ToolCallStatus = 'pending' | 'running' | 'completed' | 'error'
 // 工具类型
 export type ToolType = 'builtin' | 'workflow' | 'system'
 
+// ReAct Agent 详细执行信息（用于 SubAgent 进度展示）
+export interface ReActAgentDetail {
+  nodeId: string           // ReAct Agent 节点 ID
+  nodeName: string         // 节点名称
+  currentIteration: number // 当前迭代次数
+  maxIterations: number    // 最大迭代次数
+  currentStep?: {
+    status: 'thinking' | 'acting' | 'observing' | 'completed'
+    thought?: string       // 当前思考内容（截取前 100 字符）
+    action?: string        // 当前执行的工具
+  }
+  totalSteps: number       // 已完成的步骤数
+}
+
 // SubAgent 执行进度
 export interface SubAgentProgress {
   workflowName: string
@@ -44,6 +58,8 @@ export interface SubAgentProgress {
   logs: SubAgentLogEntry[]    // 执行日志
   startedAt: number
   updatedAt: number
+  // ReAct Agent 详细执行信息（当当前节点是 ReAct Agent 时）
+  reactAgentDetail?: ReActAgentDetail
 }
 
 // SubAgent 日志条目

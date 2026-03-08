@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Bot, Sun, Moon, Monitor, Wifi, WifiOff, Loader2, FolderOpen, Settings } from 'lucide-react'
+import { Bot, Sun, Moon, Monitor, Wifi, WifiOff, Loader2, Settings, FileDown, Globe } from 'lucide-react'
 import { useTheme, type ThemeMode } from '@/contexts/ThemeContext'
 import { cn } from '@/lib/utils'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { useWorkflowStore } from '@/store/workflow-store'
 import { useExecutionStore } from '@/store/execution-store'
-import { createEmptyWorkflow } from '@/types/workflow'
+import { useSettingsStore } from '@/store/settings-store'
+import GlobalAIConfigPanel from '@/components/settings/GlobalAIConfigPanel'
 
-async function checkOllamaStatus(ollamaHost: string): Promise<'online' | 'offline'> {
+async function checkOllamaStatus(apiEndpoint: string): Promise<'online' | 'offline'> {
   try {
-    const response = await fetch(`${ollamaHost}/api/tags`, {
+    const response = await fetch(`${apiEndpoint}/api/tags`, {
       method: 'GET',
       signal: AbortSignal.timeout(3000)
     })
@@ -23,11 +24,14 @@ async function checkOllamaStatus(ollamaHost: string): Promise<'online' | 'offlin
 export function DashboardHeader() {
   const { themeMode, setThemeMode, resolvedTheme } = useTheme()
   const { setCurrentWorkspace, setRecentWorkspaces } = useWorkspaceStore()
-  const { setWorkflow, syncEdgeAnimation } = useWorkflowStore()
+  const { setWorkflow } = useWorkflowStore()
   const [aiStatus, setAiStatus] = useState<'online' | 'offline' | 'checking'>('checking')
-  const [isOpeningProject, setIsOpeningProject] = useState(false)
   const [defaultProjectsPath, setDefaultProjectsPath] = useState<string>('')
   const [isChangingPath, setIsChangingPath] = useState(false)
+  const [isImportingFile, setIsImportingFile] = useState(false)
+  const [showGlobalConfig, setShowGlobalConfig] = useState(false)
+
+  const { isGlobalAIEnabled, globalAIConfig } = useSettingsStore()
 
   const checkStatus = () => {
     setAiStatus('checking')
@@ -49,62 +53,6 @@ export function DashboardHeader() {
     setThemeMode(nextMode)
   }
 
-  const handleOpenProject = async () => {
-    if (isOpeningProject) return
-
-    setIsOpeningProject(true)
-    try {
-      const selectedPath = await window.electronAPI.workspace.open()
-
-      if (!selectedPath) {
-        setIsOpeningProject(false)
-        return
-      }
-
-      const config = await window.electronAPI.workspace.readConfig(selectedPath)
-
-      if (!config) {
-        alert('所选文件夹不是有效的 OllamaFlow 工作区')
-        setIsOpeningProject(false)
-        return
-      }
-
-      await window.electronAPI.recent.add(selectedPath, config.name, config.description)
-      setCurrentWorkspace(selectedPath, config)
-      useExecutionStore.getState().switchWorkspaceContext(selectedPath)
-
-      const workflow = await window.electronAPI.workspace.readWorkflow(selectedPath)
-      if (workflow) {
-        setWorkflow(workflow as any)
-
-        const executionStore = useExecutionStore.getState()
-        const status = executionStore.getExecutionStatusForWorkspace(selectedPath)
-        const nodeResults = executionStore.getNodeResultsForWorkspace(selectedPath)
-        if (status === 'running' && nodeResults) {
-          const runningNodeIds: string[] = []
-          nodeResults.forEach((result, nodeId) => {
-            if (result.status === 'running') {
-              runningNodeIds.push(nodeId)
-            }
-          })
-          if (runningNodeIds.length > 0) {
-            syncEdgeAnimation(runningNodeIds)
-          }
-        }
-      } else {
-        setWorkflow(createEmptyWorkflow(config.name))
-      }
-
-      const updatedRecentWorkspaces = await window.electronAPI.recent.get()
-      setRecentWorkspaces(updatedRecentWorkspaces)
-    } catch (error) {
-      console.error('打开项目失败:', error)
-      alert('打开项目失败')
-    } finally {
-      setIsOpeningProject(false)
-    }
-  }
-
   const handleChangeDefaultPath = async () => {
     if (isChangingPath) return
 
@@ -121,6 +69,75 @@ export function DashboardHeader() {
       alert('更改默认路径失败')
     } finally {
       setIsChangingPath(false)
+    }
+  }
+
+  const handleImportFromFile = async () => {
+    if (isImportingFile) return
+
+    setIsImportingFile(true)
+    try {
+      // 1. 选择 .ollamaflow 文件
+      const content = await window.electronAPI.workflow.import()
+      if (!content) return
+
+      // 2. 解析文件内容
+      const importedData = JSON.parse(content)
+      const { metadata, nodes, edges, viewport } = importedData
+
+      // 3. 获取工作区名称和默认路径
+      const baseName = metadata?.name || 'Imported Workflow'
+      const defaultPath = await window.electronAPI.workspace.getDefaultProjectsPath()
+
+      // 4. 处理重名：检查目录是否存在
+      let workspaceName = baseName
+      let counter = 1
+      while (await window.electronAPI.workspace.exists(`${defaultPath}/${workspaceName}`)) {
+        workspaceName = `${baseName} (${counter})`
+        counter++
+      }
+      const workspacePath = `${defaultPath}/${workspaceName}`
+
+      // 5. 创建工作区（直接传入 initialWorkflow）
+      const result = await window.electronAPI.workspace.init(workspacePath, {
+        name: workspaceName,
+        description: metadata?.description || '',
+        apiEndpoint: 'http://localhost:11434',
+        defaultModel: '',
+        initialWorkflow: {
+          metadata: {
+            id: window.crypto.randomUUID(),
+            name: workspaceName,
+            createdAt: metadata?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            version: metadata?.version || '1.0.0',
+          },
+          nodes,
+          edges,
+          viewport: viewport || { x: 0, y: 0, zoom: 1 },
+        },
+      })
+
+      if (!result) {
+        alert('创建工作区失败')
+        return
+      }
+
+      // 6. 添加到最近列表并打开
+      await window.electronAPI.recent.add(workspacePath, result.config.name, result.config.description)
+      setCurrentWorkspace(workspacePath, result.config)
+      useExecutionStore.getState().switchWorkspaceContext(workspacePath)
+      setWorkflow(result.workflow)
+
+      // 7. 更新最近工作区列表
+      const updatedRecentWorkspaces = await window.electronAPI.recent.get()
+      setRecentWorkspaces(updatedRecentWorkspaces)
+
+    } catch (error) {
+      console.error('从文件导入失败:', error)
+      alert('导入失败：无效的工作流文件')
+    } finally {
+      setIsImportingFile(false)
     }
   }
 
@@ -147,8 +164,8 @@ export function DashboardHeader() {
           className="flex items-center gap-3"
         >
           <motion.button
-            onClick={handleOpenProject}
-            disabled={isOpeningProject}
+            onClick={handleImportFromFile}
+            disabled={isImportingFile}
             className={cn(
               'flex items-center gap-2 px-4 py-2 rounded-full text-sm',
               'glass-floating',
@@ -157,16 +174,37 @@ export function DashboardHeader() {
               'transition-all duration-200',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
-            whileHover={{ scale: isOpeningProject ? 1 : 1.05 }}
-            whileTap={{ scale: isOpeningProject ? 1 : 0.95 }}
-            title="打开现有项目"
+            whileHover={{ scale: isImportingFile ? 1 : 1.05 }}
+            whileTap={{ scale: isImportingFile ? 1 : 0.95 }}
+            title="从 .ollamaflow 文件创建新工作区"
           >
-            {isOpeningProject ? (
+            {isImportingFile ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <FolderOpen className="w-4 h-4" />
+              <FileDown className="w-4 h-4" />
             )}
-            <span>打开项目</span>
+            <span>导入文件</span>
+          </motion.button>
+
+          {/* Global AI Config Button */}
+          <motion.button
+            onClick={() => setShowGlobalConfig(true)}
+            className={cn(
+              'flex items-center gap-2 px-3 py-2 rounded-full text-sm',
+              'glass-floating',
+              'text-[var(--color-text-muted)]',
+              'hover:text-[var(--color-text)]',
+              'transition-all duration-200',
+              isGlobalAIEnabled && 'ring-2 ring-purple-500/30'
+            )}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            title={isGlobalAIEnabled ? `全局配置: ${globalAIConfig?.name || '已启用'}` : '配置全局 AI 端点'}
+          >
+            <Globe className={cn('w-4 h-4', isGlobalAIEnabled && 'text-purple-400')} />
+            <span className="hidden sm:inline">
+              {isGlobalAIEnabled ? (globalAIConfig?.name || '全局') : 'AI 配置'}
+            </span>
           </motion.button>
 
           <motion.button
@@ -235,6 +273,12 @@ export function DashboardHeader() {
           </motion.button>
         </motion.div>
       </div>
+
+      {/* Global AI Config Panel */}
+      <GlobalAIConfigPanel
+        isOpen={showGlobalConfig}
+        onClose={() => setShowGlobalConfig(false)}
+      />
     </header>
   )
 }

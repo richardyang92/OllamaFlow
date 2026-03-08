@@ -3,15 +3,10 @@ import { AlertTriangle, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { projectTemplates } from '../templates'
 
-type AIBackend = 'ollama' | 'openai'
-
 interface ConfirmStepProps {
   projectPath: string
   projectName: string
   description: string
-  aiBackend: AIBackend
-  apiEndpoint: string
-  defaultModel: string
   selectedTemplate: string
   onTemplateChange: (template: string) => void
 }
@@ -20,9 +15,6 @@ export default function ConfirmStep({
   projectPath,
   projectName,
   description,
-  aiBackend,
-  apiEndpoint,
-  defaultModel,
   selectedTemplate,
   onTemplateChange,
 }: ConfirmStepProps) {
@@ -47,28 +39,14 @@ export default function ConfirmStep({
             <ClipboardList className="w-4 h-4" /> 配置摘要
           </h4>
 
-          <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="grid grid-cols-1 gap-3 text-sm">
             <div>
               <p className="text-[var(--color-text-muted)] text-xs">项目名称</p>
               <p className="text-[var(--color-text)]">{projectName || '(未设置)'}</p>
             </div>
             <div>
-              <p className="text-[var(--color-text-muted)] text-xs">AI 后端</p>
-              <p className="text-[var(--color-text)]">
-                {aiBackend === 'ollama' ? 'Ollama' : 'OpenAI 兼容'}
-              </p>
-            </div>
-            <div className="col-span-2">
               <p className="text-[var(--color-text-muted)] text-xs">保存位置</p>
               <p className="text-[var(--color-text)] text-xs break-all">{projectPath}</p>
-            </div>
-            <div>
-              <p className="text-[var(--color-text-muted)] text-xs">API 端点</p>
-              <p className="text-[var(--color-text)] text-xs">{apiEndpoint}</p>
-            </div>
-            <div>
-              <p className="text-[var(--color-text-muted)] text-xs">默认模型</p>
-              <p className="text-[var(--color-text)]">{defaultModel || '(未设置)'}</p>
             </div>
           </div>
 
