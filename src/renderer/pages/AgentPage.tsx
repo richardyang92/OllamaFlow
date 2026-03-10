@@ -545,24 +545,19 @@ export default function AgentPage() {
       const workspacePath = currentWorkspace?.path
       const conversationId = conversationHistory.currentConversationId
 
-      console.log('[🏖️ SANDBOX_INIT] 开始初始化沙箱', { workspacePath, conversationId })
-
       if (conversationId) {
         if (workspacePath) {
           // 有工作区：使用工作区下的 .agent-sandbox 目录
-          console.log('[🏖️ SANDBOX_INIT] 调用 createSandbox API（工作区模式）', { workspacePath, conversationId })
           const createResult = await window.electronAPI.agent.createSandbox(workspacePath, conversationId)
-          console.log('[🏖️ SANDBOX_INIT] createSandbox 返回结果', createResult)
 
           if (createResult.success) {
             sandboxPath = createResult.path
-            console.log('[🏖️ SANDBOX_INIT] ✅ 沙箱目录创建成功（工作区模式）', { sandboxPath })
             addExecutionLog({
               level: 'info',
               message: `🏖️ 沙箱目录已创建: ${sandboxPath}`,
             })
           } else {
-            console.error('[🏖️ SANDBOX_INIT] ❌ 沙箱目录创建失败（工作区模式）', createResult.error)
+            console.error('[🏖️ SANDBOX_INIT] 沙箱目录创建失败', createResult.error)
             addExecutionLog({
               level: 'warn',
               message: `🏖️ 创建沙箱目录失败: ${createResult.error}`,
@@ -570,30 +565,23 @@ export default function AgentPage() {
           }
         } else {
           // 无工作区：使用用户数据目录下的 agent-sandbox 目录
-          console.log('[🏖️ SANDBOX_INIT] 调用 createDefaultSandbox API（默认模式）', { conversationId })
           const createResult = await window.electronAPI.agent.createDefaultSandbox(conversationId)
-          console.log('[🏖️ SANDBOX_INIT] createDefaultSandbox 返回结果', createResult)
 
           if (createResult.success) {
             sandboxPath = createResult.path
-            console.log('[🏖️ SANDBOX_INIT] ✅ 沙箱目录创建成功（默认模式）', { sandboxPath })
             addExecutionLog({
               level: 'info',
               message: `🏖️ 沙箱目录已创建（默认）: ${sandboxPath}`,
             })
           } else {
-            console.error('[🏖️ SANDBOX_INIT] ❌ 沙箱目录创建失败（默认模式）', createResult.error)
+            console.error('[🏖️ SANDBOX_INIT] 沙箱目录创建失败', createResult.error)
             addExecutionLog({
               level: 'warn',
               message: `🏖️ 创建默认沙箱目录失败: ${createResult.error}`,
             })
           }
         }
-      } else {
-        console.warn('[🏖️ SANDBOX_INIT] ⚠️ 跳过沙箱创建 - conversationId 为空', { workspacePath, conversationId })
       }
-
-      console.log('[🏖️ SANDBOX_INIT] 最终沙箱路径', { sandboxPath })
 
       // 解析 AI 配置：如果没有指定 apiEndpoint/apiKey，尝试从全局配置获取
       let resolvedApiEndpoint = apiEndpoint

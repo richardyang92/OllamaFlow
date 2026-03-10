@@ -6,6 +6,7 @@ import type { Node, Edge } from '@xyflow/react'
 import type { WorkflowNodeData, ReActStep } from '@/types/node'
 import type { GeneratedFileInfo, ReActStepDetail } from '@/store/agent-store'
 import { useExecutionStore } from '@/store/execution-store'
+import { takeFileSnapshot, compareSnapshots } from './file-snapshot'
 
 const DEBUG = false
 const log = (...args: unknown[]) => DEBUG && console.log('[WorkflowExecutor]', ...args)
@@ -196,6 +197,11 @@ export async function executeWorkflowAsSubAgent(
 
     // 通知开始加载
     options?.onProgress?.onStatusChange('loading')
+
+    // 获取执行前的文件快照
+    addLog('获取执行前文件快照...')
+    const beforeSnapshot = await takeFileSnapshot(workspacePath)
+    addLog(`执行前快照: ${beforeSnapshot.files.size} 个文件`)
 
     // 创建执行上下文
     const executionStore = useExecutionStore.getState()
@@ -436,7 +442,7 @@ export async function executeWorkflowAsSubAgent(
       }
     }
 
-    // 收集生成的文件
+    // 收集生成的文件（通过 writeFile 节点）
     const generatedFiles: GeneratedFileInfo[] = []
     nodeResults.forEach((result, nodeId) => {
       const node = nodes.find((n) => n.id === nodeId)
@@ -453,28 +459,104 @@ export async function executeWorkflowAsSubAgent(
       }
     })
 
-    console.log('[🏖️ WORKFLOW_EXECUTOR] 收集生成的文件', {
-      workspacePath,
-      generatedFilesCount: generatedFiles.length,
-      generatedFiles,
-    })
+    // 获取执行后的文件快照并比较变更
+    addLog('获取执行后文件快照...')
+    const afterSnapshot = await takeFileSnapshot(workspacePath)
+    addLog(`执行后快照: ${afterSnapshot.files.size} 个文件`)
 
-    if (generatedFiles.length > 0) {
-      addLog(`生成了 ${generatedFiles.length} 个文件: ${generatedFiles.map(f => f.path).join(', ')}`)
-    } else {
-      console.log('[🏖️ WORKFLOW_EXECUTOR] 没有找到 writeFile 节点或文件写入失败')
-      // 调试：打印所有 writeFile 节点的结果
-      nodeResults.forEach((result, nodeId) => {
-        const node = nodes.find((n) => n.id === nodeId)
-        if (node?.type === 'writeFile') {
-          console.log('[🏖️ WORKFLOW_EXECUTOR] writeFile 节点结果', {
-            nodeId,
-            output: result.output,
-            status: result.status,
-            error: result.error,
-          })
-        }
+    const fileChanges = compareSnapshots(beforeSnapshot, afterSnapshot)
+    addLog(`文件变更: 新增 ${fileChanges.created.length}, 修改 ${fileChanges.modified.length}, 删除 ${fileChanges.deleted.length}`)
+
+    // 将快照检测到的变更转换为 GeneratedFileInfo 格式
+    const snapshotGeneratedFiles: GeneratedFileInfo[] = [
+      ...fileChanges.created.map(f => ({
+        path: f.path,
+        workspacePath,
+        type: 'created' as const,
+        size: f.size,
+      })),
+      ...fileChanges.modified.map(f => ({
+        path: f.path,
+        workspacePath,
+        type: 'modified' as const,
+        size: f.size,
+      })),
+    ]
+
+    // 合并 writeFile 节点结果和快照检测结果（去重）
+    const allGeneratedFiles = [...generatedFiles]
+    for (const file of snapshotGeneratedFiles) {
+      // 如果快照检测到的文件不在 writeFile 节点结果中，则添加
+      if (!allGeneratedFiles.some(f => f.path === file.path)) {
+        allGeneratedFiles.push(file)
+      }
+    }
+
+    if (allGeneratedFiles.length > 0) {
+      addLog(`总共生成/修改 ${allGeneratedFiles.length} 个文件: ${allGeneratedFiles.map(f => `${f.path}(${f.type})`).join(', ')}`)
+    }
+
+    // 如果执行失败但有新生成的文件，尝试读取文件内容作为输出
+    // 这样即使 Agent 返回"失败"，只要有数据文件生成，也能返回有意义的结果
+    if (!success && allGeneratedFiles.length > 0) {
+      addLog('执行虽然标记为失败，但检测到新生成的文件，尝试读取文件内容...')
+
+      // 筛选出可能是数据文件的文件（JSON、TXT、MD、CSV 等）
+      const dataFileExtensions = ['json', 'txt', 'md', 'csv', 'xml', 'yaml', 'yml']
+      const dataFiles = allGeneratedFiles.filter(f => {
+        const ext = f.path.split('.').pop()?.toLowerCase()
+        return ext && dataFileExtensions.includes(ext)
       })
+
+      if (dataFiles.length > 0) {
+        addLog(`找到 ${dataFiles.length} 个可能的数据文件，尝试读取...`)
+
+        const fileContents: Record<string, unknown> = {}
+        let hasValidContent = false
+
+        for (const file of dataFiles) {
+          try {
+            const readResult = await window.electronAPI.file.read(workspacePath, file.path)
+            if (readResult.success && readResult.content) {
+              // 尝试解析 JSON
+              if (file.path.endsWith('.json')) {
+                try {
+                  fileContents[file.path] = JSON.parse(readResult.content)
+                } catch {
+                  fileContents[file.path] = readResult.content
+                }
+              } else {
+                fileContents[file.path] = readResult.content
+              }
+              hasValidContent = true
+              addLog(`成功读取文件: ${file.path}`)
+            }
+          } catch (e) {
+            addLog(`读取文件失败: ${file.path}, 错误: ${e}`)
+          }
+        }
+
+        // 如果成功读取了文件内容，将其作为输出返回，并将 success 标记为 true
+        if (hasValidContent) {
+          // 如果只有一个文件，直接返回其内容；否则返回对象
+          const fileOutput = Object.keys(fileContents).length === 1
+            ? Object.values(fileContents)[0]
+            : fileContents
+
+          addLog('从生成的文件中提取到有效内容，将作为输出返回')
+
+          // 清理执行状态
+          executionStore.deleteExecution(executionId)
+
+          return {
+            success: true,  // 标记为成功，因为有有效输出
+            output: fileOutput,
+            logs,
+            totalNodes: totalNodesCount,
+            generatedFiles: allGeneratedFiles,
+          }
+        }
+      }
     }
 
     // 清理执行状态
@@ -486,7 +568,7 @@ export async function executeWorkflowAsSubAgent(
       error,
       logs,
       totalNodes: totalNodesCount,
-      generatedFiles,
+      generatedFiles: allGeneratedFiles,
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)

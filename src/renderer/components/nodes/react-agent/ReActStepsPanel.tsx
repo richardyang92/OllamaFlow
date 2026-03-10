@@ -24,14 +24,16 @@ function ReActStepsPanel({ state }: ReActStepsPanelProps) {
   }, [state.steps, state.isRunning, state.todos])
 
   // Auto-expand the latest step during execution, collapse completed steps
+  // Also re-expand when step status changes (thinking -> acting -> observing)
   useEffect(() => {
     if (state.isRunning && state.steps.length > 0) {
       const latestStep = state.steps[state.steps.length - 1]
+      // Keep expanded for any non-completed status (thinking, acting, observing)
       if (latestStep.status !== 'completed') {
         setExpandedStepId(latestStep.id)
       }
     }
-  }, [state.steps.length, state.isRunning, state.steps])
+  }, [state.steps.length, state.isRunning, state.steps.map(s => `${s.id}:${s.status}`).join(',')])
 
   // When execution completes, collapse all steps
   useEffect(() => {

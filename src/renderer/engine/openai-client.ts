@@ -164,9 +164,8 @@ export class OpenAIClient {
     let fullContent = ''
     let reasoningContent = ''
     const toolCallsMap = new Map<string, StreamingToolCall>()
+    const indexToId = new Map<number, string>() // Map tool call index to actual ID
     let finishReason = 'stop'
-    let chunkCount = 0
-    let anonymousToolCallIndex = 0 // Counter for tool calls without IDs
 
     try {
       while (true) {
@@ -183,29 +182,16 @@ export class OpenAIClient {
 
           const data = trimmed.slice(5).trim()
           if (data === '[DONE]') {
-            console.log('[Stream] Received [DONE] signal')
             continue
           }
 
           try {
-            chunkCount++
             const parsed = JSON.parse(data)
             const delta = parsed.choices?.[0]?.delta
             const finish = parsed.choices?.[0]?.finish_reason
 
-            // Debug first few chunks
-            if (chunkCount <= 5) {
-              console.log(`[Stream] Chunk ${chunkCount}:`, JSON.stringify(delta))
-            }
-
-            // Debug: Log first few deltas to see what fields are available
-            if (fullContent === '' && reasoningContent === '' && finishReason === 'stop') {
-              console.log('[OpenAIClient] First delta received:', JSON.stringify(delta))
-            }
-
             if (finish) {
               finishReason = finish
-              console.log('[Stream] Finish reason:', finish)
             }
 
             // Handle content
@@ -216,51 +202,51 @@ export class OpenAIClient {
 
             // Handle reasoning content (DeepSeek) - support both field names
             if (delta?.reasoning_content) {
-              console.log('[OpenAIClient] reasoning_content delta:', delta.reasoning_content.substring(0, 50) + '...')
               reasoningContent += delta.reasoning_content
               onReasoningChunk?.(delta.reasoning_content)
             } else if (delta?.reasoning) {
-              console.log('[OpenAIClient] reasoning delta:', delta.reasoning.substring(0, 50) + '...')
               reasoningContent += delta.reasoning
               onReasoningChunk?.(delta.reasoning)
             }
 
             // Handle tool calls streaming
             if (delta?.tool_calls) {
-              console.log('[Stream] tool_calls delta received:', JSON.stringify(delta.tool_calls))
               for (const tc of delta.tool_calls) {
-                // Use id if provided, otherwise generate a stable ID
-                // Some providers (like Ollama) may not send IDs in streaming mode
-                let id = tc.id
+                // OpenAI streaming uses 'index' to identify which tool call this chunk belongs to
+                // DeepSeek and other providers may only send 'id' in the first chunk, then use 'index' for subsequent chunks
+                const index = tc.index !== undefined ? tc.index : 0
+                const indexBasedId = `call_idx_${index}`
 
-                // If no ID provided, try to find existing tool call by name
-                if (!id) {
-                  const toolName = tc.function?.name
-                  if (toolName) {
-                    // Check if we already have a tool call with this name
-                    const existingEntry = Array.from(toolCallsMap.entries()).find(([_, v]) => v.name === toolName)
-                    if (existingEntry) {
-                      id = existingEntry[0]
-                      console.log('[Stream] Found existing tool call by name:', toolName, 'with id:', id)
-                    } else {
-                      // Generate a new stable ID using an incrementing counter
-                      id = `call_${anonymousToolCallIndex++}`
-                      console.log('[Stream] Generated new ID for tool call:', toolName, 'id:', id)
-                    }
+                // Determine the ID to use
+                let id: string
+
+                if (tc.id) {
+                  // This chunk has an explicit ID (usually the first chunk)
+                  id = tc.id
+                  // Record the index to ID mapping for future chunks
+                  indexToId.set(index, id)
+
+                  // Check if we already have an entry for this index with a different ID
+                  // If so, we need to migrate the data
+                  const existingByIndex = toolCallsMap.get(indexBasedId)
+                  if (existingByIndex && !toolCallsMap.has(id)) {
+                    // Migrate from index-based ID to actual ID
+                    toolCallsMap.set(id, existingByIndex)
+                    toolCallsMap.delete(indexBasedId)
                   }
-                }
-
-                console.log('[Stream] Processing tool call chunk:', { id, tcId: tc.id, name: tc.function?.name, hasArgs: !!tc.function?.arguments })
-
-                if (!id) {
-                  // Skip if we still can't determine an ID
-                  console.log('[Stream] Skipping tool call chunk - unable to determine ID')
-                  continue
+                } else {
+                  // No explicit ID - use index to find the correct entry
+                  if (indexToId.has(index)) {
+                    // Found previously recorded ID for this index
+                    id = indexToId.get(index)!
+                  } else {
+                    // First time seeing this index without ID, use index-based ID
+                    id = indexBasedId
+                  }
                 }
 
                 if (!toolCallsMap.has(id)) {
                   const toolName = tc.function?.name || ''
-                  console.log('[Stream] Creating new tool call entry:', { id, toolName })
                   toolCallsMap.set(id, {
                     id,
                     name: toolName,
@@ -273,10 +259,8 @@ export class OpenAIClient {
                 if (tc.function?.name) {
                   // Check if this is a new tool name (was empty before)
                   if (!existing.name && tc.function.name) {
-                    console.log('[Stream] Tool name received:', tc.function.name)
                     // Notify when tool name is first received
                     if (onToolCallName) {
-                      console.log('[Stream] Calling onToolCallName callback')
                       onToolCallName(tc.function.name)
                     }
                   }
@@ -284,7 +268,6 @@ export class OpenAIClient {
                 }
                 if (tc.function?.arguments) {
                   existing.arguments += tc.function.arguments
-                  console.log('[Stream] Arguments accumulated for', existing.name || '(unnamed)', 'length:', existing.arguments.length)
                 }
               }
             }
@@ -295,17 +278,7 @@ export class OpenAIClient {
       }
     } finally {
       reader.releaseLock()
-      console.log('[Stream] Stream ended. Total chunks:', chunkCount)
-      console.log('[Stream] Final state:', {
-        fullContentLength: fullContent.length,
-        reasoningContentLength: reasoningContent.length,
-        toolCallsMapSize: toolCallsMap.size,
-        finishReason
-      })
     }
-
-    // Debug: Log tool calls before filtering
-    console.log('[OpenAIClient] toolCallsMap before assembly:', Array.from(toolCallsMap.entries()).map(([id, tc]) => ({ id, name: tc.name, argsLength: tc.arguments.length })))
 
     // Assemble tool calls - filter out entries with empty names
     // But be careful: if finish_reason is 'tool_calls', we should have some tool calls
@@ -326,13 +299,9 @@ export class OpenAIClient {
     // Otherwise return the array (even if empty, to distinguish from "no tool calls at all")
     const toolCalls: OpenAIToolCall[] | undefined = validToolCalls.length > 0 ? validToolCalls : undefined
 
-    console.log('[OpenAIClient] Final tool_calls:', toolCalls ? toolCalls.map(tc => ({ id: tc.id, name: tc.function.name })) : 'none')
-    console.log('[OpenAIClient] finish_reason:', finishReason)
-
     // Sanity check: if finish_reason is 'tool_calls' but we have no tool calls, log a warning
     if (finishReason === 'tool_calls' && !toolCalls) {
       console.warn('[OpenAIClient] WARNING: finish_reason is tool_calls but no tool calls were parsed!')
-      console.warn('[OpenAIClient] toolCallsMap entries:', Array.from(toolCallsMap.entries()))
     }
 
     return {
@@ -428,9 +397,25 @@ export class OpenAIClient {
  * Parse tool call arguments safely
  */
 export function parseToolCallArgs(argsString: string): Record<string, unknown> {
-  try {
-    return JSON.parse(argsString)
-  } catch {
+  // Handle empty or whitespace-only strings
+  if (!argsString || !argsString.trim()) {
     return {}
+  }
+
+  try {
+    const parsed = JSON.parse(argsString)
+    return parsed
+  } catch {
+    // Try to fix common JSON issues
+    try {
+      // Sometimes LLM returns incomplete JSON, try to complete it
+      let fixed = argsString.trim()
+      if (!fixed.startsWith('{')) fixed = '{' + fixed
+      if (!fixed.endsWith('}')) fixed = fixed + '}'
+      const parsed = JSON.parse(fixed)
+      return parsed
+    } catch {
+      return {}
+    }
   }
 }

@@ -138,6 +138,8 @@ export interface SubAgentProgress {
   reactAgentDetail?: ReActAgentDetail
   // Ollama Chat 详细执行信息（当当前节点是 Ollama Chat 时）
   ollamaChatDetail?: OllamaChatDetail
+  // 时间线事件（用于详细展示节点执行过程）
+  timeline?: NodeExecutionEvent[]
   // 工作流节点执行步骤（新增）- 类似 AgentStep 的时间线
   nodeSteps: {
     id: string                    // 步骤 ID
@@ -973,7 +975,7 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
             if (!progress) return progress
             return {
               ...progress,
-              timeline: progress.timeline.map(evt =>
+              timeline: (progress.timeline || []).map(evt =>
                 evt.id === eventId ? { ...evt, ...update } : evt
               ),
               updatedAt: Date.now(),
@@ -1083,7 +1085,30 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
       // 从recent workspaces加载工作流信息
       const workflows = await window.electronAPI.workflow.discoverAll()
       log('loadWorkflows - loaded', workflows)
-      set({ availableWorkflows: workflows || [] })
+
+      // 预加载每个工作流的输入节点元信息
+      const { loadWorkflowInputMeta } = await import('../engine/workflow-registry')
+      const workflowsWithMeta = await Promise.all(
+        (workflows || []).map(async (w: {
+          id: string
+          workspacePath: string
+          name: string
+          description?: string
+          inputNodes?: unknown
+        }) => {
+          // 如果已有输入节点信息，直接返回
+          if (w.inputNodes) return w
+          // 否则动态加载
+          try {
+            const inputNodes = await loadWorkflowInputMeta(w.workspacePath)
+            return { ...w, inputNodes }
+          } catch {
+            return w
+          }
+        })
+      )
+
+      set({ availableWorkflows: workflowsWithMeta || [] })
     } catch (error) {
       console.error('[AgentStore] loadWorkflows error:', error)
       set({ availableWorkflows: [] })

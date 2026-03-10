@@ -66,13 +66,22 @@ const ReActStepCard = forwardRef<HTMLDivElement, ReActStepCardProps>(
     }
 
     const getSummaryText = () => {
-      if (step.action) {
-        return step.action
+      // 根据状态返回不同的摘要，避免与展开内容重复
+      switch (step.status) {
+        case 'thinking':
+          return '思考中...'
+        case 'acting':
+          return step.action || '执行中...'
+        case 'observing':
+          return '等待观察结果...'
+        case 'completed':
+          // 完成状态：优先显示工具名，无工具则显示"思考完成"
+          return step.action || '思考完成'
+        case 'error':
+          return step.action || '执行出错'
+        default:
+          return '处理中...'
       }
-      if (step.thought) {
-        return step.thought.length > 30 ? step.thought.slice(0, 30) + '...' : step.thought
-      }
-      return '思考中...'
     }
 
     return (

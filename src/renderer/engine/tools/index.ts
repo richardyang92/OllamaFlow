@@ -171,26 +171,46 @@ export class TodosManager {
 
 // Parse todos action input
 function parseTodosInput(
-  actionInput: string
+  actionInput: string | Record<string, unknown>
 ): { action: TodosAction; content?: string; taskId?: string; tasks?: string[] } | null {
-  try {
-    const parsed = JSON.parse(actionInput)
-    return {
-      action: parsed.action as TodosAction,
-      content: parsed.content,
-      taskId: parsed.taskId,
-      tasks: parsed.tasks,
-    }
-  } catch {
-    // Try to parse simple format
-    const parts = actionInput.split(',').map((p) => p.trim())
-    if (parts.length >= 1) {
-      return {
-        action: parts[0] as TodosAction,
-        content: parts.slice(1).join(','),
+  let parsed: Record<string, unknown>
+
+  // Handle both string and object input
+  if (typeof actionInput === 'object') {
+    parsed = actionInput
+  } else {
+    try {
+      parsed = JSON.parse(actionInput)
+    } catch {
+      // Try to parse simple format
+      const parts = actionInput.split(',').map((p) => p.trim())
+      if (parts.length >= 1 && parts[0]) {
+        return {
+          action: parts[0] as TodosAction,
+          content: parts.slice(1).join(','),
+        }
       }
+      return null
     }
+  }
+
+  // Validate action is present and valid
+  const action = parsed.action as TodosAction | undefined
+  if (!action) {
     return null
+  }
+
+  // Validate action is one of the allowed values
+  const validActions: TodosAction[] = ['init', 'add', 'complete', 'list', 'remove', 'clear']
+  if (!validActions.includes(action)) {
+    return null
+  }
+
+  return {
+    action,
+    content: parsed.content as string | undefined,
+    taskId: parsed.taskId as string | undefined,
+    tasks: parsed.tasks as string[] | undefined,
   }
 }
 
@@ -733,11 +753,6 @@ export async function executeTool(
 ): Promise<ToolResult> {
   const { workspacePath } = context
 
-  // Convert object input to string if needed
-  const inputStr = typeof actionInput === 'object'
-    ? JSON.stringify(actionInput)
-    : actionInput
-
   switch (tool.type) {
     case 'readFile':
       return executeReadFile(actionInput, workspacePath)
@@ -764,12 +779,13 @@ export async function executeTool(
       if (!todosManager) {
         return { success: false, output: '', error: 'TodosManager 未初始化' }
       }
-      const parsed = parseTodosInput(inputStr)
+
+      const parsed = parseTodosInput(actionInput)
       if (!parsed) {
         return {
           success: false,
           output: '',
-          error: '无法解析 todos 操作输入，请使用 JSON 格式: {"action": "操作", "content": "内容"} 或 {"action": "init", "tasks": ["任务1", "任务2"]}',
+          error: '无法解析 todos 操作。请使用 JSON 格式调用，例如: {"action": "init", "tasks": ["任务1", "任务2"]} 或 {"action": "complete", "content": "任务关键词"}',
         }
       }
       return todosManager.execute(parsed.action, parsed.content, parsed.taskId, parsed.tasks)

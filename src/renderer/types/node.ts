@@ -72,7 +72,7 @@ export const AVAILABLE_TOOLS = [
     id: 'todos',
     name: 'todos',
     label: '待办事项',
-    description: '管理待办事项列表。一次性创建任务列表: {"action": "init", "tasks": ["任务1", "任务2", ...]}。单个操作: {"action": "add|complete|list|remove|clear", "content": "..."}',
+    description: '任务规划与跟踪工具。建议接到任务后首先使用 init 创建任务列表: {"action": "init", "tasks": ["步骤1", "步骤2", ...]}。可帮助跟踪进度、避免遗漏步骤、让执行更有条理。',
     type: 'todos' as const,
     builtIn: true,
   },

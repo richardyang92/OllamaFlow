@@ -3,10 +3,9 @@
  * 支持意图识别、工作流调用和流式输出
  */
 
-import path from 'path'
 import type { LLMProvider } from './react-agent/llm/types'
-import type { WorkflowInfo } from './workflow-registry'
-import { getWorkflowAsTool } from './workflow-registry'
+import type { WorkflowInfo, InputNodeMeta } from './workflow-registry'
+import { getWorkflowAsTool, loadWorkflowInputMeta } from './workflow-registry'
 import { executeWorkflowAsSubAgent } from './tools/workflow-executor'
 import { TodosManager } from './tools'
 import type {
@@ -33,6 +32,23 @@ import { analyzeToolDependencies } from './utils/tool-dependencies'
 
 const DEBUG = false
 const log = (...args: unknown[]) => DEBUG && console.log('[AgentExecutor]', ...args)
+
+// 数据转换系统提示词
+const TRANSFORM_SYSTEM_PROMPT = `你是一个数据格式转换专家。你的任务是将输入数据转换为指定的格式。
+
+规则：
+1. 严格按照目标格式要求进行转换
+2. 如果输入数据不完整或无法解析，返回空值或合理的默认值
+3. 只输出转换后的数据，不要添加任何解释或说明
+4. 对于 JSON 格式，确保输出是有效的 JSON
+5. 对于结构化数据，保持数据的准确性和完整性`
+
+// 格式匹配分析结果
+interface FormatMatchResult {
+  needsTransform: boolean    // 是否需要转换
+  reason: string             // 原因说明
+  transformHint?: string     // 转换提示
+}
 
 // 历史消息格式
 export interface HistoryMessage {
@@ -432,13 +448,24 @@ export class IntelligentAgentExecutor {
       type: 'function',
       function: {
         name: 'todos',
-        description: '管理待办事项列表，用于规划和跟踪任务进度',
+        description: '任务规划与跟踪工具。建议接到任务后首先使用此工具创建任务列表来规划步骤。',
         parameters: {
           type: 'object',
           properties: {
-            action: { type: 'string', description: '操作类型: init, add, complete, list, remove, clear' },
-            content: { type: 'string', description: '任务内容' },
-            tasks: { type: 'array', items: { type: 'string' }, description: '任务列表' },
+            action: {
+              type: 'string',
+              enum: ['init', 'add', 'complete', 'list', 'remove', 'clear'],
+              description: '必填。操作类型: init(初始化任务列表), add(添加任务), complete(完成任务), list(列出任务), remove(删除任务), clear(清空)'
+            },
+            tasks: {
+              type: 'array',
+              items: { type: 'string' },
+              description: '任务列表（仅用于init操作）。例如: ["读取文件", "分析内容", "生成总结"]'
+            },
+            content: {
+              type: 'string',
+              description: '任务内容关键词（用于add/complete/remove操作）'
+            },
           },
           required: ['action'],
         },
@@ -618,13 +645,14 @@ ${workflowDescriptions || '（暂无可用工作流）'}
 
 **✅ 应该并行执行（无依赖关系）：**
 - 读取多个不同的文件：一次返回多个 readFile 调用
-- 调用多个工作流处理**独立的**任务（如同时查询北京和上海的天气）
+- 调用**多个不同的**工作流处理**独立的**任务（如同时查询北京和上海的天气，使用两个不同的天气工作流）
 - 文件操作和工作流调用同时进行（如果工作流不依赖文件操作的结果）
 
 **❌ 必须串行执行（有依赖关系）：**
 - 先写入文件再读取同一文件
 - 先写入脚本再执行该脚本
 - todos 操作需要按顺序执行
+- **同一个工作流的多次调用必须串行执行**（如：先查询北京天气，再用结果绘制图表，即使都用同一个工作流）
 - **一个工作流的输入依赖另一个工作流的输出**（如：先获取数据，再基于数据绘图）
 - **任务之间存在因果顺序**（如：先分析需求，再基于分析结果执行操作）
 
@@ -646,13 +674,13 @@ tool_calls: [
 ]
 \`\`\`
 
-**用户请求：** "同时查询北京和上海的天气"
+**用户请求：** "同时查询北京天气和上海股市"
 
-**正确做法（并行）：** 一次返回两个 workflow 调用：
+**正确做法（并行）：** 一次返回两个不同工作流的调用：
 \`\`\`
 tool_calls: [
   { function: { name: "workflow_weather", arguments: '{"input": "北京天气"}' } },
-  { function: { name: "workflow_weather", arguments: '{"input": "上海天气"}' } }
+  { function: { name: "workflow_stock", arguments: '{"input": "上海股市"}' } }
 ]
 \`\`\`
 
@@ -666,6 +694,32 @@ tool_calls: [
 - 第二步：返回 \`tool_calls: [{ name: "workflow_chart", arguments: '{"input": "根据以下天气数据绘制图表: ..."}' }]\`
 
 **错误做法（并行）：** 一次返回两个 tool_calls，因为绘图依赖天气数据的结果
+
+**用户请求：** "查询北京、上海、广州的天气"
+
+**错误做法（并行）：** 一次返回多次相同工作流的调用
+\`\`\`javascript
+// ❌ 错误！同一工作流不能并行调用
+tool_calls: [
+  { function: { name: "workflow_weather", arguments: '{"input": "北京"}' } },
+  { function: { name: "workflow_weather", arguments: '{"input": "上海"}' } },
+  { function: { name: "workflow_weather", arguments: '{"input": "广州"}' } }
+]
+\`\`\`
+
+**正确做法（串行）：** 分三次调用同一工作流
+\`\`\`javascript
+// ✅ 第一次：查询北京天气
+tool_calls: [{ name: "workflow_weather", arguments: '{"input": "北京"}' }]
+
+// ✅ 第二次（收到第一次结果后）：查询上海天气
+tool_calls: [{ name: "workflow_weather", arguments: '{"input": "上海"}' }]
+
+// ✅ 第三次（收到第二次结果后）：查询广州天气
+tool_calls: [{ name: "workflow_weather", arguments: '{"input": "广州"}' }]
+\`\`\`
+
+**重要说明：** 同一个工作流（workflow_*）的多次调用必须串行执行。只有不同的工作流可以并行调用。
 
 ---
 
@@ -773,19 +827,175 @@ tool_calls: [
   }
 
   /**
+   * 分析数据格式是否匹配目标输入要求
+   */
+  private analyzeFormatMatch(
+    sourceData: unknown,
+    targetInput: InputNodeMeta
+  ): FormatMatchResult {
+    const sourceType = typeof sourceData
+
+    // 如果目标是 string 类型，检查是否需要特定格式
+    if (targetInput.inputType === 'string') {
+      // 检查 prompt 是否暗示需要特定格式
+      const prompt = targetInput.prompt.toLowerCase()
+      const needsStructure =
+        prompt.includes('json') ||
+        prompt.includes('结构化') ||
+        prompt.includes('数组') ||
+        prompt.includes('对象') ||
+        prompt.includes('列表') ||
+        prompt.includes('表格')
+
+      if (needsStructure && sourceType === 'string') {
+        // 源是字符串，但目标需要结构化数据
+        return {
+          needsTransform: true,
+          reason: `目标需要结构化数据（${targetInput.prompt}），但源数据是文本`,
+          transformHint: targetInput.prompt,
+        }
+      }
+
+      return {
+        needsTransform: false,
+        reason: '目标接受文本输入',
+      }
+    }
+
+    // 如果目标是 number 类型
+    if (targetInput.inputType === 'number') {
+      if (sourceType === 'number') {
+        return { needsTransform: false, reason: '类型匹配' }
+      }
+      // 检查源字符串是否是纯数字
+      if (sourceType === 'string' && /^\d+(\.\d+)?$/.test(sourceData as string)) {
+        return { needsTransform: false, reason: '字符串可转换为数字' }
+      }
+      return {
+        needsTransform: true,
+        reason: `目标需要数字，但源数据是 ${sourceType}`,
+        transformHint: '提取数值',
+      }
+    }
+
+    // 如果目标是 boolean 类型
+    if (targetInput.inputType === 'boolean') {
+      if (sourceType === 'boolean') {
+        return { needsTransform: false, reason: '类型匹配' }
+      }
+      return {
+        needsTransform: true,
+        reason: `目标需要布尔值，但源数据是 ${sourceType}`,
+        transformHint: '判断真假',
+      }
+    }
+
+    // 默认：不需要转换，让 SubAgent 自己处理
+    return {
+      needsTransform: false,
+      reason: '未明确需要转换',
+    }
+  }
+
+  /**
+   * 使用 LLM 进行智能数据转换
+   */
+  private async transformDataForSubAgent(
+    sourceData: unknown,
+    targetInput: InputNodeMeta,
+    workflowName: string
+  ): Promise<string> {
+    const sourceStr = typeof sourceData === 'string'
+      ? sourceData
+      : JSON.stringify(sourceData, null, 2)
+
+    // 输入截断保护
+    const maxInputLength = 5000
+    const truncatedSource = sourceStr.length > maxInputLength
+      ? sourceStr.slice(0, maxInputLength) + '...[已截断]'
+      : sourceStr
+
+    const typeDesc = {
+      'string': '文本',
+      'number': '数字',
+      'boolean': '布尔值(true/false)',
+    }[targetInput.inputType] || '任意'
+
+    const transformPrompt = `你需要将以下数据转换为适合「${workflowName}」工作流使用的格式。
+
+目标输入节点: ${targetInput.label}
+数据类型要求: ${typeDesc}
+功能描述: ${targetInput.prompt || '无特殊要求'}
+
+源数据:
+\`\`\`
+${truncatedSource}
+\`\`\`
+
+请将源数据转换为目标输入节点需要的格式。
+规则:
+1. 如果目标是 string 类型且需要结构化数据(如JSON)，输出格式化后的字符串
+2. 如果目标是 number 类型，只输出数字
+3. 如果目标是 boolean 类型，只输出 true 或 false
+4. 只输出转换后的数据，不要添加任何解释
+
+转换结果:`
+
+    try {
+      if (!this.openaiClient) {
+        return sourceStr
+      }
+
+      const response = await this.openaiClient.chat({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: TRANSFORM_SYSTEM_PROMPT },
+          { role: 'user', content: transformPrompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 4096,
+        stream: false
+      })
+
+      return response.content || sourceStr
+    } catch (error) {
+      console.error('数据转换失败:', error)
+      // 转换失败时返回原始数据
+      return sourceStr
+    }
+  }
+
+  /**
    * 执行内置工具
    */
   private async executeBuiltinTool(name: string, args: Record<string, unknown>, _toolCallId: string): Promise<string> {
-    // 路径验证辅助函数 - 防止路径遍历攻击
+    // 路径验证辅助函数 - 防止路径遍历攻击（纯 JS 实现，不依赖 Node.js path 模块）
     const validateSandboxPath = (relativePath: string): string | null => {
       if (!this.config.sandboxPath) {
         return null
       }
-      // 规范化路径
-      const normalizedRelative = relativePath.replace(/^\/+/, '') // 移除开头的斜杠
-      const fullPath = path.resolve(this.config.sandboxPath, normalizedRelative)
+      // 规范化路径：移除开头的斜杠，处理 .. 和 . 分段
+      let normalizedRelative = relativePath.replace(/^\/+/, '')
+
+      // 检测路径遍历攻击
+      const segments = normalizedRelative.split(/[/\\]/)
+      const normalizedSegments: string[] = []
+      for (const segment of segments) {
+        if (segment === '..') {
+          // 尝试返回上级目录 - 拒绝
+          return null
+        } else if (segment !== '.' && segment !== '') {
+          normalizedSegments.push(segment)
+        }
+      }
+      normalizedRelative = normalizedSegments.join('/')
+
+      // 构建完整路径（使用 / 作为分隔符，因为我们在渲染进程中）
+      const fullPath = this.config.sandboxPath.replace(/\\/g, '/') + '/' + normalizedRelative
+
       // 检查最终路径是否在沙箱目录内
-      if (!fullPath.startsWith(this.config.sandboxPath + path.sep) && fullPath !== this.config.sandboxPath) {
+      const sandboxPathNormalized = this.config.sandboxPath.replace(/\\/g, '/')
+      if (!fullPath.startsWith(sandboxPathNormalized + '/') && fullPath !== sandboxPathNormalized) {
         return null
       }
       return fullPath
@@ -793,8 +1003,18 @@ tool_calls: [
 
     switch (name) {
       case 'todos': {
+        // 验证 action 参数
+        const action = args.action as 'add' | 'complete' | 'list' | 'remove' | 'clear' | 'init' | undefined
+        const validActions = ['init', 'add', 'complete', 'list', 'remove', 'clear'] as const
+
+        if (!action || !validActions.includes(action)) {
+          const observation = `错误: 无效的 todos 操作。请使用 JSON 格式调用，例如: {"action": "init", "tasks": ["任务1", "任务2"]} 或 {"action": "complete", "content": "任务关键词"}`
+          this.callbacks.onObservation?.(observation)
+          return observation
+        }
+
         const result = this.todosManager.execute(
-          args.action as 'add' | 'complete' | 'list' | 'remove' | 'clear' | 'init',
+          action,
           args.content as string | undefined,
           undefined,
           args.tasks as string[] | undefined
@@ -867,15 +1087,8 @@ tool_calls: [
       }
 
       case 'writeFile': {
-        console.log('[🏖️ AGENT_TOOL] writeFile 调用', {
-          hasSandbox: !!this.config.sandboxPath,
-          sandboxPath: this.config.sandboxPath,
-          args,
-        })
-
         if (!this.config.sandboxPath) {
           const error = '错误: 沙箱未配置，无法写入文件'
-          console.error('[🏖️ AGENT_TOOL] ❌ writeFile 失败 - 沙箱未配置')
           this.callbacks.onObservation?.(error)
           return error
         }
@@ -888,34 +1101,23 @@ tool_calls: [
         }
         const validatedPath = validateSandboxPath(filename)
         if (!validatedPath) {
-          const error = `错误: 无效的文件路径或路径超出沙箱范围: ${filename}`
+          const error = `错误: 无效的文件路径: ${filename}`
           this.callbacks.onObservation?.(error)
           return error
         }
         try {
           const normalizedPath = filename.replace(/^\/+/, '')
-          console.log('[🏖️ AGENT_TOOL] 📝 准备写入文件', {
-            workspacePath: this.config.sandboxPath,
-            relativePath: normalizedPath,
-            contentLength: content?.length,
-          })
           const result = await window.electronAPI.file.write(this.config.sandboxPath, normalizedPath, content || '')
-          console.log('[🏖️ AGENT_TOOL] 文件写入结果', result)
           if (!result.success) {
             const error = `写入文件失败: ${result.error}`
             this.callbacks.onObservation?.(error)
             return error
           }
-          // 收集生成的文件信息
           this.generatedFiles.push({
             path: normalizedPath,
             workspacePath: this.config.sandboxPath,
             type: 'created',
             size: content?.length,
-          })
-          console.log('[🏖️ AGENT_TOOL] ✅ 文件已写入并添加到生成列表', {
-            path: normalizedPath,
-            totalGeneratedFiles: this.generatedFiles.length,
           })
           const successMsg = `文件已写入: ${filename}`
           this.callbacks.onObservation?.(successMsg)
@@ -1097,17 +1299,66 @@ tool_calls: [
       },
     })
 
-    // 准备工作流输入参数
+    // 准备工作流输入参数（带智能格式转换）
     let workflowInput: Record<string, unknown>
-    if (args.input !== undefined) {
-      if (typeof args.input === 'object' && args.input !== null) {
-        workflowInput = args.input as Record<string, unknown>
-      } else {
-        workflowInput = { input: args.input }
+
+    // === 智能格式转换 ===
+    // 加载工作流输入节点元信息
+    let inputNodesMeta: InputNodeMeta[] = workflow.inputNodes || []
+
+    // 如果工作流没有预加载的输入节点信息，尝试动态加载
+    if (inputNodesMeta.length === 0) {
+      try {
+        inputNodesMeta = await loadWorkflowInputMeta(workflow.workspacePath)
+      } catch (e) {
+        log('动态加载输入节点元信息失败:', e)
+      }
+    }
+
+    if (inputNodesMeta.length > 0) {
+      // 有输入节点元信息，进行智能匹配和转换
+      workflowInput = {}
+
+      for (const inputMeta of inputNodesMeta) {
+        // 尝试从 args 中匹配输入值
+        let inputValue: unknown = args[inputMeta.label] ?? args.input ?? Object.values(args)[0]
+
+        if (inputValue !== undefined && inputValue !== null) {
+          // 分析格式匹配
+          const matchResult = this.analyzeFormatMatch(inputValue, inputMeta)
+
+          if (matchResult.needsTransform) {
+            // 记录转换日志
+            log(`格式转换: ${matchResult.reason}`)
+            this.callbacks.onSubAgentLog?.(toolCallId, {
+              message: `🔄 数据格式转换: ${matchResult.reason}`,
+              type: 'info',
+            })
+
+            // 执行转换
+            inputValue = await this.transformDataForSubAgent(
+              inputValue,
+              inputMeta,
+              workflow.name
+            )
+          }
+        }
+
+        workflowInput[inputMeta.label] = inputValue
       }
     } else {
-      workflowInput = args
+      // 没有输入节点信息，使用原有逻辑
+      if (args.input !== undefined) {
+        if (typeof args.input === 'object' && args.input !== null) {
+          workflowInput = args.input as Record<string, unknown>
+        } else {
+          workflowInput = { input: args.input }
+        }
+      } else {
+        workflowInput = args
+      }
     }
+    // === 智能格式转换结束 ===
 
     log('工作流输入参数:', workflowInput)
 
@@ -1267,14 +1518,6 @@ tool_calls: [
               log('onNodeStepUpdate', nodeId, update)
               this.callbacks.onSubAgentNodeStepUpdate?.(toolCallId, nodeId, update)
             },
-            // 时间线事件回调（保留兼容性）
-            onTimelineEvent: (event) => {
-              this.callbacks.onSubAgentTimelineEvent?.(toolCallId, event)
-            },
-            // 节点流式更新回调（保留兼容性）
-            onNodeStreamUpdate: (nodeId, nodeName, update) => {
-              this.callbacks.onSubAgentStreamUpdate?.(toolCallId, nodeId, nodeName, update)
-            },
           },
         }
       )
@@ -1282,18 +1525,8 @@ tool_calls: [
       if (result.success) {
         // 收集生成的文件
         if (result.generatedFiles && result.generatedFiles.length > 0) {
-          console.log('[🏖️ AGENT_WORKFLOW] 收集工作流生成的文件', {
-            count: result.generatedFiles.length,
-            files: result.generatedFiles,
-          })
           this.generatedFiles.push(...result.generatedFiles)
-          console.log('[🏖️ AGENT_WORKFLOW] 当前 collectedFiles 总数', {
-            count: this.generatedFiles.length,
-            files: this.generatedFiles,
-          })
           this.callbacks.onFilesGenerated?.(result.generatedFiles)
-        } else {
-          console.log('[🏖️ AGENT_WORKFLOW] 工作流没有生成文件')
         }
 
         // 更新 SubAgent 状态为完成，确保进度为 100%

@@ -12,6 +12,8 @@ export type GenericMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string | null
   tool_calls?: Array<{
+    id: string
+    type: 'function'
     function: {
       name: string
       arguments: string
@@ -29,6 +31,8 @@ export function openaiToGeneric(messages: OpenAIMessage[]): GenericMessage[] {
     role: msg.role,
     content: msg.content,
     tool_calls: msg.tool_calls?.map(tc => ({
+      id: tc.id,
+      type: tc.type || 'function' as const,
       function: {
         name: tc.function.name,
         arguments: tc.function.arguments

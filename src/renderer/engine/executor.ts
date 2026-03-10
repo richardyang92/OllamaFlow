@@ -66,52 +66,30 @@ export function buildInputContext(
   // Find all incoming edges
   const incomingEdges = edges.filter((edge) => edge.target === nodeId)
 
-  console.log('[buildInputContext] Building context for node:', nodeId, 'incoming edges:', incomingEdges.length)
-  console.log('[buildInputContext] Available node results:', Array.from(nodeResults.keys()))
-  console.log('[buildInputContext] Full nodeResults:', JSON.stringify(Array.from(nodeResults.entries()).map(([k, v]) => [k, v.output]), null, 2))
-
   for (const edge of incomingEdges) {
     const sourceResult = nodeResults.get(edge.source)
-    console.log('[buildInputContext] Processing edge from', edge.source, 'result found:', !!sourceResult, 'sourceHandle:', edge.sourceHandle, 'targetHandle:', edge.targetHandle)
 
     if (sourceResult?.output) {
       // Map the output to the input port
       const sourceHandle = edge.sourceHandle
       const targetHandle = edge.targetHandle || 'input'
 
-      // Debug: log the edge and source result
-      console.log('[buildInputContext] Edge:', {
-        source: edge.source,
-        target: edge.target,
-        sourceHandle,
-        targetHandle,
-        sourceOutput: sourceResult.output,
-      })
-
       if (typeof sourceResult.output === 'object' && sourceResult.output !== null) {
         const outputObj = sourceResult.output as Record<string, unknown>
         // If there's a specific source handle, try to get that field
         if (sourceHandle && sourceHandle in outputObj) {
           context[targetHandle] = outputObj[sourceHandle]
-          console.log('[buildInputContext] Mapped field:', sourceHandle, 'to', targetHandle)
-        } else if (sourceHandle) {
-          // Handle exists but field doesn't - use the whole output as fallback
-          context[targetHandle] = sourceResult.output
-          console.log('[buildInputContext] Handle not found in output, using whole output')
         } else {
-          // No specific handle - use the whole output
+          // Handle exists but field doesn't, or no specific handle - use the whole output
           context[targetHandle] = sourceResult.output
-          console.log('[buildInputContext] No source handle, using whole output')
         }
       } else {
         // Primitive output type
         context[targetHandle] = sourceResult.output
-        console.log('[buildInputContext] Primitive output type')
       }
     }
   }
 
-  console.log('[buildInputContext] Final context:', context)
   return context
 }
 
@@ -302,8 +280,6 @@ export class WorkflowExecutor {
     this.isolatedMode = isolatedMode
     if (userInputValues) {
       this.userInputValues = new Map(Object.entries(userInputValues))
-      console.log('[WorkflowExecutor] 接收 userInputValues:', userInputValues)
-      console.log('[WorkflowExecutor] Map 内容:', Array.from(this.userInputValues.entries()))
     }
   }
 
@@ -341,10 +317,12 @@ export class WorkflowExecutor {
       progress: 0,
     })
     
-    // Debug: log execution order and edges
-    console.log('[WorkflowExecutor] Nodes:', this.nodes.map(n => ({ id: n.id, type: n.data.nodeType, label: n.data.label })))
-    console.log('[WorkflowExecutor] Edges:', this.edges.map(e => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle })))
-    console.log('[WorkflowExecutor] Initial execution order:', initialOrder)
+    // Initialize global status
+    updateGlobalStatus({
+      status: 'running',
+      startTime: new Date().toISOString(),
+      progress: 0,
+    })
 
     this.abortController = new AbortController()
     const variables: Record<string, unknown> = {}
@@ -529,8 +507,6 @@ export class WorkflowExecutor {
             message: `节点 ${node.data.label} 等待用户输入...`,
           })
 
-          console.log('[WorkflowExecutor] Node waiting for user input:', nodeId, 'executionId:', this.executionId)
-
           // Wait for node to complete (status changes from waiting to success/error)
           await new Promise<void>((resolve) => {
             const checkCompletion = () => {
@@ -539,7 +515,6 @@ export class WorkflowExecutor {
 
               // If execution no longer exists, it was cancelled/stopped
               if (!execution) {
-                console.log('[WorkflowExecutor] Execution no longer exists, stopping wait for node:', nodeId)
                 resolve()
                 return
               }
@@ -547,7 +522,6 @@ export class WorkflowExecutor {
               if (nodeResult?.status === 'success' || nodeResult?.status === 'error') {
                 const output = nodeResult.output as any
                 if (!output || output.status !== 'waiting') {
-                  console.log('[WorkflowExecutor] Node completed, resolving wait:', nodeId)
                   resolve()
                   return
                 }
@@ -705,39 +679,27 @@ export class WorkflowExecutor {
         const branches = this.identifyParallelBranches(nodeId)
         
         if (branches.length > 0) {
-          const execution = executionStore.getExecution(this.executionId)
-          console.log('[Parallel] Splitter output before parallel execution:', execution?.context?.nodeResults?.get(nodeId)?.output)
-          console.log('[Parallel] All nodeResults keys before parallel:', Array.from(execution?.context?.nodeResults?.keys() || []))
-          
           context.onLog?.({
             nodeId,
             nodeName: node.data.label,
             level: 'info',
             message: `开始并行执行 ${branches.length} 个分支`,
           })
-          
-          console.log('[Parallel] Branch details:', branches.map(b => ({ branchId: b.branchId, startNodeId: b.startNodeId, nodes: b.nodes, joinNodeId: b.joinNodeId })))
-          
+
           // Mark branch nodes as to be executed in parallel
           for (const branch of branches) {
             for (const branchNodeId of branch.nodes) {
               skipNodes.add(branchNodeId)
             }
           }
-          
+
           // Execute branches in parallel
-          console.log('[Parallel] Starting Promise.allSettled for branches')
           const branchResults = await Promise.allSettled(
-            branches.map(branch => 
+            branches.map(branch =>
               this.executeBranchChain(branch, context, executeNode, variables)
             )
           )
-          
-          console.log('[Parallel] All branches completed')
-          const executionAfter = executionStore.getExecution(this.executionId)
-          console.log('[Parallel] nodeResults after parallel:', Array.from(executionAfter?.context?.nodeResults?.keys() || []))
-          console.log('[Parallel] Full nodeResults after parallel:', JSON.stringify(Array.from(executionAfter?.context?.nodeResults?.entries() || []).map(([k, v]) => [k, v.output]), null, 2))
-          
+
           // Process results based on failure strategy
           let hasFailure = false
           for (let i = 0; i < branchResults.length; i++) {
@@ -997,25 +959,17 @@ export class WorkflowExecutor {
     executeNode: (nodeId: string) => Promise<boolean>,
     _variables: Record<string, unknown>
   ): Promise<{ success: boolean; error?: string }> {
-    console.log(`[Branch ${branch.branchId}] Starting execution, nodes:`, branch.nodes)
-    const executionStore = useExecutionStore.getState()
-    const execution = executionStore.getExecution(this.executionId)
-    console.log(`[Branch ${branch.branchId}] nodeResults at start:`, Array.from(execution?.context?.nodeResults?.keys() || []))
-    
     for (const nodeId of branch.nodes) {
-      console.log(`[Branch ${branch.branchId}] Executing node: ${nodeId}`)
       if (this.isCancelled || this.abortController?.signal.aborted) {
         return { success: false, error: 'Cancelled' }
       }
-      
+
       const nodeSuccess = await executeNode(nodeId)
-      console.log(`[Branch ${branch.branchId}] Node ${nodeId} result:`, nodeSuccess ? 'success' : 'failed')
-      
+
       if (!nodeSuccess) {
         return { success: false, error: `Node ${nodeId} failed` }
       }
     }
-    console.log(`[Branch ${branch.branchId}] Completed successfully`)
     return { success: true }
   }
 }

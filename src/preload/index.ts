@@ -35,6 +35,8 @@ export interface FileInfo {
   name: string
   isDirectory: boolean
   path: string
+  mtime?: number    // 修改时间戳（毫秒）
+  size?: number     // 文件大小（字节）
 }
 
 export interface CommandResult {

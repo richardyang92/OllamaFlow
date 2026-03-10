@@ -76,7 +76,7 @@ function getFileReferences(toolName: string, args: Record<string, unknown>): str
  * 2. executeCommand 如果操作同一文件，依赖 writeFile
  * 3. 多个 writeFile 到同一文件需要串行
  * 4. todos 操作需要串行（状态管理）
- * 5. workflow_* (SubAgent) 之间无依赖，可并行
+ * 5. workflow_* (SubAgent) 同一个工作流的调用必须串行，不同工作流可并行
  * 6. 其他内置工具（listFiles、getCurrentDate 等）可并行
  *
  * @param toolCalls 工具调用列表
@@ -99,8 +99,6 @@ export function analyzeToolDependencies(toolCalls: ToolCallInfo[]): ToolCallWith
       dependsOn: new Set<number>(),
     }
   })
-
-  // 分析依赖关系
 
   // 分析依赖关系
   for (let i = 0; i < toolCallInfos.length; i++) {
@@ -136,6 +134,15 @@ export function analyzeToolDependencies(toolCalls: ToolCallInfo[]): ToolCallWith
       // 规则 4: todos 操作需要串行（状态管理）
       if (current.name === 'todos' && previous.name === 'todos') {
         current.dependsOn.add(j)
+      }
+
+      // 规则 5: 同一个 SubAgent (workflow) 的调用必须串行
+      // 因为同一个工作流可能依赖上一次调用的状态
+      if (current.name.startsWith('workflow_') && previous.name.startsWith('workflow_')) {
+        // 检查是否是同一个工作流
+        if (current.name === previous.name) {
+          current.dependsOn.add(j)
+        }
       }
     }
   }

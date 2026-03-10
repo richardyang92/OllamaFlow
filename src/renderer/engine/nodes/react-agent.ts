@@ -37,15 +37,21 @@ function getToolParameters(toolType: string): {
           action: {
             type: 'string',
             enum: ['init', 'add', 'complete', 'list', 'remove', 'clear'],
-            description: '操作类型。推荐使用init一次性创建多个任务'
+            description: '必填。操作类型: init(初始化任务列表), add(添加任务), complete(完成任务), list(列出任务), remove(删除任务), clear(清空)'
           },
           tasks: {
             type: 'array',
             items: { type: 'string' },
-            description: '任务列表数组（用于init操作，一次性创建多个任务）'
+            description: '任务列表（仅用于init操作）。例如: ["读取文件", "分析内容", "生成总结"]'
           },
-          content: { type: 'string', description: '任务内容（用于add/complete/remove操作）' },
-          taskId: { type: 'string', description: '任务ID' }
+          content: {
+            type: 'string',
+            description: '任务内容关键词（用于add/complete/remove操作）'
+          },
+          taskId: {
+            type: 'string',
+            description: '任务ID（可选，用于精确匹配）'
+          }
         },
         required: ['action']
       }
@@ -420,16 +426,21 @@ function buildFullSystemPrompt(systemPrompt: string, enableUserInput: boolean): 
 
 ## ⚡ 核心效率原则（最重要）
 
-1. **适时早停**: 确信任务完成时立即给出最终答案，不要反复验证
-2. **简化任务管理**: 简单任务（1-2步）不需要使用 todos，直接执行即可
+1. **规划先行**: 接到任务后，建议先用 todos 工具规划步骤（使用 init 一次性创建）
+2. **适时早停**: 确信任务完成时立即给出最终答案，不要反复验证
 3. **一次性完成**: 写代码时要完整，避免多次修改；执行成功后直接回答
 
 ## 可用工具
 
-### todos - 任务规划工具（仅用于复杂任务）
-- 初始化: {"action": "init", "tasks": ["任务1", "任务2"]}
-- 完成任务: {"action": "complete", "content": "任务关键词"}
+### todos - 任务规划工具（推荐首先使用）
+**重要**: 调用此工具时必须提供 action 参数！
+
+使用示例:
+- 初始化任务列表: {"action": "init", "tasks": ["读取文件", "分析内容", "生成总结"]}
+- 完成任务: {"action": "complete", "content": "读取"}
 - 添加任务: {"action": "add", "content": "新任务"}
+
+注意: action 是必填参数，可选值: init, add, complete, list, remove, clear
 
 ### executeCommand - 执行命令
 执行 Shell 命令（python、node、curl 等）。
@@ -492,6 +503,52 @@ WAIT_FOR_INPUT: 你的问题
 
 ## JSON格式提醒
 - 代码中的反斜杠必须双写转义（\\\\cos -> \\\\\\\\cos）`
+}
+
+/**
+ * Generate a summary of completed tasks using LLM
+ * This provides a meaningful conclusion instead of just "task completed"
+ */
+async function generateTaskSummary(
+  client: OpenAIClient,
+  model: string,
+  messages: OpenAIMessage[],
+  todosStatus: { total: number; completed: number; pending: number },
+  steps: ReActStep[]
+): Promise<string> {
+  // Build key steps summary (last 5 steps with action and observation)
+  const keyStepsSummary = steps
+    .filter(s => s.action && s.observation)
+    .slice(-5)
+    .map(s => `- 操作: ${s.action}\n  结果: ${(s.observation || '').slice(0, 200)}`)
+    .join('\n')
+
+  const summaryMessages: OpenAIMessage[] = [
+    messages[0], // System prompt
+    messages[1], // Original user message
+    {
+      role: 'user',
+      content: `任务已全部完成。请根据以上执行过程，用简洁的中文回答用户的原始问题。
+
+执行记录摘要:
+${keyStepsSummary || '（无执行记录）'}
+
+请直接回答用户的问题，总结你的发现和结论。`
+    }
+  ]
+
+  try {
+    const response = await client.chat({
+      model,
+      messages: summaryMessages,
+      temperature: 0.3,
+      max_tokens: 1000,
+    })
+    return response.content || `任务已完成 ${todosStatus.completed} 个步骤。`
+  } catch (error) {
+    console.error('[ReAct] Failed to generate summary:', error)
+    return `任务已完成 ${todosStatus.completed} 个步骤。`
+  }
 }
 
 export function createReactAgentExecutor(): NodeExecutor {
@@ -794,6 +851,19 @@ async function executeReAct(
         }
 
         finalAnswer = content || '任务完成'
+
+        // If response is too brief and we have completed tasks, generate a better summary
+        if (finalAnswer.length < 100 && todosManager.getStatus().completed > 0) {
+          const reactState = executionStore.getReActState(context.executionId, node.id)
+          finalAnswer = await generateTaskSummary(
+            client,
+            data.model,
+            messages,
+            todosManager.getStatus(),
+            reactState?.steps || []
+          )
+        }
+
         executionStore.updateReActStep(context.executionId, node.id, { id: stepId, status: 'completed' })
         executionStore.completeReActStep(context.executionId, node.id, stepId)
         executionStore.setReActFinalAnswer(context.executionId, node.id, finalAnswer)
@@ -824,11 +894,78 @@ async function executeReAct(
         })
       }
 
+      // Immediately update step status to 'acting' before executing tools
+      // This ensures the UI shows the acting state in real-time
+      executionStore.updateReActStep(context.executionId, node.id, {
+        id: stepId,
+        status: 'acting',
+        action: response.tool_calls.map(tc => tc.function.name).join(', '),
+        actionInput: JSON.stringify(response.tool_calls.map(tc => parseToolCallArgs(tc.function.arguments))),
+      })
+
+      // Yield to allow React to render the updated state before blocking on tool execution
+      await new Promise(resolve => setTimeout(resolve, 0))
+
       for (const group of toolCallGroups) {
-        // Execute tools in the same group in parallel
-        const results = await Promise.all(group.map(async ({ toolCall }) => {
+        // Track observations as tools complete (for real-time UI updates)
+        const groupObservations: string[] = []
+        const allResults: Array<{
+          toolCallId: string
+          toolName: string
+          success: boolean
+          observation: string
+        }> = []
+
+        // Execute tools in the same group and update UI as each completes
+        await Promise.all(group.map(async ({ toolCall }) => {
           const toolName = toolCall.function.name
-          const toolArgs = parseToolCallArgs(toolCall.function.arguments)
+          const rawArgs = toolCall.function.arguments || ''
+          let toolArgs = parseToolCallArgs(rawArgs)
+
+          // Handle empty or invalid arguments - some LLMs (like DeepSeek) may not send args properly
+          // Return a helpful error message so the LLM can correct itself
+          if (Object.keys(toolArgs).length === 0) {
+            console.log('[ReAct] Empty/invalid args for tool:', toolName, 'raw:', rawArgs)
+            // For tools that require parameters, provide a helpful error
+            if (toolName === 'todos') {
+              const errorResult = {
+                toolCallId: toolCall.id,
+                toolName,
+                success: false,
+                observation: `错误: 调用 todos 工具时未提供参数。必须提供 action 参数。例如: {"action": "init", "tasks": ["任务1", "任务2"]}`,
+              }
+              allResults.push(errorResult)
+              groupObservations.push(errorResult.observation)
+
+              executionStore.updateReActStep(context.executionId, node.id, {
+                id: stepId,
+                status: 'observing',
+                observation: errorResult.observation,
+                observationError: true,
+              })
+              return
+            } else if (toolName === 'readFile') {
+              const errorResult = {
+                toolCallId: toolCall.id,
+                toolName,
+                success: false,
+                observation: `错误: 调用 readFile 工具时未提供参数。必须提供 filePath 参数。例如: {"filePath": "README.md"}`,
+              }
+              allResults.push(errorResult)
+              groupObservations.push(errorResult.observation)
+              return
+            } else if (toolName === 'executeCommand') {
+              const errorResult = {
+                toolCallId: toolCall.id,
+                toolName,
+                success: false,
+                observation: `错误: 调用 executeCommand 工具时未提供参数。必须提供 command 参数。例如: {"command": "ls -la"}`,
+              }
+              allResults.push(errorResult)
+              groupObservations.push(errorResult.observation)
+              return
+            }
+          }
 
           context.onLog?.({
             nodeId: node.id,
@@ -840,84 +977,96 @@ async function executeReAct(
           // Find and execute the tool
           const tool = allTools.find(t => t.name === toolName)
 
+          let result: { toolCallId: string; toolName: string; success: boolean; observation: string }
+
           if (!tool) {
-            return {
+            result = {
               toolCallId: toolCall.id,
               toolName,
               success: false,
               observation: `错误: 未知工具 "${toolName}"`,
             }
-          }
-
-          // Check if this action is blocked
-          if (loopInfo.blockedActions.includes(toolName.toLowerCase())) {
+          } else if (loopInfo.blockedActions.includes(toolName.toLowerCase())) {
             const blockedObservation = `🚫 操作被阻止: ${loopInfo.suggestion || '此操作已被阻止'}`
-            return {
+            result = {
               toolCallId: toolCall.id,
               toolName,
               success: false,
               observation: blockedObservation,
             }
-          }
+          } else {
+            if (data.stream) {
+              context.onStream?.(node.id, `🔧 调用: ${toolName}\n`)
+            }
 
-          if (data.stream) {
-            context.onStream?.(node.id, `🔧 调用: ${toolName}\n`)
-          }
+            try {
+              const toolResult = await executeTool(tool, toolArgs, context, todosManager)
+              let observation = toolResult.success ? toolResult.output : `错误: ${toolResult.error}`
 
-          try {
-            const result = await executeTool(tool, toolArgs, context, todosManager)
+              if (tool.name.toLowerCase() === 'writefile' && toolResult.success) {
+                const fileMatch = observation.match(/文件已写入:?\s*([^\n💡]+)/iu)
+                const filePath = fileMatch ? fileMatch[1].trim() : ''
+                const ext = filePath.split('.').pop()?.toLowerCase()
+                const scriptExts = ['py', 'js', 'ts', 'sh', 'bat', 'ps1', 'rb', 'php']
 
-            // Add hints based on tool type
-            let observation = result.success ? result.output : `错误: ${result.error}`
+                if (filePath) {
+                  generatedFiles.push({
+                    path: filePath,
+                    workspacePath: context.workspacePath,
+                    type: 'created',
+                    size: toolArgs?.content ? String(toolArgs.content).length : undefined,
+                  })
+                }
 
-            if (tool.name.toLowerCase() === 'writefile' && result.success) {
-              const fileMatch = observation.match(/文件已写入:?\s*([^\n💡]+)/iu)
-              const filePath = fileMatch ? fileMatch[1].trim() : ''
-              const ext = filePath.split('.').pop()?.toLowerCase()
-              const scriptExts = ['py', 'js', 'ts', 'sh', 'bat', 'ps1', 'rb', 'php']
-
-              // Track generated file
-              if (filePath) {
-                generatedFiles.push({
-                  path: filePath,
-                  workspacePath: context.workspacePath,
-                  type: 'created',
-                  size: toolArgs?.content ? String(toolArgs.content).length : undefined,
-                })
+                if (ext && scriptExts.includes(ext)) {
+                  const runCmd = ext === 'py' ? `python ${filePath}` :
+                                 ext === 'js' ? `node ${filePath}` :
+                                 ext === 'ts' ? `npx ts-node ${filePath}` :
+                                 ext === 'sh' ? `bash ${filePath}` :
+                                 ext === 'bat' || ext === 'ps1' ? filePath :
+                                 filePath
+                  observation += `\n💡 提示: 下一步用 executeCommand 执行: ${runCmd}`
+                }
               }
 
-              if (ext && scriptExts.includes(ext)) {
-                const runCmd = ext === 'py' ? `python ${filePath}` :
-                               ext === 'js' ? `node ${filePath}` :
-                               ext === 'ts' ? `npx ts-node ${filePath}` :
-                               ext === 'sh' ? `bash ${filePath}` :
-                               ext === 'bat' || ext === 'ps1' ? filePath :
-                               filePath
-                observation += `\n💡 提示: 下一步用 executeCommand 执行: ${runCmd}`
+              result = {
+                toolCallId: toolCall.id,
+                toolName,
+                success: toolResult.success,
+                observation,
+              }
+            } catch (error) {
+              result = {
+                toolCallId: toolCall.id,
+                toolName,
+                success: false,
+                observation: `工具执行错误: ${(error as Error).message}`,
               }
             }
-
-            // Only add completion hint for executeCommand success (simplified)
-            // Removed verbose task status hints to reduce context size and let agent think independently
-
-            return {
-              toolCallId: toolCall.id,
-              toolName,
-              success: result.success,
-              observation,
-            }
-          } catch (error) {
-            return {
-              toolCallId: toolCall.id,
-              toolName,
-              success: false,
-              observation: `工具执行错误: ${(error as Error).message}`,
-            }
           }
+
+          // CRITICAL: Update UI immediately when each tool completes
+          // This provides real-time feedback for acting -> observing transition
+          groupObservations.push(`${result.toolName}: ${result.observation}`)
+          allResults.push(result)
+
+          // Immediately update step to 'observing' status with streaming observation
+          executionStore.updateReActStep(context.executionId, node.id, {
+            id: stepId,
+            status: 'observing',
+            observation: groupObservations.join('\n\n'),
+            observationStreaming: true,
+            observationError: !result.success,
+          })
+
+          // Yield to allow React to render
+          await new Promise(resolve => setTimeout(resolve, 0))
+
+          return result
         }))
 
-        // Process results and update messages
-        for (const result of results) {
+        // Process results and add to messages
+        for (const result of allResults) {
           messages.push({ role: 'tool', content: result.observation, tool_call_id: result.toolCallId })
 
           context.onLog?.({
@@ -939,31 +1088,42 @@ async function executeReAct(
 
         // Early stopping: check if all tasks are complete
         if (todosStatus.total > 0 && todosStatus.pending === 0) {
-          // All tasks completed, can stop early
-          const allResults = results.map(r => r.observation).join('\n')
-          finalAnswer = `任务已全部完成。\n\n${allResults.slice(0, 500)}`
-          executionStore.setReActFinalAnswer(context.executionId, node.id, finalAnswer)
+          // Get current ReAct state for step information
+          const reactState = executionStore.getReActState(context.executionId, node.id)
 
           context.onLog?.({
             nodeId: node.id,
             nodeName: data.label,
             level: 'info',
-            message: `所有任务完成，提前结束`,
+            message: `所有任务完成，正在生成总结...`,
           })
 
           if (data.stream) {
-            context.onStream?.(node.id, `\n✅ 所有任务完成\n`)
+            context.onStream?.(node.id, `\n✅ 所有任务完成，正在生成总结...\n`)
+          }
+
+          // Use LLM to generate intelligent summary
+          finalAnswer = await generateTaskSummary(
+            client,
+            data.model,
+            messages,
+            todosStatus,
+            reactState?.steps || []
+          )
+
+          executionStore.setReActFinalAnswer(context.executionId, node.id, finalAnswer)
+
+          if (data.stream) {
+            context.onStream?.(node.id, `\n📝 总结: ${finalAnswer}\n`)
           }
           break
         }
       }
 
-      // Update step status after all tool calls
+      // Mark step as completed and stop observation streaming
       executionStore.updateReActStep(context.executionId, node.id, {
         id: stepId,
-        status: 'observing',
-        action: response.tool_calls.map(tc => tc.function.name).join(', '),
-        actionInput: JSON.stringify(response.tool_calls.map(tc => parseToolCallArgs(tc.function.arguments))),
+        observationStreaming: false,
       })
       executionStore.completeReActStep(context.executionId, node.id, stepId)
     } catch (error) {
