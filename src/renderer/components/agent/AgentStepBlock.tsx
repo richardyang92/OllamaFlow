@@ -11,12 +11,14 @@ import {
   Eye,
   CheckCircle,
   XCircle,
+  ChevronDown,
   ChevronRight,
   Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AgentStep, ReActStepDetail } from '@/store/agent-store'
 import { ToolCallBlock } from './ToolCallBlock'
+import AgentMarkdown from './AgentMarkdown'
 
 interface AgentStepBlockProps {
   step: AgentStep
@@ -33,24 +35,59 @@ interface AgentStepBlockProps {
   messageId?: string        // 消息ID，用于打开详情面板
 }
 
-// 状态图标
-function StepStatusIcon({ status, streaming }: { status: AgentStep['status']; streaming?: boolean }) {
+// 状态配置（类似 SubAgentDetailsDrawer 的 TimelineNode）
+function getStatusConfig(status: AgentStep['status'], streaming?: boolean) {
   if (streaming) {
-    return <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+    return {
+      icon: Loader2,
+      iconClass: 'text-blue-400 animate-spin',
+      borderClass: 'border-blue-500/50',
+      bgClass: 'bg-blue-500/10',
+    }
   }
 
   switch (status) {
     case 'thinking':
-      return <Brain className="w-4 h-4 text-yellow-400" />
+      return {
+        icon: Brain,
+        iconClass: 'text-yellow-400',
+        borderClass: 'border-yellow-500/50',
+        bgClass: 'bg-yellow-500/10',
+      }
     case 'acting':
-      return <Wrench className="w-4 h-4 text-blue-400" />
+      return {
+        icon: Wrench,
+        iconClass: 'text-blue-400',
+        borderClass: 'border-blue-500/50',
+        bgClass: 'bg-blue-500/10',
+      }
     case 'observing':
-      return <Eye className="w-4 h-4 text-purple-400" />
+      return {
+        icon: Eye,
+        iconClass: 'text-purple-400',
+        borderClass: 'border-purple-500/50',
+        bgClass: 'bg-purple-500/10',
+      }
     case 'completed':
-      return <CheckCircle className="w-4 h-4 text-green-400" />
+      return {
+        icon: CheckCircle,
+        iconClass: 'text-green-400',
+        borderClass: 'border-green-500/50',
+        bgClass: 'bg-green-500/10',
+      }
     case 'error':
-      return <XCircle className="w-4 h-4 text-red-400" />
+      return {
+        icon: XCircle,
+        iconClass: 'text-red-400',
+        borderClass: 'border-red-500/50',
+        bgClass: 'bg-red-500/10',
+      }
   }
+}
+
+// 判断是否为执行中状态
+function isActiveStatus(status: AgentStep['status']): boolean {
+  return status === 'thinking' || status === 'acting' || status === 'observing'
 }
 
 // 状态对应的标签文本
@@ -85,7 +122,7 @@ function StepStatusBadge({ status }: { status: ReActStepDetail['status'] }) {
 
 export const AgentStepBlock = memo(function AgentStepBlock({
   step,
-  isLast,
+  isLast: _isLast, // 保留参数但不使用（用于兼容现有调用）
   defaultExpanded = true,
   forceCollapsed = false,
   className,
@@ -93,7 +130,7 @@ export const AgentStepBlock = memo(function AgentStepBlock({
   nodeType,
   errorMessage,
   reactAgentSteps,
-  isRunning = false,
+  isRunning: _isRunning = false, // 保留参数但不使用
   messageId,
 }: AgentStepBlockProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
@@ -102,7 +139,6 @@ export const AgentStepBlock = memo(function AgentStepBlock({
   // 当思考内容流式更新时，自动滚动到底部（仅当用户已在底部附近时）
   useEffect(() => {
     if (step.thoughtStreaming && thoughtContainerRef.current) {
-      const container = thoughtContainerRef.current
       const scrollToBottom = () => {
         if (thoughtContainerRef.current) {
           const currentContainer = thoughtContainerRef.current
@@ -149,77 +185,101 @@ export const AgentStepBlock = memo(function AgentStepBlock({
     }
   }
 
+  // 获取状态配置（SubAgent 风格）
+  const statusConfig = getStatusConfig(step.status, step.thoughtStreaming)
+  const StatusIcon = statusConfig.icon
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       className={cn(
-        'relative py-1',
-        // 主Agent 样式：有左边框和时间线
-        !nodeLabel && 'pl-6',
-        !nodeLabel && !isLast && 'border-l border-[var(--color-border-subtle)] ml-2',
+        'relative',
+        // 主Agent 样式：使用 pl-8 给圆点留空间
+        !nodeLabel && 'pl-8 pb-4',
         // 节点步骤样式：简化左边框
         nodeLabel && 'pl-4',
         nodeLabel && 'border-l-2 border-purple-500/20',
         className
       )}
     >
-      {/* 步骤标记 - 节点步骤时使用不同样式 */}
-      <div className={cn(
-        "absolute left-0 top-1.5 flex items-center justify-center w-4 h-4",
-        nodeLabel ? "-translate-x-1/2" : "-translate-x-1/2"
-      )}>
-        {nodeLabel ? (
-          // 节点步骤：使用简单圆点标记（图标在标题中显示）
-          <span className="w-2 h-2 rounded-full bg-purple-500/30" />
-        ) : (
-          // 主Agent：使用状态图标
-          <StepStatusIcon status={step.status} streaming={step.thoughtStreaming} />
-        )}
-      </div>
-
-      {/* 步骤标题 */}
-      <div
-        className={cn(
-          'flex items-center gap-2 py-1 cursor-pointer select-none',
-          hasContent && 'hover:bg-[var(--color-bg-hover)] rounded px-1 -ml-1'
-        )}
-        onClick={() => hasContent && setExpanded(!expanded)}
-      >
-        {hasContent && (
-          <ChevronRight
+      {/* 主Agent 时间线：圆点标记和连接线（SubAgent 风格） */}
+      {!nodeLabel && (
+        <>
+          {/* 圆点标记 */}
+          <div
             className={cn(
-              'w-3 h-3 text-[var(--color-text-muted)] transition-transform',
-              expanded && 'rotate-90'
+              'absolute left-0 top-0 w-6 h-6 rounded-full z-10',
+              'flex items-center justify-center',
+              'border-2',
+              'bg-[var(--color-bg-elevated)]',
+              statusConfig.borderClass
             )}
-          />
-        )}
-        {/* 自定义节点标签或默认迭代显示 */}
-        {nodeLabel ? (
-          <>
-            {getNodeTypeIcon() && <span className="text-sm">{getNodeTypeIcon()}</span>}
-            <span className="text-sm text-[var(--color-text)] font-medium">{nodeLabel}</span>
-          </>
-        ) : (
-          <span className="text-xs text-[var(--color-text-muted)]">
-            迭代 {step.iteration}
+          >
+            <StatusIcon className={cn('w-3.5 h-3.5', statusConfig.iconClass)} />
+          </div>
+        </>
+      )}
+
+      {/* 节点步骤：简单圆点标记 */}
+      {nodeLabel && (
+        <div className="absolute left-0 top-1.5 flex items-center justify-center w-4 h-4 -translate-x-1/2">
+          <span className="w-2 h-2 rounded-full bg-purple-500/30" />
+        </div>
+      )}
+
+      {/* 节点内容 */}
+      <div className={nodeLabel ? '' : 'pl-0'}>
+        {/* 步骤标题按钮 */}
+        <button
+          onClick={() => hasContent && setExpanded(!expanded)}
+          disabled={!hasContent}
+          className={cn(
+            'w-full flex items-center gap-2 py-1 px-2 -ml-2 rounded-md',
+            'hover:bg-[var(--color-bg-input)]/50',
+            'transition-colors text-left',
+            !hasContent && 'cursor-default'
+          )}
+        >
+          {/* 展开/收起图标 */}
+          {hasContent && (
+            expanded ? (
+              <ChevronDown className="w-3.5 h-3.5 text-[var(--color-text-muted)] flex-shrink-0" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5 text-[var(--color-text-muted)] flex-shrink-0" />
+            )
+          )}
+
+          {/* 自定义节点标签或默认迭代显示 */}
+          {nodeLabel ? (
+            <>
+              {getNodeTypeIcon() && <span className="text-sm">{getNodeTypeIcon()}</span>}
+              <span className="text-sm text-[var(--color-text)] font-medium">{nodeLabel}</span>
+            </>
+          ) : (
+            <span className="text-xs font-medium text-[var(--color-text)]">
+              迭代 {step.iteration}
+            </span>
+          )}
+
+          {/* 状态徽章 */}
+          <span className={cn(
+            'text-xs px-1.5 py-0.5 rounded',
+            statusConfig.bgClass,
+            statusConfig.iconClass,
+            // 执行中状态添加闪烁动画
+            isActiveStatus(step.status) && 'animate-pulse'
+          )}>
+            {statusLabels[step.status]}
           </span>
-        )}
-        <span className={cn(
-          'text-xs px-1.5 py-0.5 rounded',
-          step.status === 'thinking' && 'bg-yellow-500/10 text-yellow-400',
-          step.status === 'acting' && 'bg-blue-500/10 text-blue-400',
-          step.status === 'observing' && 'bg-purple-500/10 text-purple-400',
-          step.status === 'completed' && 'bg-green-500/10 text-green-400',
-          step.status === 'error' && 'bg-red-500/10 text-red-400',
-        )}>
-          {statusLabels[step.status]}
-        </span>
-        {duration && (
-          <span className="text-xs text-[var(--color-text-muted)]">
-            {duration}
-          </span>
-        )}
+
+          {/* 执行时长 */}
+          {duration && (
+            <span className="text-[10px] text-[var(--color-text-muted)] flex-shrink-0 ml-auto">
+              {duration}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* 展开内容 */}
@@ -241,11 +301,17 @@ export const AgentStepBlock = memo(function AgentStepBlock({
                 </div>
                 <div
                   ref={thoughtContainerRef}
-                  className="text-sm text-[var(--var-color-text)] bg-yellow-500/5 border border-yellow-500/10 rounded-lg p-2 whitespace-pre-wrap max-h-24 overflow-y-auto"
+                  className="text-sm text-[var(--color-text)] bg-yellow-500/5 border border-yellow-500/10 rounded-lg p-2 max-h-48 overflow-y-auto"
                 >
-                  {step.thought}
-                  {step.thoughtStreaming && (
-                    <span className="inline-block w-1.5 h-4 ml-0.5 bg-blue-400 animate-pulse" />
+                  {step.thoughtStreaming ? (
+                    // 流式输出时直接显示文本
+                    <div className="whitespace-pre-wrap">
+                      {step.thought}
+                      <span className="inline-block w-1.5 h-4 ml-0.5 bg-blue-400 animate-pulse" />
+                    </div>
+                  ) : (
+                    // 完成后渲染 Markdown
+                    <AgentMarkdown content={step.thought} />
                   )}
                 </div>
               </div>

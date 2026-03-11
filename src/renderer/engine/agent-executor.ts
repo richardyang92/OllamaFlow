@@ -249,7 +249,6 @@ export class IntelligentAgentExecutor {
           this.callbacks.onStepUpdate?.(this.currentStepId, {
             status: 'acting',
           })
-          this.callbacks.onStepComplete?.(this.currentStepId)
 
           // 分析工具依赖关系，分组并行执行
           const toolCallGroups = analyzeToolDependencies(response.toolCalls)
@@ -313,6 +312,13 @@ export class IntelligentAgentExecutor {
               }
             }
           }
+
+          // 所有工具执行完成，更新步骤状态为 completed
+          this.callbacks.onStepUpdate?.(this.currentStepId, {
+            status: 'completed',
+            completedAt: Date.now(),
+          })
+          this.callbacks.onStepComplete?.(this.currentStepId)
         } else {
           // 没有工具调用，返回最终答案
           this.callbacks.onStepUpdate?.(this.currentStepId, {

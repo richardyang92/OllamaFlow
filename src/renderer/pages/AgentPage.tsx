@@ -448,6 +448,7 @@ export default function AgentPage() {
     updateNodeStep,
     // 对话历史
     conversationHistory,
+    isHistoryLoaded,
     createConversation,
     loadConversationHistory,
     saveCurrentConversation,
@@ -468,12 +469,12 @@ export default function AgentPage() {
     loadConversationHistory()
   }, [loadConfig, loadWorkflows, loadConversationHistory])
 
-  // 如果没有当前对话，自动创建一个
+  // 如果没有当前对话，自动创建一个（等待历史加载完成后再判断）
   useEffect(() => {
-    if (conversationHistory.currentConversationId === null && !isRunning) {
+    if (isHistoryLoaded && conversationHistory.currentConversationId === null && !isRunning) {
       createConversation()
     }
-  }, [conversationHistory.currentConversationId, createConversation, isRunning])
+  }, [isHistoryLoaded, conversationHistory.currentConversationId, createConversation, isRunning])
 
   // 自动保存当前对话
   useEffect(() => {
@@ -1080,16 +1081,14 @@ export default function AgentPage() {
         </div>
       </div>
 
-      {/* 右侧：执行日志面板 */}
-      <SidePanel show={showLogsPanel} side="right">
+      {/* 右侧：执行日志面板 或 SubAgent 详情面板（互斥） */}
+      <SidePanel show={showLogsPanel && !showSubAgentDetailsPanel} side="right">
         <ExecutionLogPanel />
       </SidePanel>
 
-      {/* 新增：SubAgent 详情抽屉 */}
-      <SubAgentDetailsDrawer
-        isOpen={showSubAgentDetailsPanel}
-        onClose={() => setShowSubAgentDetailsPanel(false)}
-      />
+      <SidePanel show={showSubAgentDetailsPanel} side="right">
+        <SubAgentDetailsDrawer onClose={() => setShowSubAgentDetailsPanel(false)} />
+      </SidePanel>
 
       {/* 设置面板 */}
       <AgentSettingsPanel

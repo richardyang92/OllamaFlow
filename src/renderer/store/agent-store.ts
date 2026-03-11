@@ -322,6 +322,7 @@ interface AgentState {
 
   // 初始化状态
   isInitialized: boolean
+  isHistoryLoaded: boolean  // 对话历史是否已加载完成
 
   // 对话历史
   conversationHistory: ConversationHistory
@@ -460,6 +461,7 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
   selectedSubAgentKey: null,
   abortController: undefined,
   isInitialized: false,
+  isHistoryLoaded: false,
   conversationHistory: {
     conversations: [],
     currentConversationId: null,
@@ -819,13 +821,29 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
         const steps = msg.steps?.map((step) => {
           if (step.id !== stepId) return step
 
-          // 辅助函数：向 SubAgentProgress 添加节点步骤
-          const addNodeStepToProgress = (progress: SubAgentProgress | undefined) => {
+          // 辅助函数：添加或更新节点步骤（根据 nodeId 匹配）
+          const addOrUpdateNodeStepToProgress = (progress: SubAgentProgress | undefined) => {
             if (!progress) return progress
-            return {
-              ...progress,
-              nodeSteps: [...(progress.nodeSteps || []), nodeStep],
-              updatedAt: Date.now(),
+
+            // 检查是否已存在相同 nodeId 的步骤
+            const existingIndex = progress.nodeSteps?.findIndex(ns => ns.nodeId === nodeStep.nodeId) ?? -1
+
+            if (existingIndex !== -1 && progress.nodeSteps) {
+              // 已存在，更新该步骤
+              const newNodeSteps = [...progress.nodeSteps]
+              newNodeSteps[existingIndex] = { ...newNodeSteps[existingIndex], ...nodeStep }
+              return {
+                ...progress,
+                nodeSteps: newNodeSteps,
+                updatedAt: Date.now(),
+              }
+            } else {
+              // 不存在，添加新步骤
+              return {
+                ...progress,
+                nodeSteps: [...(progress.nodeSteps || []), nodeStep],
+                updatedAt: Date.now(),
+              }
             }
           }
 
@@ -835,7 +853,7 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
               ...step,
               toolCall: {
                 ...step.toolCall,
-                subAgentProgress: addNodeStepToProgress(step.toolCall.subAgentProgress),
+                subAgentProgress: addOrUpdateNodeStepToProgress(step.toolCall.subAgentProgress),
               },
             }
           }
@@ -847,7 +865,7 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
               const newToolCalls = [...step.toolCalls]
               newToolCalls[toolCallIndex] = {
                 ...newToolCalls[toolCallIndex],
-                subAgentProgress: addNodeStepToProgress(newToolCalls[toolCallIndex].subAgentProgress),
+                subAgentProgress: addOrUpdateNodeStepToProgress(newToolCalls[toolCallIndex].subAgentProgress),
               }
               return { ...step, toolCalls: newToolCalls }
             }
@@ -1388,11 +1406,34 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
       log('loadConversationHistory - starting')
       const history = await window.electronAPI.agent.getConversationHistory()
       log('loadConversationHistory - loaded', history)
+
       if (history) {
-        set({ conversationHistory: history })
+        // 如果有当前对话 ID，加载该对话的消息
+        if (history.currentConversationId) {
+          const data = await window.electronAPI.agent.getConversation(history.currentConversationId)
+          if (data) {
+            set({
+              conversationHistory: history,
+              messages: data.messages as AgentMessage[],
+              isHistoryLoaded: true,
+            })
+            log('loadConversationHistory - restored messages', data.messages.length)
+            return
+          }
+        }
+        // 没有当前对话或加载失败，只设置历史记录
+        set({
+          conversationHistory: history,
+          isHistoryLoaded: true,
+        })
+      } else {
+        // 没有历史记录，标记为已加载
+        set({ isHistoryLoaded: true })
       }
     } catch (error) {
       console.error('[AgentStore] loadConversationHistory error:', error)
+      // 即使出错也标记为已加载，避免阻塞
+      set({ isHistoryLoaded: true })
     }
   },
 

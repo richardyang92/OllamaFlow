@@ -389,6 +389,37 @@ export async function executeWorkflowAsSubAgent(
 
     addLog(`工作流执行${success ? '成功' : '失败'}`)
 
+    // 执行完成后，进行最后一次节点状态检查，确保所有节点状态都被更新
+    const finalExecutionForCheck = executionStore.getExecution(executionId)
+    const finalNodeResults = finalExecutionForCheck?.context?.nodeResults
+    if (finalNodeResults) {
+      finalNodeResults.forEach((result, nodeId) => {
+        const nodeName = nodeNameMap.get(nodeId) || nodeId
+        const node = nodes.find(n => n.id === nodeId)
+        const nodeType = node?.type || 'unknown'
+
+        // 检查是否有节点已完成但还没发送完成回调
+        if ((result.status === 'success' || result.status === 'error') && !completedNodeIds.has(nodeId)) {
+          completedNodeIds.add(nodeId)
+          const startTime = nodeStartTimes.get(nodeId) || Date.now()
+          const endTime = Date.now()
+
+          // 更新节点步骤为完成状态
+          options?.onProgress?.onNodeStep?.({
+            id: `nodestep_${nodeId}`,
+            nodeId,
+            nodeName,
+            nodeType,
+            status: result.status === 'success' ? 'completed' : 'error',
+            startTime,
+            endTime,
+            observation: typeof result.output === 'string' ? result.output : JSON.stringify(result.output),
+            error: result.error,
+          })
+        }
+      })
+    }
+
     // 执行完成后，确保进度更新到 100%
     options?.onProgress?.onProgress(totalNodesCount, totalNodesCount)
 

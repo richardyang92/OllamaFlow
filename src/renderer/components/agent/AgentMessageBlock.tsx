@@ -276,19 +276,25 @@ function AssistantMessage({
           </motion.div>
         )}
 
-        {/* 推理步骤 */}
+        {/* 推理步骤 - SubAgent 风格时间线 */}
         {hasSteps && (
-          <div className="space-y-1 mb-3">
-            {message.steps!.map((step, index) => (
-              <AgentStepBlock
-                key={step.id}
-                step={step}
-                isLast={index === message.steps!.length - 1}
-                defaultExpanded={step.status === 'thinking' || step.status === 'acting'}
-                forceCollapsed={shouldCollapseSteps}
-                messageId={message.id}
-              />
-            ))}
+          <div className="relative mb-3">
+            {/* 左侧连接线 */}
+            <div className="absolute left-[11px] top-3 bottom-3 w-0.5 bg-[var(--color-border-subtle)]" />
+
+            {/* 步骤列表 */}
+            <div className="space-y-0">
+              {message.steps!.map((step, index) => (
+                <AgentStepBlock
+                  key={step.id}
+                  step={step}
+                  isLast={index === message.steps!.length - 1}
+                  defaultExpanded={step.status === 'thinking' || step.status === 'acting'}
+                  forceCollapsed={shouldCollapseSteps}
+                  messageId={message.id}
+                />
+              ))}
+            </div>
           </div>
         )}
 
