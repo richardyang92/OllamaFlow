@@ -1,4 +1,3 @@
-export { DashboardHeader } from './DashboardHeader'
 export { WorkspaceCard } from './WorkspaceCard'
 export { NewWorkspaceCard } from './NewWorkspaceCard'
 export { AddWorkspaceCard } from './AddWorkspaceCard'

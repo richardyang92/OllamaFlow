@@ -235,7 +235,7 @@ export const AgentStepBlock = memo(function AgentStepBlock({
           onClick={() => hasContent && setExpanded(!expanded)}
           disabled={!hasContent}
           className={cn(
-            'w-full flex items-center gap-2 py-1 px-2 -ml-2 rounded-md',
+            'w-full flex items-center gap-2 py-1 px-2 ml-2 rounded-md',
             'hover:bg-[var(--color-bg-input)]/50',
             'transition-colors text-left',
             !hasContent && 'cursor-default'
@@ -373,7 +373,7 @@ export const AgentStepBlock = memo(function AgentStepBlock({
                   'text-sm rounded-lg p-2 whitespace-pre-wrap font-mono text-xs max-h-48 overflow-y-auto',
                   step.observationError
                     ? 'bg-red-500/5 border border-red-500/10 text-red-300'
-                    : 'bg-purple-500/5 border border-purple-500/10 text-purple-300'
+                    : 'bg-purple-500/5 border border-purple-500/10 text-purple-400'
                 )}>
                   {step.observation}
                   {step.observationStreaming && (

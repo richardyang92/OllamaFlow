@@ -7,28 +7,19 @@
  * - 执行日志面板
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Send,
   Square,
-  Loader2,
-  Settings,
-  ArrowLeft,
   Check,
   Sparkles,
-  FileText,
-  PanelLeftClose,
-  Sun,
-  Moon,
-  Monitor,
 } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { useAgentStore } from '@/store/agent-store'
 import type { AgentStep, ToolCallRecord, AgentMessage } from '@/store/agent-store'
 import { IntelligentAgentExecutor } from '@/engine/agent-executor'
 import { resolveAIConfig } from '@/engine/config-resolver'
-import { useTheme, type ThemeMode } from '@/contexts/ThemeContext'
 import { cn } from '@/lib/utils'
 import {
   AgentMessageBlock,
@@ -36,10 +27,11 @@ import {
   AgentQuestionsManager,
   AgentInlineTodos,
   AgentInlineGeneratedFiles,
+  AgentSidePanel,
 } from '@/components/agent'
 import AgentSidebar from '@/components/agent/AgentSidebar'
-// 新增
-import SubAgentDetailsDrawer from '@/components/agent/SubAgentDetailsDrawer'
+import { AppHeader } from '@/components/layout'
+import { AnimatedBackground } from '@/components/common'
 
 // 反馈提示组件
 function AgentFeedback({ message }: { message: string }) {
@@ -52,179 +44,6 @@ function AgentFeedback({ message }: { message: string }) {
     >
       <Check className="w-4 h-4" />
       {message}
-    </motion.div>
-  )
-}
-
-// 工具栏按钮组件
-interface AgentToolbarButtonProps {
-  icon: React.ComponentType<{ className?: string }>
-  onClick?: () => void
-  disabled?: boolean
-  tooltip?: string
-  primary?: boolean
-  active?: boolean
-  isHovered: boolean
-}
-
-function AgentToolbarButton({
-  icon: Icon,
-  onClick,
-  disabled = false,
-  tooltip,
-  primary = false,
-  active = false,
-  isHovered,
-}: AgentToolbarButtonProps) {
-  return (
-    <motion.button
-      whileHover={{ scale: disabled ? 1 : 1.05 }}
-      whileTap={{ scale: disabled ? 1 : 0.95 }}
-      onClick={onClick}
-      disabled={disabled}
-      title={tooltip}
-      className={cn(
-        'relative flex items-center justify-center',
-        'w-8 h-8 rounded-full',
-        'transition-all duration-300',
-        isHovered ? 'opacity-100' : 'opacity-50',
-        disabled && 'opacity-30! cursor-not-allowed',
-        primary && !active && [
-          'bg-gradient-to-r from-purple-500/60 to-blue-500/60',
-          'text-white',
-          isHovered && 'from-purple-500/80 to-blue-500/80 shadow-lg shadow-purple-500/25',
-        ],
-        active && [
-          'bg-red-500/60',
-          'text-white',
-          isHovered && 'bg-red-500/80 shadow-lg shadow-red-500/25',
-        ],
-        !primary && !active && [
-          'text-[var(--color-text-muted)]',
-          'hover:text-[var(--color-text)]',
-          'hover:bg-[var(--color-bg-input)]/50',
-        ]
-      )}
-    >
-      <Icon className="w-4 h-4" />
-    </motion.button>
-  )
-}
-
-// 悬浮工具栏
-function AgentToolbar({
-  onBack,
-  onSettings,
-  onToggleLogs,
-  isRunning,
-  showLogsPanel,
-}: {
-  onBack: () => void
-  onSettings: () => void
-  onToggleLogs: () => void
-  isRunning: boolean
-  showLogsPanel: boolean
-}) {
-  const { themeMode, setThemeMode, resolvedTheme } = useTheme()
-  const [isHovered, setIsHovered] = useState(false)
-
-  const handleThemeToggle = () => {
-    const modes: ThemeMode[] = ['light', 'dark', 'system']
-    const currentIndex = modes.indexOf(themeMode)
-    const nextMode = modes[(currentIndex + 1) % modes.length]
-    setThemeMode(nextMode)
-  }
-
-  const ThemeIcon = themeMode === 'system' ? Monitor : resolvedTheme === 'dark' ? Moon : Sun
-
-  const isDark = resolvedTheme === 'dark'
-  const glowColor = isDark ? '255,255,255' : '0,0,0'
-  const shadowValue = isHovered
-    ? `0 0 30px rgba(${glowColor},0.1), 0 0 60px rgba(${glowColor},0.05)`
-    : `0 0 20px rgba(${glowColor},0.05)`
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      style={{ boxShadow: shadowValue }}
-      className={cn(
-        'flex items-center justify-center',
-        'px-2 py-1.5',
-        'rounded-full',
-        'transition-all duration-300',
-        isHovered
-          ? 'bg-[var(--color-bg-elevated)]/80 backdrop-blur-xl'
-          : 'bg-[var(--color-bg-elevated)]/5 backdrop-blur-sm'
-      )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <AgentToolbarButton
-        icon={ArrowLeft}
-        onClick={onBack}
-        tooltip="返回"
-        isHovered={isHovered}
-      />
-
-      <div className={cn(
-        'w-px h-5 mx-1 transition-colors duration-300',
-        isHovered ? 'bg-[var(--color-border)]' : 'bg-[var(--color-border)]/30'
-      )} />
-
-      {/* 标题 */}
-      <div className="flex items-center gap-2 px-2">
-        <Sparkles className="w-4 h-4 text-purple-400" />
-        <span
-          className="text-sm font-medium transition-opacity duration-300"
-          style={{ opacity: isHovered ? 1 : 0.5 }}
-        >
-          智能助手
-        </span>
-        {isRunning && (
-          <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
-        )}
-      </div>
-
-      <div className={cn(
-        'w-px h-5 mx-1 transition-colors duration-300',
-        isHovered ? 'bg-[var(--color-border)]' : 'bg-[var(--color-border)]/30'
-      )} />
-
-      {/* 面板切换 */}
-      <AgentToolbarButton
-        icon={showLogsPanel ? PanelLeftClose : FileText}
-        onClick={onToggleLogs}
-        tooltip={showLogsPanel ? '隐藏日志' : '显示日志'}
-        active={showLogsPanel}
-        isHovered={isHovered}
-      />
-
-      <div className={cn(
-        'w-px h-5 mx-1 transition-colors duration-300',
-        isHovered ? 'bg-[var(--color-border)]' : 'bg-[var(--color-border)]/30'
-      )} />
-
-      {/* 主题切换 */}
-      <AgentToolbarButton
-        icon={ThemeIcon}
-        onClick={handleThemeToggle}
-        tooltip={themeMode === 'system' ? '跟随系统' : themeMode === 'dark' ? '深色模式' : '浅色模式'}
-        isHovered={isHovered}
-      />
-
-      <div className={cn(
-        'w-px h-5 mx-1 transition-colors duration-300',
-        isHovered ? 'bg-[var(--color-border)]' : 'bg-[var(--color-border)]/30'
-      )} />
-
-      <AgentToolbarButton
-        icon={Settings}
-        onClick={onSettings}
-        tooltip="设置"
-        isHovered={isHovered}
-      />
     </motion.div>
   )
 }
@@ -312,95 +131,6 @@ function ChatInput({
           >
             <Send className="w-4 h-4" />
           </motion.button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// 侧边面板容器
-function SidePanel({
-  show,
-  side,
-  children,
-}: {
-  show: boolean
-  side: 'left' | 'right'
-  children: React.ReactNode
-}) {
-  return (
-    <AnimatePresence>
-      {show && (
-        <motion.div
-          initial={{ width: 0, opacity: 0 }}
-          animate={{ width: 280, opacity: 1 }}
-          exit={{ width: 0, opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className={cn(
-            'h-full border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] flex-shrink-0 overflow-hidden',
-            side === 'left' ? 'border-r pt-8' : 'border-l' // 左侧面板顶部留出空间给红绿灯按钮
-          )}
-        >
-          <motion.div
-            initial={{ x: side === 'left' ? -20 : 20 }}
-            animate={{ x: 0 }}
-            exit={{ x: side === 'left' ? -20 : 20 }}
-            className="h-full w-[280px]"
-          >
-            {children}
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
-}
-
-// 执行日志面板
-function ExecutionLogPanel() {
-  const { executionLogs, clearExecutionLogs } = useAgentStore()
-
-  return (
-    <div className="h-full flex flex-col">
-      {/* 标题 */}
-      <div className="px-4 py-3 border-b border-[var(--color-border-subtle)] flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FileText className="w-4 h-4 text-[var(--color-text-muted)]" />
-          <span className="text-sm font-medium text-[var(--color-text)]">执行日志</span>
-        </div>
-        {executionLogs.length > 0 && (
-          <button
-            onClick={clearExecutionLogs}
-            className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-          >
-            清空
-          </button>
-        )}
-      </div>
-
-      {/* 日志列表 */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {executionLogs.length === 0 ? (
-          <div className="text-xs text-[var(--color-text-muted)] text-center py-4">
-            暂无日志
-          </div>
-        ) : (
-          executionLogs.map((log) => (
-            <div
-              key={log.id}
-              className={cn(
-                'text-xs font-mono p-2 rounded',
-                log.level === 'error' && 'text-red-400 bg-red-500/5',
-                log.level === 'warn' && 'text-yellow-400 bg-yellow-500/5',
-                log.level === 'info' && 'text-[var(--color-text)] bg-[var(--color-bg-input)]',
-                log.level === 'debug' && 'text-[var(--color-text-muted)] bg-[var(--color-bg-input)]/50'
-              )}
-            >
-              <span className="text-[var(--color-text-muted)] mr-2">
-                {new Date(log.timestamp).toLocaleTimeString()}
-              </span>
-              {log.message}
-            </div>
-          ))
         )}
       </div>
     </div>
@@ -933,162 +663,192 @@ export default function AgentPage() {
     setTimeout(() => setFeedback(null), 2000)
   }, [setRunning])
 
+  // Platform detection
+  const isMac = useMemo(() => window.electronAPI.platform.isMac(), [])
+
   return (
-    <div className="h-screen flex bg-[var(--color-bg-canvas)] text-[var(--color-text)] overflow-hidden">
-      {/* 左侧：聊天历史侧边栏 */}
-      <motion.div
-        initial={{ width: 240, opacity: 1 }}
-        animate={{ width: 240, opacity: 1 }}
-        className="h-full flex-shrink-0 pt-8"
-      >
-        <AgentSidebar />
-      </motion.div>
+    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] overflow-hidden">
+      <AnimatedBackground />
 
-      {/* 中间：主聊天区域 */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* 顶部工具栏 */}
-        <div className="flex-shrink-0 pt-2 flex justify-center">
-          <AgentToolbar
-            onBack={handleBack}
-            onSettings={() => setSettingsOpen(true)}
-            onToggleLogs={() => setShowLogsPanel(!showLogsPanel)}
-            isRunning={isRunning}
-            showLogsPanel={showLogsPanel}
-          />
-        </div>
+      {/* macOS style drag region */}
+      {isMac && (
+        <div
+          className="fixed top-0 left-0 w-[72px] h-14 z-30"
+          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        />
+      )}
 
-        {/* 消息区域 */}
-        <main ref={messagesContainerRef} className="flex-1 overflow-y-auto">
-          <div className="max-w-3xl mx-auto px-4">
-            {messages.length === 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.1 }}
-                className="flex flex-col items-center justify-center py-16"
-              >
-                {/* 顶部图标和标题组合 */}
-                <div className="flex items-center gap-3 mb-4">
-                  <motion.div
-                    className="w-12 h-12 rounded-xl glass-panel flex items-center justify-center"
-                    whileHover={{ scale: 1.05 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <Sparkles className="w-6 h-6 text-purple-400" />
-                  </motion.div>
-                  <h2 className="text-xl font-semibold">欢迎使用智能助手</h2>
-                </div>
+      {/* AppHeader */}
+      <AppHeader
+        page="agent"
+        onClose={handleBack}
+        onSettings={() => setSettingsOpen(true)}
+        onToggleLogs={() => setShowLogsPanel(!showLogsPanel)}
+        showLogsPanel={showLogsPanel}
+        isRunning={isRunning}
+      />
 
-                <p className="text-sm text-[var(--color-text-muted)] text-center max-w-md mb-6">
-                  {availableWorkflows.length > 0
-                    ? `已发现 ${availableWorkflows.length} 个可用工作流，可以直接向我提问`
-                    : '请在设置中配置模型后开始对话'}
-                </p>
+      {/* Main content */}
+      <div className="fixed inset-0 top-14 flex overflow-hidden">
+        {/* 左侧：聊天历史侧边栏 */}
+        <motion.div
+          initial={{ width: 240, opacity: 1 }}
+          animate={{ width: 240, opacity: 1 }}
+          className="h-full flex-shrink-0"
+        >
+          <AgentSidebar />
+        </motion.div>
 
-                {/* 可用工作流列表 - 网格布局 */}
-                {availableWorkflows.length > 0 && (
-                  <div className="grid grid-cols-2 gap-2 max-w-md w-full">
-                    {availableWorkflows.slice(0, 4).map((w) => (
-                      <div
-                        key={w.workspacePath}
-                        className="px-3 py-2 rounded-lg glass-panel text-xs text-center truncate"
-                        title={w.name}
-                      >
-                        {w.name}
-                      </div>
-                    ))}
-                    {availableWorkflows.length > 4 && (
-                      <div className="px-3 py-2 rounded-lg glass-panel text-xs text-center text-[var(--color-text-muted)] col-span-2">
-                        还有 {availableWorkflows.length - 4} 个工作流可用
-                      </div>
-                    )}
+        {/* 中间：主聊天区域 */}
+        <motion.div
+          className="h-full overflow-hidden relative flex flex-col"
+          layout
+          animate={{
+            width: showLogsPanel ? 'calc(100% - 240px - 320px)' : 'calc(100% - 240px)'
+          }}
+          transition={{
+            duration: 0.25,
+            ease: [0.4, 0, 0.2, 1] // Material Design 标准缓动
+          }}
+        >
+          {/* 消息区域 */}
+          <main ref={messagesContainerRef} className="flex-1 overflow-y-auto">
+            <div className="max-w-3xl mx-auto px-4">
+              {messages.length === 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.1 }}
+                  className="flex flex-col items-center justify-center py-16"
+                >
+                  {/* 顶部图标和标题组合 */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <motion.div
+                      className="w-12 h-12 rounded-xl glass-panel flex items-center justify-center"
+                      whileHover={{ scale: 1.05 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <Sparkles className="w-6 h-6 text-purple-400" />
+                    </motion.div>
+                    <h2 className="text-xl font-semibold">欢迎使用智能助手</h2>
                   </div>
-                )}
-              </motion.div>
-            )}
 
-            {/* 消息列表 */}
-            {messages.map((msg, index) => (
-              <AgentMessageBlock
-                key={msg.id}
-                message={msg}
-                isLast={index === messages.length - 1}
-                isRunning={isRunning}
-                onRetry={() => handleRetry(msg.id)}
-                onDelete={() => {
-                  if (confirm('确定要删除这条消息吗？')) {
-                    deleteMessage(msg.id)
-                  }
-                }}
-                onEdit={(newContent) => {
-                  // 找到该消息在列表中的索引
-                  const msgIndex = messages.findIndex(m => m.id === msg.id)
-                  // 更新用户消息内容
-                  updateMessage(msg.id, { content: newContent })
-                  // 删除该消息后面的所有消息
-                  deleteMessagesAfter(msg.id)
-                  // 自动重新执行
-                  executeAgent(newContent, messages.slice(0, msgIndex))
-                }}
-              />
-            ))}
+                  <p className="text-sm text-[var(--color-text-muted)] text-center max-w-md mb-6">
+                    {availableWorkflows.length > 0
+                      ? `已发现 ${availableWorkflows.length} 个可用工作流，可以直接向我提问`
+                      : '请在设置中配置模型后开始对话'}
+                  </p>
 
-            <div ref={messagesEndRef} />
-          </div>
-        </main>
+                  {/* 可用工作流列表 - 网格布局 */}
+                  {availableWorkflows.length > 0 && (
+                    <div className="grid grid-cols-2 gap-2 max-w-md w-full">
+                      {availableWorkflows.slice(0, 4).map((w) => (
+                        <div
+                          key={w.workspacePath}
+                          className="px-3 py-2 rounded-lg glass-panel text-xs text-center truncate"
+                          title={w.name}
+                        >
+                          {w.name}
+                        </div>
+                      ))}
+                      {availableWorkflows.length > 4 && (
+                        <div className="px-3 py-2 rounded-lg glass-panel text-xs text-center text-[var(--color-text-muted)] col-span-2">
+                          还有 {availableWorkflows.length - 4} 个工作流可用
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </motion.div>
+              )}
 
-        {/* 输入区域 - 固定在底部 */}
-        <div className="flex-shrink-0 p-4 bg-gradient-to-t from-[var(--color-bg-canvas)] via-[var(--color-bg-canvas)]/95 to-transparent">
-          <div className="max-w-3xl mx-auto">
-            {/* 内联任务列表 */}
-            <AgentInlineTodos todos={todos.items} isRunning={isRunning} />
+              {/* 消息列表 */}
+              {messages.map((msg, index) => (
+                <AgentMessageBlock
+                  key={msg.id}
+                  message={msg}
+                  isLast={index === messages.length - 1}
+                  isRunning={isRunning}
+                  onRetry={() => handleRetry(msg.id)}
+                  onDelete={() => {
+                    if (confirm('确定要删除这条消息吗？')) {
+                      deleteMessage(msg.id)
+                    }
+                  }}
+                  onEdit={(newContent) => {
+                    // 找到该消息在列表中的索引
+                    const msgIndex = messages.findIndex(m => m.id === msg.id)
+                    // 更新用户消息内容
+                    updateMessage(msg.id, { content: newContent })
+                    // 删除该消息后面的所有消息
+                    deleteMessagesAfter(msg.id)
+                    // 自动重新执行
+                    executeAgent(newContent, messages.slice(0, msgIndex))
+                  }}
+                />
+              ))}
 
-            {/* 生成的文件列表 - 聚合所有消息中的生成文件 */}
-            <AgentInlineGeneratedFiles messages={messages} />
-
-            {/* 状态栏 */}
-            <div className="flex items-center justify-between mb-2 px-1 text-xs text-[var(--color-text-muted)]">
-              <span>
-                {model ? (
-                  <span className="flex items-center gap-1.5">
-                    <span className={cn(
-                      'w-2 h-2 rounded-full',
-                      provider === 'ollama' ? 'bg-green-400' : 'bg-blue-400'
-                    )} />
-                    {provider === 'ollama' ? 'Ollama' : 'OpenAI'}: {model}
-                  </span>
-                ) : (
-                  <span className="text-yellow-400">未选择模型</span>
-                )}
-              </span>
-              <span>
-                {availableWorkflows.length > 0 && (
-                  <span>{availableWorkflows.length} 个工作流可用</span>
-                )}
-              </span>
+              <div ref={messagesEndRef} />
             </div>
+          </main>
 
-            {/* 输入框 */}
-            <ChatInput
-              input={input}
-              setInput={setInput}
-              onSend={handleSend}
-              onStop={handleStop}
-              isRunning={isRunning}
-              disabled={!model}
-            />
+          {/* 输入区域 - 固定在底部 */}
+          <div className="flex-shrink-0 p-4 bg-gradient-to-t from-[var(--color-bg)] via-[var(--color-bg)]/95 to-transparent">
+            <div className="max-w-3xl mx-auto">
+              {/* 内联任务列表 */}
+              <AgentInlineTodos todos={todos.items} isRunning={isRunning} />
+
+              {/* 生成的文件列表 - 聚合所有消息中的生成文件 */}
+              <AgentInlineGeneratedFiles messages={messages} />
+
+              {/* 状态栏 */}
+              <div className="flex items-center justify-between mb-2 px-1 text-xs text-[var(--color-text-muted)]">
+                <span>
+                  {model ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className={cn(
+                        'w-2 h-2 rounded-full',
+                        provider === 'ollama' ? 'bg-green-400' : 'bg-blue-400'
+                      )} />
+                      {provider === 'ollama' ? 'Ollama' : 'OpenAI'}: {model}
+                    </span>
+                  ) : (
+                    <span className="text-yellow-400">未选择模型</span>
+                  )}
+                </span>
+                <span>
+                  {availableWorkflows.length > 0 && (
+                    <span>{availableWorkflows.length} 个工作流可用</span>
+                  )}
+                </span>
+              </div>
+
+              {/* 输入框 */}
+              <ChatInput
+                input={input}
+                setInput={setInput}
+                onSend={handleSend}
+                onStop={handleStop}
+                isRunning={isRunning}
+                disabled={!model}
+              />
+            </div>
           </div>
-        </div>
+        </motion.div>
+
+        {/* 右侧：Tab 面板（日志和 SubAgent） */}
+        <AgentSidePanel
+          visible={showLogsPanel}
+          activeTab={showSubAgentDetailsPanel ? 'subagent' : 'logs'}
+          onTabChange={(tab) => {
+            if (tab === 'subagent') {
+              setShowSubAgentDetailsPanel(true)
+            } else {
+              setShowSubAgentDetailsPanel(false)
+            }
+          }}
+          onClose={() => setShowLogsPanel(false)}
+        />
       </div>
-
-      {/* 右侧：执行日志面板 或 SubAgent 详情面板（互斥） */}
-      <SidePanel show={showLogsPanel && !showSubAgentDetailsPanel} side="right">
-        <ExecutionLogPanel />
-      </SidePanel>
-
-      <SidePanel show={showSubAgentDetailsPanel} side="right">
-        <SubAgentDetailsDrawer onClose={() => setShowSubAgentDetailsPanel(false)} />
-      </SidePanel>
 
       {/* 设置面板 */}
       <AgentSettingsPanel

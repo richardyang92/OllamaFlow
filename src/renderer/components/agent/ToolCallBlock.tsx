@@ -534,7 +534,7 @@ export const ToolCallBlock = memo(function ToolCallBlock({
   const [expanded, setExpanded] = useState(defaultExpanded)
 
   // 获取打开详情面板的方法
-  const { setShowSubAgentDetailsPanel, setSelectedSubAgentKey } = useAgentStore()
+  const { setShowSubAgentDetailsPanel, setSelectedSubAgentKey, setShowLogsPanel } = useAgentStore()
 
   const toolName = toolCall.toolName
   const status = toolCall.status
@@ -548,6 +548,8 @@ export const ToolCallBlock = memo(function ToolCallBlock({
     const key = `${messageId}|${stepId}|${toolCall.id}`
     setSelectedSubAgentKey(key)
     setShowSubAgentDetailsPanel(true)
+    // 同时打开侧边栏
+    setShowLogsPanel(true)
   }
 
   // 判断 SubAgent 是否正在运行

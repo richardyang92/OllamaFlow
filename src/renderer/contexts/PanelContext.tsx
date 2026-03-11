@@ -1,17 +1,25 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 
 export type PanelType = 'nodes' | 'properties' | 'variables' | 'files' | null
+export type SidePanelTab = 'nodes' | 'properties' | 'variables' | 'files' | 'execution'
 
 interface PanelState {
   activePanel: PanelType
   executionPanelVisible: boolean
   executionPanelCollapsed: boolean
   manuallyClosedPanels: Set<string>
+  // New side panel state
+  sidePanelVisible: boolean
+  sidePanelTab: SidePanelTab
   setActivePanel: (panel: PanelType) => void
   toggleExecutionPanel: () => void
   toggleExecutionCollapse: () => void
   markPanelManuallyClosed: (panel: string) => void
   isPanelManuallyClosed: (panel: string) => boolean
+  // New side panel methods
+  setSidePanelVisible: (visible: boolean) => void
+  setSidePanelTab: (tab: SidePanelTab) => void
+  toggleSidePanel: () => void
 }
 
 const PanelContext = createContext<PanelState | undefined>(undefined)
@@ -29,6 +37,9 @@ export function PanelProvider({ children }: { children: ReactNode }) {
   const [executionPanelVisible, setExecutionPanelVisible] = useState(false)
   const [executionPanelCollapsed, setExecutionPanelCollapsed] = useState(false)
   const [manuallyClosedPanels, setManuallyClosedPanels] = useState<Set<string>>(new Set())
+  // New side panel state
+  const [sidePanelVisible, setSidePanelVisible] = useState(false)
+  const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>('nodes')
 
   // setActivePanel wrapper to clear manually closed when opening
   const setActivePanel = useCallback((panel: PanelType) => {
@@ -66,62 +77,84 @@ export function PanelProvider({ children }: { children: ReactNode }) {
     return manuallyClosedPanels.has(panel)
   }, [manuallyClosedPanels])
 
+  // Toggle side panel
+  const toggleSidePanel = useCallback(() => {
+    setSidePanelVisible(prev => !prev)
+  }, [])
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isModPressed = e.metaKey || e.ctrlKey
 
+      // Helper to toggle side panel tab
+      const toggleTab = (tab: SidePanelTab) => {
+        if (sidePanelVisible && sidePanelTab === tab) {
+          setSidePanelVisible(false)
+        } else {
+          setSidePanelTab(tab)
+          setSidePanelVisible(true)
+        }
+      }
+
       // Cmd+1: Nodes panel
       if (isModPressed && e.key === '1') {
         e.preventDefault()
-        setActivePanel(activePanel === 'nodes' ? null : 'nodes')
+        toggleTab('nodes')
       }
       // Cmd+2: Properties panel
       else if (isModPressed && e.key === '2') {
         e.preventDefault()
-        setActivePanel(activePanel === 'properties' ? null : 'properties')
+        toggleTab('properties')
       }
       // Cmd+3: Variables panel
       else if (isModPressed && e.key === '3') {
         e.preventDefault()
-        setActivePanel(activePanel === 'variables' ? null : 'variables')
+        toggleTab('variables')
       }
       // Cmd+4: Files panel
       else if (isModPressed && e.key === '4') {
         e.preventDefault()
-        setActivePanel(activePanel === 'files' ? null : 'files')
+        toggleTab('files')
       }
-      // Cmd+5: Execution panel
+      // Cmd+5: Execution panel (now in side panel)
       else if (isModPressed && e.key === '5') {
         e.preventDefault()
-        toggleExecutionPanel()
+        toggleTab('execution')
       }
       // Cmd+0: Close all panels
       else if (isModPressed && e.key === '0') {
         e.preventDefault()
-        setActivePanel(null)
+        setSidePanelVisible(false)
         setExecutionPanelVisible(false)
       }
-      // Esc: Close current sidebar panel
-      else if (e.key === 'Escape' && activePanel) {
-        setActivePanel(null)
+      // Esc: Close side panel
+      else if (e.key === 'Escape' && sidePanelVisible) {
+        setSidePanelVisible(false)
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activePanel, toggleExecutionPanel, setActivePanel])
+  }, [sidePanelVisible, sidePanelTab, setExecutionPanelVisible])
 
   const value: PanelState = {
     activePanel,
     executionPanelVisible,
     executionPanelCollapsed,
     manuallyClosedPanels,
+    // New side panel state
+    sidePanelVisible,
+    sidePanelTab,
     setActivePanel,
     toggleExecutionPanel,
     toggleExecutionCollapse,
     markPanelManuallyClosed,
     isPanelManuallyClosed,
+    // New side panel methods
+    setSidePanelVisible,
+    setSidePanelTab,
+    toggleSidePanel,
   }
 
   return <PanelContext.Provider value={value}>{children}</PanelContext.Provider>

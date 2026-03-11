@@ -82,7 +82,8 @@ function ConversationItem({
         'group relative flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors',
         isActive
           ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300'
-          : 'hover:bg-[var(--color-bg-hover)] text-[var(--color-text)]'
+          : 'hover:bg-[var(--color-bg-hover)] text-[var(--color-text)]',
+        'hover:bg-[var(--color-bg-hover)]'
       )}
       onClick={() => !isEditing && onSelect()}
       onMouseEnter={() => setIsHovered(true)}
@@ -124,7 +125,7 @@ function ConversationItem({
               e.stopPropagation()
               setIsEditing(true)
             }}
-            className="p-1 hover:bg-[var(--color-bg-active)] rounded transition-colors"
+            className="p-1 hover:bg-[var(--color-bg-active)] rounded transition-colors cursor-pointer"
           >
             <Pencil className="w-3 h-3" />
           </button>
@@ -133,7 +134,7 @@ function ConversationItem({
               e.stopPropagation()
               onDelete()
             }}
-            className="p-1 hover:bg-red-500/20 hover:text-red-400 rounded transition-colors"
+            className="p-1 hover:bg-red-500/20 hover:text-red-400 rounded transition-colors cursor-pointer"
           >
             <Trash2 className="w-3 h-3" />
           </button>
@@ -208,12 +209,12 @@ export default function AgentSidebar() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-[var(--color-bg-canvas)] border-r border-[var(--color-border-subtle)]">
+    <div className="h-full flex flex-col glass-panel border-r border-[var(--color-border-subtle)]">
       {/* 顶部：新建按钮 */}
       <div className="p-3">
         <button
           onClick={handleNewChat}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-purple-500/20 text-purple-700 dark:text-purple-400 hover:bg-purple-500/30 transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-purple-500/20 text-purple-700 dark:text-purple-400 hover:bg-purple-500/30 transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span className="text-sm font-medium">新对话</span>
@@ -229,7 +230,7 @@ export default function AgentSidebar() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="搜索对话..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+            className="w-full pl-9 pr-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-purple-500/30 transition-colors"
           />
         </div>
       </div>

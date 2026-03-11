@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Plus, Sparkles } from 'lucide-react'
+import { Plus, Sparkles, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NewWorkspaceCardProps {
@@ -12,58 +12,86 @@ export function NewWorkspaceCard({ onClick, isLoading = false }: NewWorkspaceCar
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      whileHover={{ scale: 1.01, y: -2 }}
+      whileHover={{ scale: 1.01, y: -4 }}
       whileTap={{ scale: 0.99 }}
       onClick={onClick}
       className={cn(
-        'rounded-2xl cursor-pointer overflow-hidden',
-        'border-2 border-dashed border-[var(--color-border-subtle)]',
-        'hover:border-purple-500/50',
+        'relative rounded-2xl cursor-pointer overflow-hidden',
+        'border border-[var(--color-border-subtle)]',
+        'bg-[var(--color-bg-card)]/50',
+        'backdrop-blur-sm',
+        'hover:border-purple-500/30',
         'hover:bg-purple-500/5',
         'transition-all duration-300',
         'group',
         isLoading && 'opacity-50 pointer-events-none'
       )}
     >
-      {/* 顶部装饰条占位 */}
-      <div className="h-1.5 w-full bg-gradient-to-r from-transparent via-purple-500/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      {/* Animated gradient border on hover */}
+      <div className={cn(
+        'absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300',
+        'bg-gradient-to-r from-violet-500/20 via-purple-500/20 to-fuchsia-500/20',
+        'blur-xl -z-10'
+      )} />
 
-      <div className="p-6 min-h-[168px] flex items-center justify-center">
-        <div className="flex items-center gap-5">
-          {/* 左侧图标 */}
-          <div className={cn(
-            'w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0',
-            'bg-[var(--color-bg-hover)]',
-            'group-hover:bg-purple-500/20',
-            'transition-all duration-300',
-            'shadow-lg group-hover:shadow-purple-500/20'
+      {/* Top accent line */}
+      <div className={cn(
+        'h-0.5 w-full',
+        'bg-gradient-to-r from-transparent via-purple-500/40 to-transparent',
+        'opacity-0 group-hover:opacity-100 transition-opacity duration-300'
+      )} />
+
+      <div className="p-5 flex items-center" style={{ minHeight: '172px' }}>
+        {/* Icon with liquid glass effect */}
+        <div className={cn(
+          'relative w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0',
+          'bg-gradient-to-br from-purple-500/10 to-violet-500/10',
+          'group-hover:from-purple-500/20 group-hover:to-violet-500/20',
+          'transition-all duration-300',
+          'shadow-sm group-hover:shadow-purple-500/10'
+        )}>
+          {/* Inner glow */}
+          <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          <Plus className={cn(
+            'w-7 h-7 relative z-10',
+            'text-[var(--color-text-muted)]',
+            'group-hover:text-purple-400',
+            'transition-colors duration-300'
+          )} />
+
+          {/* Animated ring */}
+          <motion.div
+            className="absolute inset-0 rounded-xl border border-purple-500/20"
+            initial={{ scale: 1, opacity: 0 }}
+            whileHover={{ scale: 1.1, opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          />
+        </div>
+
+        {/* Text content */}
+        <div className="flex flex-col gap-1 ml-4">
+          <span className={cn(
+            'text-base font-semibold',
+            'text-[var(--color-text)]',
+            'flex items-center gap-2',
+            'transition-colors duration-200'
           )}>
-            <Plus className={cn(
-              'w-8 h-8',
-              'text-[var(--color-text-muted)]',
-              'group-hover:text-purple-400',
-              'transition-colors duration-300'
+            新建项目
+            <ArrowRight className={cn(
+              'w-4 h-4 opacity-0 -translate-x-2',
+              'group-hover:opacity-100 group-hover:translate-x-0',
+              'transition-all duration-300',
+              'text-purple-400'
             )} />
-          </div>
-
-          {/* 右侧文字 */}
-          <div className="flex flex-col gap-1">
-            <span className={cn(
-              'text-lg font-semibold',
-              'text-[var(--color-text)]',
-              'transition-colors duration-200'
-            )}>
-              新建项目
-            </span>
-            <span className={cn(
-              'text-sm',
-              'text-[var(--color-text-muted)]',
-              'flex items-center gap-1.5'
-            )}>
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              创建一个新的工作流
-            </span>
-          </div>
+          </span>
+          <span className={cn(
+            'text-xs',
+            'text-[var(--color-text-muted)]',
+            'flex items-center gap-1.5'
+          )}>
+            <Sparkles className="w-3 h-3 text-purple-400" />
+            创建一个新的工作流
+          </span>
         </div>
       </div>
     </motion.div>

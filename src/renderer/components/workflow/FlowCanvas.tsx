@@ -1,4 +1,4 @@
-import { useCallback, useRef, DragEvent, useState, useEffect } from 'react'
+import { useCallback, useRef, DragEvent, useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import {
   ReactFlow,
   Background,
@@ -19,6 +19,7 @@ import { Target, ArrowDownToLine, Bot, GitBranch, ArrowUpFromLine, Blocks } from
 
 import { useWorkflowStore } from '@/store/workflow-store'
 import { WorkflowNodeData, WorkflowNode } from '@/types/node'
+import { cn } from '@/lib/utils'
 
 import InputNode from '@/components/nodes/InputNode'
 import OllamaChatNode from '@/components/nodes/OllamaChatNode'
@@ -78,6 +79,10 @@ interface FlowCanvasProps {
   onPaneClick?: () => void
 }
 
+export interface FlowCanvasRef {
+  fitView: () => void
+}
+
 function EmptyCanvasState() {
   return (
     <motion.div
@@ -85,53 +90,119 @@ function EmptyCanvasState() {
       animate={{ opacity: 1, scale: 1 }}
       className="absolute inset-0 flex items-center justify-center pointer-events-none"
     >
-      <div className="max-w-md text-center p-8 rounded-2xl glass-panel">
-        <Target className="w-12 h-12 mx-auto mb-4 text-[var(--color-text-muted)]" />
-        <h2 className="text-xl font-bold text-[var(--color-text)] mb-3">开始构建工作流</h2>
-        <div className="text-[var(--color-text-muted)] mb-6 space-y-1">
-          <p>点击工具栏的<span className="text-[var(--color-text)] inline-flex items-center gap-1"><Blocks className="w-[16px] h-[16px] mx-[4px]" /></span>按钮打开节点面板</p>
-          <p>拖拽节点到画布，连接它们创建自动化流程</p>
-        </div>
-        <div className="grid grid-cols-2 gap-4 text-left">
-          <div className="p-3 rounded-lg bg-[var(--color-bg-input)]">
-            <ArrowDownToLine className="w-5 h-5 mb-2 text-cyan-400" />
-            <div className="text-sm font-semibold text-[var(--color-text)] mb-1">添加输入</div>
-            <div className="text-xs text-[var(--color-text-muted)]">开始工作流的数据</div>
+      <div className="relative max-w-md text-center p-8 rounded-2xl glass-panel overflow-hidden group">
+        {/* Gradient accent bar at top - macOS 26 style */}
+        <div className={cn(
+          'absolute top-0 left-0 right-0 h-1',
+          'bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500',
+          'opacity-70 group-hover:opacity-100 transition-opacity duration-300'
+        )} />
+
+        {/* Inner glow effect on hover */}
+        <div className={cn(
+          'absolute inset-0 rounded-2xl pointer-events-none',
+          'bg-gradient-to-br from-purple-500/5 via-transparent to-blue-500/5',
+          'opacity-0 group-hover:opacity-100 transition-opacity duration-300'
+        )} />
+
+        <div className="relative">
+          {/* Icon with gradient background */}
+          <div className={cn(
+            'w-16 h-16 mx-auto mb-5 rounded-xl flex items-center justify-center',
+            'bg-gradient-to-br from-violet-500/15 to-purple-500/15',
+            'shadow-lg shadow-purple-500/10'
+          )}>
+            <Target className="w-8 h-8 text-purple-400" />
           </div>
-          <div className="p-3 rounded-lg bg-[var(--color-bg-input)]">
-            <Bot className="w-5 h-5 mb-2 text-purple-400" />
-            <div className="text-sm font-semibold text-[var(--color-text)] mb-1">AI 处理</div>
-            <div className="text-xs text-[var(--color-text-muted)]">使用 Ollama 模型</div>
+
+          <h2 className="text-xl font-bold text-[var(--color-text)] mb-3">开始构建工作流</h2>
+          <div className="text-[var(--color-text-muted)] mb-6 space-y-1">
+            <p>点击工具栏的<span className="text-[var(--color-text)] inline-flex items-center gap-1"><Blocks className="w-[16px] h-[16px] mx-[4px]" /></span>按钮打开节点面板</p>
+            <p>拖拽节点到画布，连接它们创建自动化流程</p>
           </div>
-          <div className="p-3 rounded-lg bg-[var(--color-bg-input)]">
-            <GitBranch className="w-5 h-5 mb-2 text-blue-400" />
-            <div className="text-sm font-semibold text-[var(--color-text)] mb-1">条件逻辑</div>
-            <div className="text-xs text-[var(--color-text-muted)]">分支和控制流</div>
+
+          {/* Feature cards with enhanced styling */}
+          <div className="grid grid-cols-2 gap-3 text-left">
+            <div className={cn(
+              'p-3 rounded-xl transition-all duration-300',
+              'bg-[var(--color-bg-input)] hover:bg-[var(--color-bg-hover)]',
+              'group/card'
+            )}>
+              <div className={cn(
+                'w-8 h-8 mb-2 rounded-lg flex items-center justify-center',
+                'bg-cyan-500/15'
+              )}>
+                <ArrowDownToLine className="w-4 h-4 text-cyan-400" />
+              </div>
+              <div className="text-sm font-semibold text-[var(--color-text)] mb-0.5">添加输入</div>
+              <div className="text-xs text-[var(--color-text-muted)]">开始工作流的数据</div>
+            </div>
+            <div className={cn(
+              'p-3 rounded-xl transition-all duration-300',
+              'bg-[var(--color-bg-input)] hover:bg-[var(--color-bg-hover)]',
+              'group/card'
+            )}>
+              <div className={cn(
+                'w-8 h-8 mb-2 rounded-lg flex items-center justify-center',
+                'bg-purple-500/15'
+              )}>
+                <Bot className="w-4 h-4 text-purple-400" />
+              </div>
+              <div className="text-sm font-semibold text-[var(--color-text)] mb-0.5">AI 处理</div>
+              <div className="text-xs text-[var(--color-text-muted)]">使用 Ollama 模型</div>
+            </div>
+            <div className={cn(
+              'p-3 rounded-xl transition-all duration-300',
+              'bg-[var(--color-bg-input)] hover:bg-[var(--color-bg-hover)]',
+              'group/card'
+            )}>
+              <div className={cn(
+                'w-8 h-8 mb-2 rounded-lg flex items-center justify-center',
+                'bg-blue-500/15'
+              )}>
+                <GitBranch className="w-4 h-4 text-blue-400" />
+              </div>
+              <div className="text-sm font-semibold text-[var(--color-text)] mb-0.5">条件逻辑</div>
+              <div className="text-xs text-[var(--color-text-muted)]">分支和控制流</div>
+            </div>
+            <div className={cn(
+              'p-3 rounded-xl transition-all duration-300',
+              'bg-[var(--color-bg-input)] hover:bg-[var(--color-bg-hover)]',
+              'group/card'
+            )}>
+              <div className={cn(
+                'w-8 h-8 mb-2 rounded-lg flex items-center justify-center',
+                'bg-teal-500/15'
+              )}>
+                <ArrowUpFromLine className="w-4 h-4 text-teal-400" />
+              </div>
+              <div className="text-sm font-semibold text-[var(--color-text)] mb-0.5">输出结果</div>
+              <div className="text-xs text-[var(--color-text-muted)]">显示或保存数据</div>
+            </div>
           </div>
-          <div className="p-3 rounded-lg bg-[var(--color-bg-input)]">
-            <ArrowUpFromLine className="w-5 h-5 mb-2 text-teal-400" />
-            <div className="text-sm font-semibold text-[var(--color-text)] mb-1">输出结果</div>
-            <div className="text-xs text-[var(--color-text-muted)]">显示或保存数据</div>
-          </div>
-        </div>
-        <div className="mt-6 pt-6 border-t border-[var(--color-border-subtle)]">
-          <div className="flex items-center justify-center gap-3 text-xs text-[var(--color-text-muted)]">
-            <span className="flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded bg-[var(--color-bg-input)] flex items-center justify-center text-[10px]">1</span>
-              打开面板
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded bg-[var(--color-bg-input)] flex items-center justify-center text-[10px]">2</span>
-              拖拽节点
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded bg-[var(--color-bg-input)] flex items-center justify-center text-[10px]">3</span>
-              连接端口
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded bg-[var(--color-bg-input)] flex items-center justify-center text-[10px]">4</span>
-              执行工作流
-            </span>
+
+          {/* Steps guide */}
+          <div className="mt-6 pt-6 border-t border-[var(--color-border-subtle)]">
+            <div className="flex items-center justify-center gap-3 text-xs text-[var(--color-text-muted)]">
+              {[
+                { num: '1', label: '打开面板' },
+                { num: '2', label: '拖拽节点' },
+                { num: '3', label: '连接端口' },
+                { num: '4', label: '执行工作流' },
+              ].map((step, i) => (
+                <span key={step.num} className="flex items-center gap-1.5">
+                  <span className={cn(
+                    'w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-medium',
+                    'bg-gradient-to-br from-violet-500/20 to-purple-500/20',
+                    'text-purple-400'
+                  )}>
+                    {step.num}
+                  </span>
+                  {i < 3 && <span className="text-[var(--color-border)]">→</span>}
+                  <span className="hidden sm:inline">{step.label}</span>
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -139,7 +210,10 @@ function EmptyCanvasState() {
   )
 }
 
-export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeClick: onNodeClickProp, onPaneClick: onPaneClickProp }: FlowCanvasProps) {
+const FlowCanvas = forwardRef<FlowCanvasRef, FlowCanvasProps>(function FlowCanvas(
+  { colorMode = 'system', onDragStart, onNodeClick: onNodeClickProp, onPaneClick: onPaneClickProp },
+  ref
+) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<Node<WorkflowNodeData>, Edge> | null>(null)
 
@@ -149,6 +223,15 @@ export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeCl
   const onInit = useCallback((instance: ReactFlowInstance<Node<WorkflowNodeData>, Edge>) => {
     setReactFlowInstance(instance)
   }, [])
+
+  // Expose fitView method via ref
+  useImperativeHandle(ref, () => ({
+    fitView: () => {
+      if (reactFlowInstance) {
+        reactFlowInstance.fitView({ padding: 0.2, duration: 200 })
+      }
+    }
+  }), [reactFlowInstance])
 
   // Keyboard shortcuts for copy/paste
   useEffect(() => {
@@ -262,9 +345,9 @@ export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeCl
   )
 
   return (
-    <div 
-      ref={reactFlowWrapper} 
-      className="flex-1 overflow-hidden relative"
+    <div
+      ref={reactFlowWrapper}
+      className="w-full h-full overflow-hidden relative"
     >
       <ReactFlow<Node<WorkflowNodeData>, Edge>
         nodes={nodes}
@@ -328,4 +411,6 @@ export default function FlowCanvas({ colorMode = 'system', onDragStart, onNodeCl
       <PlanQuestionsManager />
     </div>
   )
-}
+})
+
+export default FlowCanvas

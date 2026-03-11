@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Folder, Trash2, ExternalLink, Clock, CheckCircle, XCircle, Loader2, Play } from 'lucide-react'
+import { Folder, Trash2, ExternalLink, Clock, CheckCircle, XCircle, Loader2, Play, Sparkles } from 'lucide-react'
 import type { RecentWorkspace } from '@/types/workspace'
 import { cn } from '@/lib/utils'
 
@@ -103,132 +103,150 @@ export function WorkspaceCard({
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      whileHover={{ scale: 1.01, y: -2 }}
+      whileHover={{ scale: 1.01, y: -4 }}
       whileTap={{ scale: 0.99 }}
       onClick={handleOpen}
       className={cn(
         'relative rounded-2xl cursor-pointer overflow-hidden',
         'glass-panel',
-        'hover:shadow-xl hover:shadow-purple-500/10',
         'transition-all duration-300',
         'group',
         isLoading && 'opacity-50 pointer-events-none',
         isRunning && 'ring-2 ring-green-500/30'
       )}
     >
-      {/* 顶部装饰条 */}
+      {/* macOS 26 style top accent bar with gradient */}
       <div className={cn(
-        'h-1.5 w-full',
-        'bg-gradient-to-r from-purple-500 via-blue-500 to-cyan-500',
-        'opacity-60 group-hover:opacity-100 transition-opacity duration-300',
+        'h-1 w-full',
+        'bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500',
+        'opacity-70 group-hover:opacity-100 transition-opacity duration-300',
         isRunning && 'opacity-100'
       )} />
 
-      <div className="p-6">
-        {/* 主体内容区域 */}
-        <div className="flex gap-5">
-          {/* 左侧大图标 */}
+      {/* Subtle inner glow on hover */}
+      <div className={cn(
+        'absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none',
+        'bg-gradient-to-br from-purple-500/5 via-transparent to-blue-500/5'
+      )} />
+
+      <div className="p-5 relative">
+        {/* Main content area */}
+        <div className="flex gap-4">
+          {/* Left icon with liquid glass effect */}
           <div className={cn(
-            'w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0',
-            'bg-gradient-to-br from-purple-500/20 to-blue-500/20',
-            'group-hover:from-purple-500/30 group-hover:to-blue-500/30',
+            'relative w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0',
+            'bg-gradient-to-br from-purple-500/15 to-blue-500/15',
+            'group-hover:from-purple-500/25 group-hover:to-blue-500/25',
             'transition-all duration-300',
-            'shadow-lg shadow-purple-500/10'
+            'shadow-lg shadow-purple-500/5'
           )}>
-            <Folder className="w-8 h-8 text-purple-400" />
+            {/* Inner glow */}
+            <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <Folder className="w-7 h-7 text-purple-400 relative z-10" />
+
+            {/* Running indicator */}
+            {isRunning && (
+              <motion.div
+                className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-green-500"
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              />
+            )}
           </div>
 
-          {/* 右侧信息 */}
+          {/* Right content */}
           <div className="flex-1 min-w-0">
-            {/* 标题行 */}
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <h3 className="text-lg font-semibold text-[var(--color-text)] truncate">
+            {/* Title row */}
+            <div className="flex items-start justify-between gap-2 mb-1.5">
+              <h3 className="text-base font-semibold text-[var(--color-text)] truncate leading-tight">
                 {workspace.name}
               </h3>
 
-              {/* 操作按钮 */}
-              <div className="flex items-center gap-1 flex-shrink-0">
+              {/* Action buttons - macOS style */}
+              <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={handleShowInFinder}
                   className={cn(
-                    'w-8 h-8 rounded-lg flex items-center justify-center',
+                    'w-7 h-7 rounded-lg flex items-center justify-center',
                     'text-[var(--color-text-muted)]',
                     'hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]',
-                    'transition-all duration-200',
-                    'opacity-0 group-hover:opacity-100'
+                    'transition-all duration-150'
                   )}
                   title="在 Finder 中显示"
                 >
-                  <ExternalLink className="w-4 h-4" />
+                  <ExternalLink className="w-3.5 h-3.5" />
                 </motion.button>
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={handleRemove}
                   className={cn(
-                    'w-8 h-8 rounded-lg flex items-center justify-center',
+                    'w-7 h-7 rounded-lg flex items-center justify-center',
                     'text-[var(--color-text-muted)]',
                     'hover:bg-red-500/10 hover:text-red-400',
-                    'transition-all duration-200',
-                    'opacity-0 group-hover:opacity-100'
+                    'transition-all duration-150'
                   )}
                   title="删除工作区"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-3.5 h-3.5" />
                 </motion.button>
               </div>
             </div>
 
-            {/* 描述 */}
+            {/* Description */}
             {workspace.description && (
-              <p className="text-sm text-[var(--color-text-secondary)] mb-3 line-clamp-2">
+              <p className="text-xs text-[var(--color-text-muted)] mb-2 line-clamp-1 leading-relaxed">
                 {workspace.description}
               </p>
             )}
 
-            {/* 路径 */}
-            <p className="text-xs text-[var(--color-text-muted)] truncate mb-4 font-mono" title={workspace.path}>
+            {/* Path */}
+            <p className="text-[11px] text-[var(--color-text-subtle)] truncate mb-3 font-mono" title={workspace.path}>
               {truncatedPath}
             </p>
 
-            {/* 底部状态栏 */}
-            <div className="flex items-center justify-between">
-              <div className={cn('flex items-center gap-2', getStatusColor())}>
+            {/* Bottom status bar - cleaner design */}
+            <div className="flex items-center justify-between gap-2">
+              <div className={cn('flex items-center gap-1.5 min-w-0 flex-1', getStatusColor())}>
                 {getStatusIcon()}
-                <span className="text-sm font-medium">{getStatusText()}</span>
+                <span className="text-xs font-medium truncate">{getStatusText()}</span>
                 {isRunning && executionStatus.currentNode && (
-                  <span className="text-xs text-[var(--color-text-muted)] truncate max-w-[120px]">
+                  <span className="text-[10px] text-[var(--color-text-muted)] truncate max-w-[80px] flex-shrink-0">
                     · {executionStatus.currentNode}
                   </span>
                 )}
               </div>
 
+              {/* Open badge - macOS pill style */}
               <div className={cn(
-                'px-3 py-1 rounded-full text-xs font-medium',
+                'flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0',
                 'bg-[var(--color-bg-hover)]',
                 'text-[var(--color-text-muted)]',
-                'group-hover:bg-purple-500/10 group-hover:text-purple-400',
+                'group-hover:bg-purple-500/15 group-hover:text-purple-400',
                 'transition-all duration-200'
               )}>
-                打开
+                <Sparkles className="w-3 h-3 opacity-50 group-hover:opacity-100 transition-opacity duration-200" />
+                <span>打开</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* 运行进度条 */}
-        {isRunning && (
-          <div className="mt-4 h-1.5 bg-[var(--color-bg-hover)] rounded-full overflow-hidden">
+        {/* Progress bar container - always takes space to maintain consistent card height */}
+        <div className="mt-3 h-1 bg-[var(--color-bg-hover)] rounded-full overflow-hidden">
+          {isRunning ? (
             <motion.div
-              className="h-full bg-gradient-to-r from-green-500 to-emerald-400"
+              className="h-full bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400"
               initial={{ width: 0 }}
               animate={{ width: `${executionStatus?.progress || 0}%` }}
               transition={{ duration: 0.3 }}
             />
-          </div>
-        )}
+          ) : (
+            <div className="h-full w-0" />
+          )}
+        </div>
       </div>
     </motion.div>
   )

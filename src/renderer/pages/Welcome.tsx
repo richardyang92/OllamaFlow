@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { useWorkflowStore } from '@/store/workflow-store'
 import { useExecutionStore } from '@/store/execution-store'
 import { createEmptyWorkflow } from '@/types/workflow'
 import { useResolvedTheme } from '@/contexts/ThemeContext'
 import {
-  DashboardHeader,
   WorkspaceCard,
   NewWorkspaceCard,
   AddWorkspaceCard,
@@ -13,7 +13,16 @@ import {
   AgentFloatingButton,
 } from '@/components/dashboard'
 import { ConfirmDialog } from '@/components/common'
+import { AppHeader } from '@/components/layout'
 
+/**
+ * macOS 26 Liquid Glass Animated Background
+ * Features:
+ * - Flowing gradient orbs with blur effects
+ * - Subtle particle system
+ * - Theme-aware colors
+ * - Performance optimized with requestAnimationFrame
+ */
 function AnimatedBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const resolvedTheme = useResolvedTheme()
@@ -23,61 +32,90 @@ function AnimatedBackground() {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const ctx = canvas.getContext('2d')
+    const ctx = canvas.getContext('2d', { alpha: true })
     if (!ctx) return
 
     const resizeCanvas = () => {
-      canvas.width = window.innerWidth
-      canvas.height = window.innerHeight
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = window.innerWidth * dpr
+      canvas.height = window.innerHeight * dpr
+      ctx.scale(dpr, dpr)
     }
     resizeCanvas()
     window.addEventListener('resize', resizeCanvas)
 
-    const curves: Array<{
-      startX: number
-      startY: number
-      cp1X: number
-      cp1Y: number
-      cp2X: number
-      cp2Y: number
-      endX: number
-      endY: number
-      speed: number
-      offset: number
-      color: string
-      width: number
-    }> = []
+    // macOS 26 inspired gradient orbs
+    interface GradientOrb {
+      x: number
+      y: number
+      radius: number
+      color1: string
+      color2: string
+      speedX: number
+      speedY: number
+      phase: number
+      pulseSpeed: number
+    }
 
-    const darkColors = [
-      'rgba(59, 130, 246, 0.3)',
-      'rgba(139, 92, 246, 0.3)',
-      'rgba(236, 72, 153, 0.2)',
-      'rgba(6, 182, 212, 0.25)',
+    const orbs: GradientOrb[] = []
+
+    // Dark mode colors - more vibrant, translucent
+    const darkOrbColors = [
+      { c1: 'rgba(99, 102, 241, 0.15)', c2: 'rgba(139, 92, 246, 0.08)' },  // Indigo -> Purple
+      { c1: 'rgba(59, 130, 246, 0.12)', c2: 'rgba(6, 182, 212, 0.06)' },   // Blue -> Cyan
+      { c1: 'rgba(236, 72, 153, 0.10)', c2: 'rgba(244, 114, 182, 0.05)' }, // Pink
+      { c1: 'rgba(34, 197, 94, 0.08)', c2: 'rgba(20, 184, 166, 0.04)' },   // Green -> Teal
     ]
 
-    const lightColors = [
-      'rgba(59, 130, 246, 0.25)',
-      'rgba(139, 92, 246, 0.25)',
-      'rgba(236, 72, 153, 0.15)',
-      'rgba(6, 182, 212, 0.2)',
+    // Light mode colors - subtle, airy
+    const lightOrbColors = [
+      { c1: 'rgba(99, 102, 241, 0.08)', c2: 'rgba(139, 92, 246, 0.04)' },
+      { c1: 'rgba(59, 130, 246, 0.06)', c2: 'rgba(6, 182, 212, 0.03)' },
+      { c1: 'rgba(236, 72, 153, 0.05)', c2: 'rgba(244, 114, 182, 0.025)' },
+      { c1: 'rgba(34, 197, 94, 0.04)', c2: 'rgba(20, 184, 166, 0.02)' },
     ]
 
-    const colors = isDark ? darkColors : lightColors
+    const orbColors = isDark ? darkOrbColors : lightOrbColors
+    const width = window.innerWidth
+    const height = window.innerHeight
 
-    for (let i = 0; i < 8; i++) {
-      curves.push({
-        startX: Math.random() * canvas.width,
-        startY: Math.random() * canvas.height,
-        cp1X: Math.random() * canvas.width,
-        cp1Y: Math.random() * canvas.height,
-        cp2X: Math.random() * canvas.width,
-        cp2Y: Math.random() * canvas.height,
-        endX: Math.random() * canvas.width,
-        endY: Math.random() * canvas.height,
-        speed: 0.0003 + Math.random() * 0.0005,
-        offset: Math.random() * Math.PI * 2,
-        color: colors[i % colors.length],
-        width: 1 + Math.random() * 2,
+    // Create flowing orbs
+    for (let i = 0; i < 4; i++) {
+      const colors = orbColors[i % orbColors.length]
+      orbs.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        radius: 150 + Math.random() * 200,
+        color1: colors.c1,
+        color2: colors.c2,
+        speedX: 0.15 + Math.random() * 0.25,
+        speedY: 0.1 + Math.random() * 0.2,
+        phase: Math.random() * Math.PI * 2,
+        pulseSpeed: 0.0008 + Math.random() * 0.0012,
+      })
+    }
+
+    // Floating particles
+    interface Particle {
+      x: number
+      y: number
+      size: number
+      speedX: number
+      speedY: number
+      alpha: number
+      pulse: number
+    }
+
+    const particles: Particle[] = []
+    for (let i = 0; i < 30; i++) {
+      particles.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        size: 1 + Math.random() * 2,
+        speedX: 0.1 + Math.random() * 0.3,
+        speedY: 0.05 + Math.random() * 0.15,
+        alpha: 0.1 + Math.random() * 0.2,
+        pulse: Math.random() * Math.PI * 2,
       })
     }
 
@@ -85,66 +123,76 @@ function AnimatedBackground() {
     let time = 0
 
     const animate = () => {
-      const bgColor = isDark ? 'rgba(13, 13, 13, 0.05)' : 'rgba(250, 250, 250, 0.05)'
-      ctx.fillStyle = bgColor
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      const w = window.innerWidth
+      const h = window.innerHeight
+
+      // Clear with subtle fade for trail effect
+      ctx.clearRect(0, 0, w, h)
 
       time += 1
 
-      curves.forEach((curve) => {
-        const t = time * curve.speed + curve.offset
+      // Draw gradient orbs with flowing movement
+      orbs.forEach((orb) => {
+        const t = time * 0.001 + orb.phase
 
-        const startX = curve.startX + Math.sin(t) * 50
-        const startY = curve.startY + Math.cos(t * 0.7) * 30
-        const cp1X = curve.cp1X + Math.sin(t * 1.3) * 100
-        const cp1Y = curve.cp1Y + Math.cos(t * 0.9) * 80
-        const cp2X = curve.cp2X + Math.sin(t * 0.8) * 100
-        const cp2Y = curve.cp2Y + Math.cos(t * 1.2) * 80
-        const endX = curve.endX + Math.cos(t) * 50
-        const endY = curve.endY + Math.sin(t * 0.7) * 30
+        // Smooth sine wave movement
+        orb.x += orb.speedX
+        orb.y += orb.speedY
 
-        ctx.beginPath()
-        ctx.moveTo(startX, startY)
-        ctx.bezierCurveTo(cp1X, cp1Y, cp2X, cp2Y, endX, endY)
+        // Wrap around edges
+        if (orb.x > w + orb.radius) orb.x = -orb.radius
+        if (orb.y > h + orb.radius) orb.y = -orb.radius
+        if (orb.x < -orb.radius) orb.x = w + orb.radius
+        if (orb.y < -orb.radius) orb.y = h + orb.radius
 
-        const gradient = ctx.createLinearGradient(startX, startY, endX, endY)
-        gradient.addColorStop(0, 'transparent')
-        gradient.addColorStop(0.5, curve.color)
+        // Pulsing radius
+        const pulseRadius = orb.radius + Math.sin(t * orb.pulseSpeed * 1000) * 30
+
+        // Create radial gradient
+        const gradient = ctx.createRadialGradient(
+          orb.x, orb.y, 0,
+          orb.x, orb.y, pulseRadius
+        )
+        gradient.addColorStop(0, orb.color1)
+        gradient.addColorStop(0.5, orb.color2)
         gradient.addColorStop(1, 'transparent')
 
-        ctx.strokeStyle = gradient
-        ctx.lineWidth = curve.width
-        ctx.lineCap = 'round'
-        ctx.stroke()
-
-        const pointAlpha = isDark ? 0.1 : 0.15
-        const alpha = pointAlpha + Math.sin(t * 2) * 0.05
-        const pointColor = isDark
-          ? `rgba(255, 255, 255, ${alpha})`
-          : `rgba(0, 0, 0, ${alpha * 0.5})`
-        ctx.fillStyle = pointColor
+        ctx.fillStyle = gradient
         ctx.beginPath()
-        ctx.arc(cp1X, cp1Y, 2, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.beginPath()
-        ctx.arc(cp2X, cp2Y, 2, 0, Math.PI * 2)
+        ctx.arc(orb.x, orb.y, pulseRadius, 0, Math.PI * 2)
         ctx.fill()
       })
 
-      for (let i = 0; i < 20; i++) {
-        const x = (Math.sin(time * 0.001 + i * 0.5) * 0.5 + 0.5) * canvas.width
-        const y = (Math.cos(time * 0.0008 + i * 0.3) * 0.5 + 0.5) * canvas.height
-        const size = 1 + Math.sin(time * 0.002 + i) * 0.5
-        const baseAlpha = isDark ? 0.1 : 0.08
-        const alpha = baseAlpha + Math.sin(time * 0.003 + i * 0.7) * 0.08
+      // Draw floating particles
+      particles.forEach((p) => {
+        p.x += p.speedX
+        p.y += p.speedY
+        p.pulse += 0.02
+
+        if (p.x > w) p.x = 0
+        if (p.y > h) p.y = 0
+
+        const pulseAlpha = p.alpha + Math.sin(p.pulse) * 0.05
+        const pulseSize = p.size + Math.sin(p.pulse) * 0.3
 
         const particleColor = isDark
-          ? `rgba(255, 255, 255, ${alpha})`
-          : `rgba(0, 0, 0, ${alpha * 0.5})`
+          ? `rgba(255, 255, 255, ${pulseAlpha})`
+          : `rgba(0, 0, 0, ${pulseAlpha * 0.4})`
+
         ctx.fillStyle = particleColor
         ctx.beginPath()
-        ctx.arc(x, y, size, 0, Math.PI * 2)
+        ctx.arc(p.x, p.y, pulseSize, 0, Math.PI * 2)
         ctx.fill()
+      })
+
+      // Subtle noise texture overlay (very light)
+      if (isDark) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.005)'
+        for (let i = 0; i < 50; i++) {
+          const x = Math.random() * w
+          const y = Math.random() * h
+          ctx.fillRect(x, y, 1, 1)
+        }
       }
 
       animationFrameId = requestAnimationFrame(animate)
@@ -159,11 +207,36 @@ function AnimatedBackground() {
   }, [isDark])
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="fixed inset-0 pointer-events-none"
-      style={{ opacity: isDark ? 0.6 : 0.4 }}
-    />
+    <>
+      {/* Base gradient layer */}
+      <div
+        className="fixed inset-0 pointer-events-none transition-opacity duration-500"
+        style={{
+          background: isDark
+            ? 'radial-gradient(ellipse at 30% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(139, 92, 246, 0.06) 0%, transparent 50%)'
+            : 'radial-gradient(ellipse at 30% 20%, rgba(99, 102, 241, 0.04) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(139, 92, 246, 0.03) 0%, transparent 50%)',
+        }}
+      />
+      {/* Animated canvas layer */}
+      <canvas
+        ref={canvasRef}
+        className="fixed inset-0 pointer-events-none"
+        style={{
+          width: '100%',
+          height: '100%',
+          opacity: isDark ? 1 : 0.8,
+        }}
+      />
+      {/* Subtle vignette for depth */}
+      <div
+        className="fixed inset-0 pointer-events-none"
+        style={{
+          background: isDark
+            ? 'radial-gradient(circle at center, transparent 30%, rgba(0, 0, 0, 0.4) 100%)'
+            : 'radial-gradient(circle at center, transparent 30%, rgba(0, 0, 0, 0.05) 100%)',
+        }}
+      />
+    </>
   )
 }
 
@@ -405,34 +478,104 @@ export default function WelcomePage() {
     setDeleteConfirmWorkspace(null)
   }
 
+  // Platform detection for layout adjustments
+  const isMac = useMemo(() => {
+    return typeof window !== 'undefined' &&
+           window.electronAPI?.platform?.isMac?.()
+  }, [])
+
+  // macOS: content starts lower (pt-20) since toolbar is at top-0
+  // Windows/Linux: content needs more space (pt-28) for floating toolbar
+  const welcomePaddingTop = isMac ? 'pt-20' : 'pt-28'
+
   return (
-    <div className="min-h-screen bg-[var(--color-bg-canvas)] text-[var(--color-text)]">
+    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] overflow-hidden">
       <AnimatedBackground />
-      <DashboardHeader />
 
-      <WorkspaceGrid>
-        {recentWorkspaces.map((workspace) => (
-          <WorkspaceCard
-            key={workspace.path}
-            workspace={workspace}
-            executionStatus={executionStatuses[workspace.path] || null}
-            onOpen={handleOpenRecent}
-            onRemove={handleRemoveRecent}
-            isLoading={isLoading}
-          />
-        ))}
-        <AddWorkspaceCard 
-          onOpenFolder={handleAddWorkspace} 
-          onImportFile={handleImportFile}
-          isLoading={isLoading}
-          isImporting={isImporting}
+      {/* macOS style drag region - only on macOS, positioned to not overlap with toolbar buttons */}
+      {isMac && (
+        <div
+          className="fixed top-0 left-0 w-[72px] h-14 z-30"
+          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
         />
-        <NewWorkspaceCard onClick={handleNewProject} isLoading={isLoading} />
-      </WorkspaceGrid>
+      )}
 
-      <div className="fixed bottom-6 left-0 right-0 text-center text-[var(--color-text-muted)] text-sm">
-        v0.1.0 • 由 Ollama 驱动
+      {/* Platform-aware toolbar */}
+      <AppHeader page="welcome" />
+
+      {/* Main content area */}
+      <div className="relative z-10">
+        {/* Welcome section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className={`max-w-5xl mx-auto px-6 ${welcomePaddingTop} pb-8`}
+        >
+          <h1 className="text-3xl font-bold text-[var(--color-text)] mb-2">
+            欢迎
+          </h1>
+          <p className="text-[var(--color-text-muted)] text-lg">
+            选择一个项目开始，或创建新的工作流
+          </p>
+        </motion.div>
+
+        <WorkspaceGrid>
+          {recentWorkspaces.map((workspace, index) => (
+            <motion.div
+              key={workspace.path}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.3 + index * 0.05 }}
+            >
+              <WorkspaceCard
+                workspace={workspace}
+                executionStatus={executionStatuses[workspace.path] || null}
+                onOpen={handleOpenRecent}
+                onRemove={handleRemoveRecent}
+                isLoading={isLoading}
+              />
+            </motion.div>
+          ))}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.3 + recentWorkspaces.length * 0.05 }}
+          >
+            <AddWorkspaceCard
+              onOpenFolder={handleAddWorkspace}
+              onImportFile={handleImportFile}
+              isLoading={isLoading}
+              isImporting={isImporting}
+            />
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.35 + recentWorkspaces.length * 0.05 }}
+          >
+            <NewWorkspaceCard onClick={handleNewProject} isLoading={isLoading} />
+          </motion.div>
+        </WorkspaceGrid>
       </div>
+
+      {/* Footer */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.5 }}
+        className="fixed bottom-6 left-0 right-0 text-center z-10"
+      >
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-floating-subtle">
+          <span className="text-[var(--color-text-muted)] text-sm">
+            v0.1.0
+          </span>
+          <span className="w-1 h-1 rounded-full bg-[var(--color-text-muted)] opacity-50" />
+          <span className="text-[var(--color-text-muted)] text-sm">
+            由 Ollama 驱动
+          </span>
+        </div>
+      </motion.div>
 
       <AgentFloatingButton onClick={() => setCurrentPage('agent')} />
 

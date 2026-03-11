@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check } from 'lucide-react'
@@ -7,14 +7,12 @@ import { useWorkflowStore } from '@/store/workflow-store'
 import { useExecutionStore } from '@/store/execution-store'
 import { useResolvedTheme } from '@/contexts/ThemeContext'
 import { PanelProvider, usePanelContext } from '@/contexts/PanelContext'
-import FlowCanvas from '@/components/workflow/FlowCanvas'
-import { FloatingToolbar } from '@/components/workflow/FloatingToolbar'
-import { FloatingIconBar } from '@/components/workflow/FloatingIconBar'
-import { FloatingSidebar } from '@/components/workflow/FloatingSidebar'
+import FlowCanvas, { type FlowCanvasRef } from '@/components/workflow/FlowCanvas'
+import { EditorSidePanel } from '@/components/workflow/EditorSidePanel'
 import { type FileItem } from '@/components/workflow/WorkspaceFiles'
-import ExecutionPanel from '@/components/workflow/ExecutionPanel'
 import InputDialog from '@/components/workflow/InputDialog'
 import FilePreviewDialog from '@/components/workflow/FilePreviewDialog'
+import { AppHeader } from '@/components/layout'
 import { initializeExecutors } from '@/engine/executor'
 import { executionManager } from '@/engine/execution-manager'
 import type { RecentWorkspace } from '@/types/workspace'
@@ -40,11 +38,19 @@ function EditorContent() {
   const { workflow, isDirty, markClean, syncEdgeAnimation } = useWorkflowStore()
   const resolvedTheme = useResolvedTheme()
   const {
-    executionPanelVisible,
-    toggleExecutionPanel,
-    isPanelManuallyClosed,
-    setActivePanel
+    sidePanelVisible,
+    sidePanelTab,
+    setSidePanelVisible,
+    setSidePanelTab,
   } = usePanelContext()
+
+  // Ref for FlowCanvas to call fitView
+  const flowCanvasRef = useRef<FlowCanvasRef>(null)
+
+  // Handle animation complete - fit view when panel animation finishes
+  const handlePanelAnimationComplete = useCallback(() => {
+    flowCanvasRef.current?.fitView()
+  }, [])
 
   // Subscribe to execution store changes - use workspace-specific status
   const workspacePath = currentWorkspace?.path
@@ -81,13 +87,14 @@ function EditorContent() {
 
   const handleNodeClick = useCallback(() => {
     // Always open properties panel when clicking a node
-    setActivePanel('properties')
-  }, [setActivePanel])
+    setSidePanelTab('properties')
+    setSidePanelVisible(true)
+  }, [setSidePanelTab, setSidePanelVisible])
 
   const handlePaneClick = useCallback(() => {
-    // Close properties panel when clicking on empty canvas
-    setActivePanel(null)
-  }, [setActivePanel])
+    // Close side panel when clicking on empty canvas
+    setSidePanelVisible(false)
+  }, [setSidePanelVisible])
 
   const handleSave = useCallback(async () => {
     if (!currentWorkspace || !workflow || saveActive) return
@@ -229,11 +236,9 @@ function EditorContent() {
   const executeWorkflow = useCallback((nodes: any[], edges: any[], inputValues?: Record<string, string>) => {
     if (!currentWorkspace) return
 
-    // Smart context: auto-open execution panel if not manually closed
-    // Disabled: don't auto-open execution panel when executing workflow
-    // if (!isPanelManuallyClosed('execution')) {
-    //   toggleExecutionPanel()
-    // }
+    // Auto-open side panel to execution tab
+    setSidePanelTab('execution')
+    setSidePanelVisible(true)
 
     executionManager.startExecution(
       currentWorkspace.path,
@@ -250,7 +255,7 @@ function EditorContent() {
         })
       }
     })
-  }, [currentWorkspace, isPanelManuallyClosed, toggleExecutionPanel])
+  }, [currentWorkspace, setSidePanelTab, setSidePanelVisible])
 
   const handleInputSubmit = useCallback((values: Record<string, string>) => {
     setShowInputDialog(false)
@@ -265,10 +270,9 @@ function EditorContent() {
 
   const handleDragStart = useCallback(() => {
     // Smart context: auto-open nodes panel
-    if (!isPanelManuallyClosed('nodes')) {
-      setActivePanel('nodes')
-    }
-  }, [isPanelManuallyClosed, setActivePanel])
+    setSidePanelTab('nodes')
+    setSidePanelVisible(true)
+  }, [setSidePanelTab, setSidePanelVisible])
 
   // Export workflow
   const handleExport = useCallback(async () => {
@@ -405,8 +409,9 @@ function EditorContent() {
   }, [currentWorkspace, updateConfig, addRecentWorkspace])
 
   return (
-    <div className="h-screen flex flex-col bg-[var(--color-bg-canvas)] text-[var(--color-text)] overflow-hidden">
-      <FloatingToolbar
+    <div className="h-screen bg-[var(--color-bg-canvas)] text-[var(--color-text)] overflow-hidden">
+      <AppHeader
+        page="editor"
         workspaceName={currentWorkspace?.config.name || '未命名'}
         workspaceDescription={currentWorkspace?.config.description || ''}
         isDirty={isDirty}
@@ -420,33 +425,35 @@ function EditorContent() {
         onEditInfo={handleEditInfo}
       />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 flex overflow-hidden relative">
+      {/* Main content area - fixed positioning below header */}
+      <div className="fixed inset-0 top-14 flex overflow-hidden">
+        {/* Canvas container - shrinks when panel is open */}
+        <motion.div
+          className="h-full overflow-hidden relative"
+          animate={{
+            width: sidePanelVisible ? 'calc(100% - 320px)' : '100%'
+          }}
+          transition={{ duration: 0.2, ease: 'easeInOut' }}
+          onAnimationComplete={handlePanelAnimationComplete}
+        >
           <FlowCanvas
+            ref={flowCanvasRef}
             colorMode={resolvedTheme}
             onDragStart={handleDragStart}
             onNodeClick={handleNodeClick}
             onPaneClick={handlePaneClick}
           />
+        </motion.div>
 
-          <AnimatePresence>
-            {executionPanelVisible && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                className="absolute bottom-4 left-4 right-4 z-30 h-64 glass-panel rounded-glass-lg"
-              >
-                <ExecutionPanel onClose={() => toggleExecutionPanel()} />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+        {/* Right side panel */}
+        <EditorSidePanel
+          visible={sidePanelVisible}
+          activeTab={sidePanelTab}
+          onTabChange={setSidePanelTab}
+          onClose={() => setSidePanelVisible(false)}
+          onFileClick={(file: FileItem) => setSelectedFile(file)}
+        />
       </div>
-
-      {/* Floating panel system */}
-      <FloatingIconBar />
-      <FloatingSidebar onFileClick={(file) => setSelectedFile(file)} />
 
       {showInputDialog && (
         <InputDialog

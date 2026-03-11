@@ -419,6 +419,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }> => ipcRenderer.invoke('globalAI:testConnection', config),
   },
 
+  // Platform info (synchronous, no IPC needed)
+  platform: {
+    getOS: () => process.platform,  // 'darwin' | 'win32' | 'linux'
+    isMac: () => process.platform === 'darwin',
+    isWindows: () => process.platform === 'win32',
+    isLinux: () => process.platform === 'linux',
+  },
+
   // Agent config storage
   agent: {
     getConfig: (): Promise<{
@@ -641,6 +649,12 @@ declare global {
         closeTab: (workspacePath: string, tabId: string) => Promise<ActionResult>
         goBack: (workspacePath: string) => Promise<ActionResult>
         goForward: (workspacePath: string) => Promise<ActionResult>
+      }
+      platform: {
+        getOS: () => string
+        isMac: () => boolean
+        isWindows: () => boolean
+        isLinux: () => boolean
       }
       openai: {
         getApiKey: (keyId: string) => Promise<string | null>

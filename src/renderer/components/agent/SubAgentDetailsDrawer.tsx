@@ -11,7 +11,6 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
-  X,
   Circle,
   ChevronDown,
   ChevronRight,
@@ -29,10 +28,6 @@ import {
   Code,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-interface SubAgentDetailsDrawerProps {
-  onClose?: () => void
-}
 
 // 节点类型图标映射
 const nodeTypeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -252,9 +247,7 @@ const TimelineNode = memo(function TimelineNode({
   )
 })
 
-export const SubAgentDetailsDrawer = memo(function SubAgentDetailsDrawer({
-  onClose,
-}: SubAgentDetailsDrawerProps = {}) {
+export const SubAgentDetailsDrawer = memo(function SubAgentDetailsDrawer() {
   const { selectedSubAgentKey, messages } = useAgentStore()
   const contentRef = useRef<HTMLDivElement>(null)
 
@@ -325,80 +318,53 @@ export const SubAgentDetailsDrawer = memo(function SubAgentDetailsDrawer({
 
   return (
     <div className="h-full flex flex-col">
-      {/* 标题栏 */}
-      <div className="px-4 py-3 border-b border-[var(--color-border-subtle)] flex items-center justify-between">
-        <div className="flex-1 min-w-0">
-          {!hasData ? (
-            <>
-              <h2 className="text-sm font-medium text-[var(--color-text)]">未选择 SubAgent</h2>
-              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                点击工具调用卡片上的「查看详情」按钮
-              </p>
-            </>
-          ) : (
-            <>
-              <h2 className="text-sm font-medium text-[var(--color-text)] truncate">
-                {progress.workflowName}
-              </h2>
-              <p className="text-xs text-[var(--color-text-muted)] mt-0.5 truncate">
-                {progress.completedNodes ?? 0}/{progress.totalNodes ?? 0} 节点 • {formatDuration(progress.updatedAt - progress.startedAt)}
-              </p>
-            </>
-          )}
-        </div>
-        {/* 关闭按钮 */}
-        {onClose && (
-          <button
-            onClick={onClose}
-            className={cn(
-              'flex-shrink-0 ml-2',
-              'w-6 h-6 flex items-center justify-center',
-              'rounded-full',
-              'text-[var(--color-text-muted)] hover:text-[var(--color-text)]',
-              'hover:bg-[var(--color-bg-input)]',
-              'transition-all'
-            )}
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
       {/* 状态指示器 - 仅在有数据时显示 */}
-      {hasData && (
-        <div className="px-4 py-2 border-b border-[var(--color-border-subtle)] flex items-center gap-2">
-          {progress.status === 'loading' && (
-            <>
-              <Loader2 className="w-3.5 h-3.5 text-yellow-400 animate-spin" />
-              <span className="text-xs text-yellow-400">加载中</span>
-            </>
-          )}
-          {progress.status === 'running' && (
-            <>
-              <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
-              <span className="text-xs text-blue-400">执行中</span>
-            </>
-          )}
-          {progress.status === 'completed' && (
-            <>
-              <CheckCircle className="w-3.5 h-3.5 text-green-400" />
-              <span className="text-xs text-green-400">已完成</span>
-            </>
-          )}
-          {progress.status === 'error' && (
-            <>
-              <XCircle className="w-3.5 h-3.5 text-red-400" />
-              <span className="text-xs text-red-400">执行失败</span>
-            </>
-          )}
-          {progress.currentNode && (
-            <>
-              <span className="text-[var(--color-border)]">•</span>
-              <span className="text-xs text-[var(--color-text-muted)] truncate">{progress.currentNode}</span>
-            </>
-          )}
+      {hasData ? (
+        <div className="px-3 py-2 border-b border-[var(--color-border-subtle)]">
+          {/* 工作流信息 */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-[var(--color-text)] truncate">
+              {progress.workflowName}
+            </span>
+            <span className="text-xs text-[var(--color-text-muted)] flex-shrink-0 ml-2">
+              {progress.completedNodes ?? 0}/{progress.totalNodes ?? 0} 节点
+            </span>
+          </div>
+          {/* 执行状态 */}
+          <div className="flex items-center gap-2 text-xs">
+            {progress.status === 'loading' && (
+              <>
+                <Loader2 className="w-3.5 h-3.5 text-yellow-400 animate-spin" />
+                <span className="text-xs text-yellow-400">加载中</span>
+              </>
+            )}
+            {progress.status === 'running' && (
+              <>
+                <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                <span className="text-xs text-blue-400">执行中</span>
+              </>
+            )}
+            {progress.status === 'completed' && (
+              <>
+                <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+                <span className="text-xs text-green-400">已完成</span>
+              </>
+            )}
+            {progress.status === 'error' && (
+              <>
+                <XCircle className="w-3.5 h-3.5 text-red-400" />
+                <span className="text-xs text-red-400">执行失败</span>
+              </>
+            )}
+            {progress.currentNode && (
+              <>
+                <span className="text-[var(--color-border)]">•</span>
+                <span className="text-xs text-[var(--color-text-muted)] truncate">{progress.currentNode}</span>
+              </>
+            )}
+          </div>
         </div>
-      )}
+      ) : null}
 
       {/* 节点步骤时间线 */}
       <div ref={contentRef} className="flex-1 overflow-y-auto p-3">

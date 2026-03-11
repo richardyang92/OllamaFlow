@@ -187,16 +187,6 @@ function PropertiesPanelContent({
     return (
       <>
         <div className="h-full flex flex-col">
-          <div className="px-4 py-3 border-b border-[var(--color-border-subtle)] flex items-center justify-between">
-            <h2 className="text-sm font-medium text-[var(--color-text)]">属性</h2>
-            <button
-              onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-input)] transition-all"
-              title="关闭"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
           {content}
         </div>
 
@@ -242,20 +232,8 @@ export default function 属性Panel({ onClose, isDrawer = false }: { onClose: ()
   if (!selectedNode) {
     if (isDrawer) {
       return (
-        <div className="h-full flex flex-col">
-          <div className="px-4 py-3 border-b border-[var(--color-border-subtle)] flex items-center justify-between">
-            <h2 className="text-sm font-medium text-[var(--color-text)]">属性</h2>
-            <button
-              onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-input)] transition-all"
-              title="关闭"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="flex-1 flex items-center justify-center p-4">
-            <p className="text-sm text-[var(--color-text-muted)]">选择一个节点以查看其属性</p>
-          </div>
+        <div className="h-full flex items-center justify-center p-4">
+          <p className="text-sm text-[var(--color-text-muted)]">选择一个节点以查看其属性</p>
         </div>
       )
     }

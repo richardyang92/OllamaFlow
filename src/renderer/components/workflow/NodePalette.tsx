@@ -33,23 +33,11 @@ export default function NodePalette({ onClose, isDrawer = false }: NodePalettePr
   if (isDrawer) {
     return (
       <div className="h-full flex flex-col">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border-subtle)]">
-          <div className="flex-1">
-            <h2 className="text-sm font-medium text-[var(--color-text)]">节点面板</h2>
-            <p className="text-[10px] text-[var(--color-text-muted)]">拖拽节点到画布</p>
-          </div>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-input)] transition-all"
-              title="关闭"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
+        <div className="px-4 py-3">
+          <p className="text-xs text-[var(--color-text-muted)]">拖拽节点到画布</p>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 pt-0 space-y-4">
           {groupedTemplates.map(
             (category) =>
               category.templates.length > 0 && (
