@@ -51,7 +51,7 @@ export interface ToolDefinition {
   id: string
   name: string
   description: string
-  type: 'readFile' | 'writeFile' | 'executeCommand' | 'httpRequest' | 'todos' | 'getCurrentDate' | 'writeMultipleFiles' | 'executePython' | BrowserToolType
+  type: 'readFile' | 'writeFile' | 'executeCommand' | 'httpRequest' | 'todos' | 'getCurrentDate' | 'writeMultipleFiles' | 'executePython' | 'webSearch' | 'fetchUrl' | BrowserToolType
   config: Record<string, unknown>
 }
 
@@ -204,6 +204,22 @@ export const AVAILABLE_TOOLS = [
     type: 'browser_wait' as const,
     builtIn: false,
     category: 'browser',
+  },
+  {
+    id: 'webSearch',
+    name: 'webSearch',
+    label: '网页搜索',
+    description: '通过 SimpleXNG 搜索引擎搜索网页内容。输入: {"query": "搜索关键词", "maxResults": 5}。maxResults可选，默认5条结果',
+    type: 'webSearch' as const,
+    builtIn: false,
+  },
+  {
+    id: 'fetchUrl',
+    name: 'fetchUrl',
+    label: '获取网页',
+    description: '获取并解析网页内容，返回干净的 Markdown 格式文本（自动过滤广告和导航）。输入: {"url": "https://example.com", "maxContentLength": 5000}',
+    type: 'fetchUrl' as const,
+    builtIn: false,
   },
 ] as const
 

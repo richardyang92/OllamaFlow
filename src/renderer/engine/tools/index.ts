@@ -424,6 +424,8 @@ async function executeHttpRequest(
     let method = (config.method as string) || 'GET'
     let headers = (config.headers as Record<string, string>) || {}
     let body = config.body as string | undefined
+    let parseContent = config.parseContent !== false // Default true
+    let maxContentLength = (config.maxContentLength as number) || 5000
 
     if (typeof actionInput === 'object') {
       url = (actionInput.url as string) || ''
@@ -431,6 +433,7 @@ async function executeHttpRequest(
       if (actionInput.method) method = actionInput.method as string
       if (actionInput.headers) headers = { ...headers, ...(actionInput.headers as Record<string, string>) }
       if (actionInput.body) body = actionInput.body as string
+      if (actionInput.parseContent !== undefined) parseContent = actionInput.parseContent as boolean
     } else {
       // Try to parse as JSON first, then use as raw URL
       try {
@@ -463,9 +466,42 @@ async function executeHttpRequest(
       }
     }
 
+    // Check if we should parse HTML content
+    if (parseContent && result.body) {
+      const isHtml = await window.electronAPI.webParser.isHtml(result.body)
+      if (isHtml) {
+        const parsed = await window.electronAPI.webParser.parseHtml(result.body, url, {
+          maxContentLength,
+          includeLinks: true,
+          outputFormat: 'markdown',
+        })
+
+        if (parsed.error) {
+          // Parsing failed, return truncated raw content
+          return {
+            success: result.success,
+            output: result.body.length > maxContentLength
+              ? result.body.slice(0, maxContentLength) + '\n...[内容已截断]'
+              : result.body,
+            error: result.success ? undefined : `HTTP ${result.status}: ${result.statusText}`,
+          }
+        }
+
+        // Format parsed content for LLM
+        const formattedContent = formatParsedContent(parsed, maxContentLength)
+        return {
+          success: result.success,
+          output: formattedContent,
+          error: result.success ? undefined : `HTTP ${result.status}: ${result.statusText}`,
+        }
+      }
+    }
+
     return {
       success: result.success,
-      output: result.body,
+      output: result.body.length > maxContentLength && parseContent
+        ? result.body.slice(0, maxContentLength) + '\n...[内容已截断]'
+        : result.body,
       error: result.success
         ? undefined
         : `HTTP ${result.status}: ${result.statusText}`,
@@ -477,6 +513,39 @@ async function executeHttpRequest(
       error: `HTTP 请求错误: ${(error as Error).message}`,
     }
   }
+}
+
+// Helper to format parsed content
+function formatParsedContent(
+  parsed: { title: string; mainContent: string; textContent: string; links: Array<{ text: string; href: string }> },
+  maxLength: number
+): string {
+  const parts: string[] = []
+
+  // Add title
+  if (parsed.title) {
+    parts.push(`# ${parsed.title}\n`)
+  }
+
+  // Add main content (truncated if needed)
+  let content = parsed.mainContent || parsed.textContent
+  if (content.length > maxLength) {
+    content = content.slice(0, maxLength) + '\n...[内容已截断]'
+  }
+  parts.push(content)
+
+  // Add links summary if available
+  if (parsed.links && parsed.links.length > 0) {
+    parts.push('\n\n## 相关链接')
+    parsed.links.slice(0, 10).forEach(link => {
+      parts.push(`- [${link.text}](${link.href})`)
+    })
+    if (parsed.links.length > 10) {
+      parts.push(`- ...还有 ${parsed.links.length - 10} 个链接`)
+    }
+  }
+
+  return parts.join('\n')
 }
 
 // Execute browser tool
@@ -744,6 +813,230 @@ async function executePythonCode(
   }
 }
 
+// Execute web search using SimpleXNG
+async function executeWebSearch(
+  actionInput: string | Record<string, unknown>,
+  config: Record<string, unknown>
+): Promise<ToolResult> {
+  try {
+    // Parse input parameters
+    let query: string
+    let maxResults = 5
+    let engines: string[] = []
+    let timeRange: string | undefined
+
+    if (typeof actionInput === 'object') {
+      query = (actionInput.query as string) || ''
+      maxResults = (actionInput.maxResults as number) || 5
+      engines = (actionInput.engines as string[]) || []
+      timeRange = actionInput.timeRange as string | undefined
+    } else {
+      try {
+        const parsed = JSON.parse(actionInput)
+        query = parsed.query || ''
+        maxResults = parsed.maxResults || 5
+        engines = parsed.engines || []
+        timeRange = parsed.timeRange
+      } catch {
+        // Use input as query directly
+        query = actionInput
+      }
+    }
+
+    if (!query.trim()) {
+      return { success: false, output: '', error: '搜索关键词不能为空' }
+    }
+
+    // Get SimpleXNG endpoint from config, or from IPC settings, or use default
+    let baseUrl = config.endpoint as string | undefined
+    if (!baseUrl) {
+      try {
+        baseUrl = await window.electronAPI.simplexng.getEndpoint()
+        console.log('[webSearch] Loaded endpoint from settings:', baseUrl)
+      } catch (error) {
+        console.warn('[webSearch] Failed to load endpoint from settings:', error)
+      }
+    }
+    baseUrl = baseUrl || 'http://localhost:8888'
+    console.log('[webSearch] Using endpoint:', baseUrl, 'for query:', query)
+
+    // Build search URL
+    const searchUrl = new URL(`${baseUrl}/search`)
+    searchUrl.searchParams.set('q', query)
+    searchUrl.searchParams.set('format', 'json')
+
+    if (engines.length > 0) {
+      searchUrl.searchParams.set('engines', engines.join(','))
+    }
+    if (timeRange) {
+      searchUrl.searchParams.set('time_range', timeRange)
+    }
+
+    const timeout = (config.timeout as number) || 30000
+
+    // Execute search request via main process
+    const result = await window.electronAPI.http.fetch({
+      url: searchUrl.toString(),
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+      timeout,
+    })
+
+    if (!result.success) {
+      return {
+        success: false,
+        output: '',
+        error: `搜索请求失败: ${result.error || `HTTP ${result.status}`}`,
+      }
+    }
+
+    // Parse response
+    interface SearchResult {
+      url: string
+      title: string
+      snippet?: string
+      content?: string
+      engine?: string
+      engines?: string[]
+      score?: number
+    }
+
+    let response: { results: SearchResult[] }
+
+    try {
+      response = JSON.parse(result.body)
+    } catch {
+      return {
+        success: false,
+        output: '',
+        error: '无法解析搜索结果',
+      }
+    }
+
+    if (!response.results || response.results.length === 0) {
+      return {
+        success: true,
+        output: `未找到与 "${query}" 相关的搜索结果`,
+      }
+    }
+
+    // Format and limit results
+    const limitedResults = response.results.slice(0, Math.min(maxResults, 10))
+
+    const lines: string[] = []
+    lines.push(`搜索关键词: "${query}"`)
+    lines.push(`找到 ${limitedResults.length} 条结果:\n`)
+
+    limitedResults.forEach((item, index) => {
+      lines.push(`## 结果 ${index + 1}`)
+      lines.push(`**标题**: ${item.title}`)
+      lines.push(`**链接**: ${item.url}`)
+
+      if (item.snippet) {
+        lines.push(`**摘要**: ${item.snippet}`)
+      }
+
+      if (item.content && item.content !== item.snippet) {
+        // Truncate long content
+        const content = item.content.length > 500 ? item.content.substring(0, 500) + '...' : item.content
+        lines.push(`**内容**: ${content}`)
+      }
+
+      if (item.engines && item.engines.length > 0) {
+        lines.push(`**来源引擎**: ${item.engines.join(', ')}`)
+      }
+
+      lines.push('') // Empty line between results
+    })
+
+    return {
+      success: true,
+      output: lines.join('\n'),
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      error: `网页搜索错误: ${(error as Error).message}`,
+    }
+  }
+}
+
+// Execute fetch URL tool - fetch and parse web content
+async function executeFetchUrl(
+  actionInput: string | Record<string, unknown>,
+  config: Record<string, unknown>
+): Promise<ToolResult> {
+  try {
+    // Parse input parameters
+    let url: string
+    let maxContentLength = (config.maxContentLength as number) || 5000
+    let timeout = (config.timeout as number) || 30000
+    let outputFormat: 'markdown' | 'text' = 'markdown'
+
+    if (typeof actionInput === 'object') {
+      url = (actionInput.url as string) || ''
+      maxContentLength = (actionInput.maxContentLength as number) || maxContentLength
+      timeout = (actionInput.timeout as number) || timeout
+      if (actionInput.outputFormat) outputFormat = actionInput.outputFormat as 'markdown' | 'text'
+    } else {
+      try {
+        const parsed = JSON.parse(actionInput)
+        url = parsed.url || ''
+        maxContentLength = parsed.maxContentLength || maxContentLength
+        timeout = parsed.timeout || timeout
+        if (parsed.outputFormat) outputFormat = parsed.outputFormat
+      } catch {
+        // Use input as URL directly
+        url = actionInput
+      }
+    }
+
+    if (!url.trim()) {
+      return { success: false, output: '', error: 'URL 不能为空' }
+    }
+
+    // Validate URL
+    try {
+      new URL(url)
+    } catch {
+      return { success: false, output: '', error: '无效的 URL 格式' }
+    }
+
+    // Use main process to fetch and parse
+    const result = await window.electronAPI.webParser.fetchAndParse(url, {
+      maxContentLength,
+      includeLinks: true,
+      outputFormat,
+      timeout,
+    })
+
+    if (result.error) {
+      return {
+        success: false,
+        output: '',
+        error: `获取网页失败: ${result.error}`,
+      }
+    }
+
+    // Format result for LLM
+    const formattedContent = formatParsedContent(result, maxContentLength)
+
+    return {
+      success: true,
+      output: formattedContent,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      error: `获取网页错误: ${(error as Error).message}`,
+    }
+  }
+}
+
 // Main tool execution function
 export async function executeTool(
   tool: ToolDefinition,
@@ -801,6 +1094,12 @@ export async function executeTool(
     case 'browser_evaluate':
     case 'browser_wait':
       return executeBrowserTool(tool.type, actionInput, workspacePath)
+
+    case 'webSearch':
+      return executeWebSearch(actionInput, tool.config)
+
+    case 'fetchUrl':
+      return executeFetchUrl(actionInput, tool.config)
 
     default:
       return { success: false, output: '', error: `未知工具类型: ${tool.type}` }

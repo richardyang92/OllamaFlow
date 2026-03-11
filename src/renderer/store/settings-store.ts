@@ -20,6 +20,9 @@ interface SettingsState {
   availableModels: ModelInfo[]
   isLoadingModels: boolean
 
+  // SimpleXNG 配置
+  simplexngEndpoint: string
+
   // Actions - Ollama 连接
   addConnection: (connection: OllamaConnection) => void
   updateConnection: (id: string, data: Partial<OllamaConnection>) => void
@@ -33,6 +36,10 @@ interface SettingsState {
   setGlobalAIConfig: (config: GlobalAIConfig, apiKey?: string) => Promise<void>
   clearGlobalAIConfig: () => Promise<void>
   fetchModels: () => Promise<ModelInfo[]>
+
+  // Actions - SimpleXNG 配置
+  loadSimpleXNGConfig: () => Promise<void>
+  setSimpleXNGEndpoint: (endpoint: string) => Promise<void>
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -52,6 +59,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   isGlobalAIEnabled: false,
   availableModels: [],
   isLoadingModels: false,
+
+  // SimpleXNG 配置状态
+  simplexngEndpoint: 'http://localhost:8888',
 
   // 现有 Actions
   addConnection: (connection) => {
@@ -180,6 +190,28 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       return []
     } finally {
       set({ isLoadingModels: false })
+    }
+  },
+
+  // SimpleXNG 配置 Actions
+  loadSimpleXNGConfig: async () => {
+    try {
+      const endpoint = await window.electronAPI.simplexng.getEndpoint()
+      if (endpoint) {
+        set({ simplexngEndpoint: endpoint })
+      }
+    } catch (error) {
+      console.error('[SettingsStore] Failed to load SimpleXNG config:', error)
+    }
+  },
+
+  setSimpleXNGEndpoint: async (endpoint: string) => {
+    try {
+      await window.electronAPI.simplexng.setEndpoint(endpoint)
+      set({ simplexngEndpoint: endpoint })
+    } catch (error) {
+      console.error('[SettingsStore] Failed to save SimpleXNG endpoint:', error)
+      throw error
     }
   },
 }))

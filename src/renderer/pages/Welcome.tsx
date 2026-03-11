@@ -8,6 +8,7 @@ import {
   DashboardHeader,
   WorkspaceCard,
   NewWorkspaceCard,
+  AddWorkspaceCard,
   WorkspaceGrid,
   AgentFloatingButton,
 } from '@/components/dashboard'
@@ -171,6 +172,7 @@ export default function WelcomePage() {
     useWorkspaceStore()
   const { setWorkflow, syncEdgeAnimation } = useWorkflowStore()
   const [isLoading, setIsLoading] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
   const [deleteConfirmWorkspace, setDeleteConfirmWorkspace] = useState<{ path: string; name: string } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [executionStatuses, setExecutionStatuses] = useState<Record<string, {
@@ -202,6 +204,120 @@ export default function WelcomePage() {
 
   const handleNewProject = () => {
     setCurrentPage('wizard')
+  }
+
+  const handleAddWorkspace = async () => {
+    setIsLoading(true)
+    
+    try {
+      const selectedPath = await window.electronAPI.workspace.open()
+      if (!selectedPath) {
+        setIsLoading(false)
+        return
+      }
+
+      const config = await window.electronAPI.workspace.readConfig(selectedPath)
+      if (config) {
+        await window.electronAPI.recent.add(selectedPath, config.name, config.description)
+        setCurrentWorkspace(selectedPath, config)
+        
+        useExecutionStore.getState().switchWorkspaceContext(selectedPath)
+
+        const workflow = await window.electronAPI.workspace.readWorkflow(selectedPath)
+        if (workflow) {
+          setWorkflow(workflow as any)
+
+          const executionStore = useExecutionStore.getState()
+          const status = executionStore.getExecutionStatusForWorkspace(selectedPath)
+          const nodeResults = executionStore.getNodeResultsForWorkspace(selectedPath)
+          if (status === 'running' && nodeResults) {
+            const runningNodeIds: string[] = []
+            nodeResults.forEach((result, nodeId) => {
+              if (result.status === 'running') {
+                runningNodeIds.push(nodeId)
+              }
+            })
+            if (runningNodeIds.length > 0) {
+              syncEdgeAnimation(runningNodeIds)
+            }
+          }
+        } else {
+          setWorkflow(createEmptyWorkflow(config.name))
+        }
+
+        const updatedRecentWorkspaces = await window.electronAPI.recent.get()
+        setRecentWorkspaces(updatedRecentWorkspaces)
+      } else {
+        alert('该目录不是有效的 OllamaFlow 工作区\n\n请选择包含 .ollamaflow/config.json 的目录，或创建新项目')
+      }
+    } catch (error) {
+      console.error('打开工作区失败:', error)
+      alert('打开工作区失败')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleImportFile = async () => {
+    if (isImporting) return
+
+    setIsImporting(true)
+    try {
+      const content = await window.electronAPI.workflow.import()
+      if (!content) return
+
+      const importedData = JSON.parse(content)
+      const { metadata, nodes, edges, viewport } = importedData
+
+      const baseName = metadata?.name || 'Imported Workflow'
+      const defaultPath = await window.electronAPI.workspace.getDefaultProjectsPath()
+
+      let workspaceName = baseName
+      let counter = 1
+      while (await window.electronAPI.workspace.exists(`${defaultPath}/${workspaceName}`)) {
+        workspaceName = `${baseName} (${counter})`
+        counter++
+      }
+      const workspacePath = `${defaultPath}/${workspaceName}`
+
+      const result = await window.electronAPI.workspace.init(workspacePath, {
+        name: workspaceName,
+        description: metadata?.description || '',
+        apiEndpoint: 'http://localhost:11434',
+        defaultModel: '',
+        initialWorkflow: {
+          metadata: {
+            id: window.crypto.randomUUID(),
+            name: workspaceName,
+            createdAt: metadata?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            version: metadata?.version || '1.0.0',
+          },
+          nodes,
+          edges,
+          viewport: viewport || { x: 0, y: 0, zoom: 1 },
+        },
+      })
+
+      if (!result) {
+        alert('创建工作区失败')
+        return
+      }
+
+      await window.electronAPI.recent.add(workspacePath, result.config.name, result.config.description)
+      setCurrentWorkspace(workspacePath, result.config)
+      useExecutionStore.getState().switchWorkspaceContext(workspacePath)
+      setWorkflow(result.workflow as any)
+
+      const updatedRecentWorkspaces = await window.electronAPI.recent.get()
+      setRecentWorkspaces(updatedRecentWorkspaces)
+
+    } catch (error) {
+      console.error('从文件导入失败:', error)
+      alert('导入失败：无效的工作流文件')
+    } finally {
+      setIsImporting(false)
+    }
   }
 
   const handleOpenRecent = async (path: string) => {
@@ -305,6 +421,12 @@ export default function WelcomePage() {
             isLoading={isLoading}
           />
         ))}
+        <AddWorkspaceCard 
+          onOpenFolder={handleAddWorkspace} 
+          onImportFile={handleImportFile}
+          isLoading={isLoading}
+          isImporting={isImporting}
+        />
         <NewWorkspaceCard onClick={handleNewProject} isLoading={isLoading} />
       </WorkspaceGrid>
 

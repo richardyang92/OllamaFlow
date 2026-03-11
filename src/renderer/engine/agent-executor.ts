@@ -24,9 +24,11 @@ import { OpenAIClient, type OpenAIMessage, type OpenAITool, type OpenAIToolCall 
 import type { TodoItem, ReActStep } from '@/types/node'
 import {
   compressOpenAIContext,
+  compressOpenAIContextWithLLM,
   getContextConfig,
   estimateMessageTokens,
   type GenericMessage,
+  type HybridCompressionOptions,
 } from './react-agent/context-compressor'
 import { analyzeToolDependencies } from './utils/tool-dependencies'
 
@@ -223,7 +225,7 @@ export class IntelligentAgentExecutor {
         this.callbacks.onStepStart?.(thinkingStep)
 
         // 上下文压缩：检查并在需要时压缩消息历史
-        const compressedMessages = this.compressMessagesIfNeeded(messages)
+        const compressedMessages = await this.compressMessagesIfNeeded(messages)
 
         // 调用LLM（流式）- 统一使用 OpenAI 兼容 API
         const response = await this.callOpenAIStream(compressedMessages)
@@ -581,11 +583,18 @@ export class IntelligentAgentExecutor {
    * 构建系统提示
    */
   private buildSystemPrompt(): string {
+    const now = new Date()
+    const currentDate = now.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
+    const currentTime = now.toLocaleTimeString('zh-CN')
+    const currentTimeInfo = `${currentDate} ${currentTime}`
+
     const workflowDescriptions = this.config.workflows
       .map((w, i) => `${i + 1}. **${w.name}**: ${w.description || '无描述'} (路径: ${w.workspacePath})`)
       .join('\n')
 
     return `你是一个智能助手，可以帮助用户完成各种任务。
+
+**当前时间**: ${currentTimeInfo}
 
 你可以访问以下工作流（子智能体）：
 
@@ -1604,8 +1613,9 @@ ${truncatedSource}
   /**
    * 压缩消息历史（如果需要）
    * 根据模型配置自动压缩过长的上下文
+   * 支持 LLM 驱动的语义压缩
    */
-  private compressMessagesIfNeeded(messages: OpenAIMessage[]): OpenAIMessage[] {
+  private async compressMessagesIfNeeded(messages: OpenAIMessage[]): Promise<OpenAIMessage[]> {
     // 获取模型的上下文配置
     const contextConfig = getContextConfig(this.config.model)
     const maxTokens = contextConfig.maxContextTokens - contextConfig.reserveTokens
@@ -1620,20 +1630,43 @@ ${truncatedSource}
       return messages
     }
 
-    // 执行压缩 - 统一使用 OpenAI 格式压缩
+    // 执行压缩 - 使用异步 LLM 压缩（如果启用）
     log(`触发上下文压缩: ${currentTokens} > ${maxTokens}`)
 
-    const result = compressOpenAIContext(messages, maxTokens, {
+    // 构建 LLM 压缩选项
+    const compressionOptions: HybridCompressionOptions = {
       keepRecentIterations: contextConfig.keepRecentIterations,
       maxObservationLength: contextConfig.maxObservationLength,
       enableSummarization: contextConfig.enableSummarization,
-    })
-
-    log(`压缩完成: ${result.originalTokens} -> ${result.newTokens} tokens (${Math.round(result.compressionRatio * 100)}%)`)
-    if (result.summary) {
-      log(`压缩摘要: ${result.summary}`)
+      enableLLMCompression: contextConfig.enableLLMCompression ?? true, // 默认启用 LLM 压缩
+      llmOptions: {
+        model: this.config.model,
+        apiEndpoint: this.config.apiEndpoint || '',
+        apiKey: this.config.apiKey,
+        provider: this.config.provider,
+      },
     }
 
-    return result.messages
+    try {
+      const result = await compressOpenAIContextWithLLM(messages, maxTokens, compressionOptions)
+
+      log(`压缩完成: ${result.originalTokens} -> ${result.newTokens} tokens (${Math.round(result.compressionRatio * 100)}%)`)
+      if (result.summary) {
+        log(`压缩摘要: ${result.summary}`)
+      }
+
+      return result.messages
+    } catch (error) {
+      // LLM 压缩失败，降级到规则压缩
+      log(`LLM 压缩失败，降级到规则压缩: ${error}`)
+
+      const result = compressOpenAIContext(messages, maxTokens, {
+        keepRecentIterations: contextConfig.keepRecentIterations,
+        maxObservationLength: contextConfig.maxObservationLength,
+        enableSummarization: contextConfig.enableSummarization,
+      })
+
+      return result.messages
+    }
   }
 }

@@ -1262,3 +1262,90 @@ ipcMain.handle('globalAI:testConnection', async (_, config: { apiEndpoint: strin
     return { success: false, error: (error as Error).message }
   }
 })
+
+// ==================== SimpleXNG Config ====================
+
+// SimpleXNG: Get endpoint
+ipcMain.handle('simplexng:getEndpoint', async () => {
+  const s = await getStore()
+  return s.get('simplexng-endpoint', 'http://localhost:8888') as string
+})
+
+// SimpleXNG: Set endpoint
+ipcMain.handle('simplexng:setEndpoint', async (_, endpoint: string) => {
+  const s = await getStore()
+  s.set('simplexng-endpoint', endpoint)
+  return true
+})
+
+// ============================================
+// Web Parser IPC Handlers
+// ============================================
+
+import { parseHtmlContent, isHtmlContent } from './web-parser'
+
+interface WebParserOptions {
+  maxContentLength?: number
+  includeLinks?: boolean
+  outputFormat?: 'markdown' | 'text'
+}
+
+// Web Parser: Parse HTML content
+ipcMain.handle('webParser:parseHtml', async (_, html: string, baseUrl?: string, options?: WebParserOptions) => {
+  try {
+    return parseHtmlContent(html, baseUrl, options)
+  } catch (error) {
+    return {
+      title: '',
+      mainContent: '',
+      textContent: '',
+      links: [],
+      error: `解析失败: ${error instanceof Error ? error.message : String(error)}`,
+    }
+  }
+})
+
+// Web Parser: Fetch URL and parse
+ipcMain.handle('webParser:fetchAndParse', async (_, url: string, options?: WebParserOptions & { timeout?: number }) => {
+  try {
+    const timeout = options?.timeout || 30000
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; OllamaFlowBot/1.0)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      return {
+        title: '',
+        mainContent: '',
+        textContent: '',
+        links: [],
+        error: `HTTP ${response.status}: ${response.statusText}`,
+      }
+    }
+
+    const html = await response.text()
+    return parseHtmlContent(html, url, options)
+  } catch (error) {
+    return {
+      title: '',
+      mainContent: '',
+      textContent: '',
+      links: [],
+      error: `获取失败: ${error instanceof Error ? error.message : String(error)}`,
+    }
+  }
+})
+
+// Web Parser: Check if content is HTML
+ipcMain.handle('webParser:isHtml', async (_, content: string) => {
+  return isHtmlContent(content)
+})

@@ -1,5 +1,6 @@
 export { DashboardHeader } from './DashboardHeader'
 export { WorkspaceCard } from './WorkspaceCard'
 export { NewWorkspaceCard } from './NewWorkspaceCard'
+export { AddWorkspaceCard } from './AddWorkspaceCard'
 export { WorkspaceGrid } from './WorkspaceGrid'
 export { AgentFloatingButton } from './AgentFloatingButton'

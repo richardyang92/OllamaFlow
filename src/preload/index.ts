@@ -526,6 +526,46 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('fileWatcher:changed', handler)
     },
   },
+
+  // SimpleXNG Config
+  simplexng: {
+    getEndpoint: (): Promise<string> =>
+      ipcRenderer.invoke('simplexng:getEndpoint'),
+
+    setEndpoint: (endpoint: string): Promise<boolean> =>
+      ipcRenderer.invoke('simplexng:setEndpoint', endpoint),
+  },
+
+  // Web Content Parser
+  webParser: {
+    parseHtml: (html: string, baseUrl?: string, options?: {
+      maxContentLength?: number
+      includeLinks?: boolean
+      outputFormat?: 'markdown' | 'text'
+    }): Promise<{
+      title: string
+      mainContent: string
+      textContent: string
+      links: Array<{ text: string; href: string }>
+      error?: string
+    }> => ipcRenderer.invoke('webParser:parseHtml', html, baseUrl, options),
+
+    fetchAndParse: (url: string, options?: {
+      maxContentLength?: number
+      includeLinks?: boolean
+      outputFormat?: 'markdown' | 'text'
+      timeout?: number
+    }): Promise<{
+      title: string
+      mainContent: string
+      textContent: string
+      links: Array<{ text: string; href: string }>
+      error?: string
+    }> => ipcRenderer.invoke('webParser:fetchAndParse', url, options),
+
+    isHtml: (content: string): Promise<boolean> =>
+      ipcRenderer.invoke('webParser:isHtml', content),
+  },
 })
 
 // Type declaration for window.electronAPI
@@ -692,6 +732,36 @@ declare global {
         start: (workspacePath: string) => Promise<{ success: boolean; message?: string; error?: string }>
         stop: (workspacePath: string) => Promise<{ success: boolean; message?: string }>
         onChanged: (callback: (data: { workspacePath: string; eventType: string; filename: string }) => void) => () => void
+      }
+      simplexng: {
+        getEndpoint: () => Promise<string>
+        setEndpoint: (endpoint: string) => Promise<boolean>
+      }
+      webParser: {
+        parseHtml: (html: string, baseUrl?: string, options?: {
+          maxContentLength?: number
+          includeLinks?: boolean
+          outputFormat?: 'markdown' | 'text'
+        }) => Promise<{
+          title: string
+          mainContent: string
+          textContent: string
+          links: Array<{ text: string; href: string }>
+          error?: string
+        }>
+        fetchAndParse: (url: string, options?: {
+          maxContentLength?: number
+          includeLinks?: boolean
+          outputFormat?: 'markdown' | 'text'
+          timeout?: number
+        }) => Promise<{
+          title: string
+          mainContent: string
+          textContent: string
+          links: Array<{ text: string; href: string }>
+          error?: string
+        }>
+        isHtml: (content: string) => Promise<boolean>
       }
     }
   }

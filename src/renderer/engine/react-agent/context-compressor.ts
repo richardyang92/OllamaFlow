@@ -1,13 +1,12 @@
 /**
  * Context Compressor for ReAct Agent
  * Automatically compresses message history when approaching context length limits
+ * Supports both rule-based and LLM-driven compression
  */
 
 import type { OpenAIMessage } from '../openai-client'
+import { LLMCompressor, type LLMCompressionOptions } from './llm-compressor'
 
-/**
- * Generic message type that works with OpenAI-compatible API format
- */
 export type GenericMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string | null
@@ -23,9 +22,6 @@ export type GenericMessage = {
   reasoning_content?: string
 }
 
-/**
- * Convert OpenAIMessage to GenericMessage
- */
 export function openaiToGeneric(messages: OpenAIMessage[]): GenericMessage[] {
   return messages.map(msg => ({
     role: msg.role,
@@ -43,9 +39,6 @@ export function openaiToGeneric(messages: OpenAIMessage[]): GenericMessage[] {
   }))
 }
 
-/**
- * Convert GenericMessage back to OpenAIMessage
- */
 export function genericToOpenai(messages: GenericMessage[]): OpenAIMessage[] {
   return messages.map(msg => ({
     role: msg.role,
@@ -56,40 +49,20 @@ export function genericToOpenai(messages: GenericMessage[]): OpenAIMessage[] {
   })) as OpenAIMessage[]
 }
 
-/**
- * Estimate token count for a message
- * This is a rough estimation: ~4 characters per token for Chinese/English mixed content
- */
 function estimateTokens(text: string): number {
-  // More accurate estimation considering:
-  // - Chinese characters: ~1.5 tokens each
-  // - English words: ~1.3 tokens per word (average 5 chars)
-  // - Whitespace and punctuation: varies
-
-  // Simple approximation: count Chinese chars separately
   const chineseChars = (text.match(/[\u4e00-\u9fff]/g) || []).length
   const otherChars = text.length - chineseChars
-
-  // Chinese: ~1.5 tokens/char, Other: ~0.25 tokens/char (4 chars per token)
   return Math.ceil(chineseChars * 1.5 + otherChars * 0.25)
 }
 
-/**
- * Estimate total tokens in message array
- */
 export function estimateMessageTokens(messages: GenericMessage[] | OpenAIMessage[]): number {
   let total = 0
 
   for (const msg of messages) {
-    // Role and formatting overhead (~4 tokens per message)
     total += 4
-
-    // Content
     if (typeof msg.content === 'string') {
       total += estimateTokens(msg.content)
     }
-
-    // Tool calls
     if (msg.tool_calls) {
       for (const tc of msg.tool_calls) {
         total += estimateTokens(tc.function.name)
@@ -99,13 +72,9 @@ export function estimateMessageTokens(messages: GenericMessage[] | OpenAIMessage
         total += estimateTokens(args)
       }
     }
-
-    // Reasoning content (for DeepSeek)
     if ('reasoning_content' in msg && msg.reasoning_content) {
       total += estimateTokens(msg.reasoning_content)
     }
-
-    // Tool call ID
     if ('tool_call_id' in msg && msg.tool_call_id) {
       total += 2
     }
@@ -114,9 +83,6 @@ export function estimateMessageTokens(messages: GenericMessage[] | OpenAIMessage
   return total
 }
 
-/**
- * Compression result
- */
 export interface CompressionResult<T = GenericMessage> {
   messages: T[]
   compressed: boolean
@@ -126,59 +92,79 @@ export interface CompressionResult<T = GenericMessage> {
   summary?: string
 }
 
+export interface ContextConfig {
+  maxContextTokens: number
+  reserveTokens: number
+  keepRecentIterations: number
+  maxObservationLength: number
+  enableSummarization: boolean
+  preserveErrors?: boolean
+  preserveMilestones?: boolean
+  maxErrorLength?: number
+  // LLM compression options
+  enableLLMCompression?: boolean
+}
 
-/**
- * Extract and compress a group of messages (thought-action-observation cycle)
- * Returns a summary message
- */
+// Extended compression options including LLM config
+export interface HybridCompressionOptions {
+  keepRecentIterations?: number
+  maxObservationLength?: number
+  enableSummarization?: boolean
+  preserveErrors?: boolean
+  // LLM compression
+  enableLLMCompression?: boolean
+  llmOptions?: LLMCompressionOptions
+}
+
+function isErrorObservation(content: string): boolean {
+  const errorIndicators = ['错误:', '失败', 'Error', 'error', 'exception', 'Exception', 'EXCEPTION', '失败:', 'timeout', '超时']
+  return errorIndicators.some(indicator => content.includes(indicator))
+}
+
 function compressStepGroup(
   assistantMsg: GenericMessage,
-  toolMsgs: GenericMessage[]
-): { summary: string; success: boolean } {
+  toolMsgs: GenericMessage[],
+  preserveErrors: boolean = true
+): { summary: string; success: boolean; hasError: boolean } {
   const thought = (assistantMsg.content as string) || ''
   const actions: string[] = []
   const observations: string[] = []
   let allSuccess = true
+  let hasError = false
 
-  // Extract actions from tool calls
   if (assistantMsg.tool_calls) {
     for (const tc of assistantMsg.tool_calls) {
       actions.push(`${tc.function.name}(${tc.function.arguments.slice(0, 100)}...)`)
     }
   }
 
-  // Extract observations from tool responses
   for (const toolMsg of toolMsgs) {
     const content = (toolMsg.content as string) || ''
-    const isError = content.includes('错误:') || content.includes('失败') || content.includes('Error')
-    if (isError) allSuccess = false
+    const isError = isErrorObservation(content)
+    if (isError) {
+      allSuccess = false
+      hasError = true
+    }
 
-    // Truncate long observations
-    const truncatedObs = content.length > 200
-      ? content.slice(0, 200) + '...'
-      : content
-    observations.push(truncatedObs)
+    if (preserveErrors && isError) {
+      observations.push(`[ERROR] ${content}`)
+    } else {
+      const truncatedObs = content.length > 200
+        ? content.slice(0, 200) + '...'
+        : content
+      observations.push(isError ? `[ERROR] ${truncatedObs}` : truncatedObs)
+    }
   }
 
-  // Create summary
   const summary = `[已压缩步骤]
 思考: ${thought.slice(0, 150)}${thought.length > 150 ? '...' : ''}
 行动: ${actions.join('; ')}
 观察: ${observations.join('; ')}
 结果: ${allSuccess ? '成功' : '失败'}`
 
-  return { summary, success: allSuccess }
+  return { summary, success: allSuccess, hasError }
 }
 
-/**
- * Compress message history to fit within token limit
- *
- * Strategy:
- * 1. Keep system message and recent user message
- * 2. Keep last N iterations (configurable)
- * 3. Compress middle iterations into summaries
- * 4. Truncate very long observations
- */
 export function compressContext(
   messages: GenericMessage[],
   maxTokens: number,
@@ -186,17 +172,18 @@ export function compressContext(
     keepRecentIterations?: number
     maxObservationLength?: number
     enableSummarization?: boolean
+    preserveErrors?: boolean
   } = {}
 ): CompressionResult<GenericMessage> {
   const {
     keepRecentIterations = 3,
     maxObservationLength = 1000,
-    enableSummarization = true
+    enableSummarization = true,
+    preserveErrors = true
   } = options
 
   const originalTokens = estimateMessageTokens(messages)
 
-  // If under limit, no compression needed
   if (originalTokens <= maxTokens) {
     return {
       messages,
@@ -207,18 +194,15 @@ export function compressContext(
     }
   }
 
-  // Separate messages by type
   const systemMessages = messages.filter(m => m.role === 'system')
   const conversationMessages = messages.filter(m => m.role !== 'system')
 
-  // Identify iteration boundaries (assistant + tool responses)
   const iterations: Array<{ assistant: GenericMessage; tools: GenericMessage[] }> = []
   let currentIteration: { assistant: GenericMessage | null; tools: GenericMessage[] } = { assistant: null, tools: [] }
   let userMessages: GenericMessage[] = []
 
   for (const msg of conversationMessages) {
     if (msg.role === 'user') {
-      // If we have a completed iteration, save it
       if (currentIteration.assistant) {
         iterations.push({
           assistant: currentIteration.assistant,
@@ -228,7 +212,6 @@ export function compressContext(
       }
       userMessages.push(msg)
     } else if (msg.role === 'assistant') {
-      // If we have a previous assistant message, save that iteration
       if (currentIteration.assistant) {
         iterations.push({
           assistant: currentIteration.assistant,
@@ -244,7 +227,6 @@ export function compressContext(
     }
   }
 
-  // Don't forget the last iteration
   if (currentIteration.assistant) {
     iterations.push({
       assistant: currentIteration.assistant,
@@ -252,9 +234,7 @@ export function compressContext(
     })
   }
 
-  // If no iterations, just return truncated messages
   if (iterations.length === 0) {
-    // Truncate long content in messages
     const truncatedMessages = messages.map(msg => {
       if (typeof msg.content === 'string' && msg.content.length > maxObservationLength) {
         return {
@@ -275,24 +255,20 @@ export function compressContext(
     }
   }
 
-  // Determine which iterations to keep and which to compress
   const recentIterations = iterations.slice(-keepRecentIterations)
   const oldIterations = iterations.slice(0, -keepRecentIterations)
 
-  // Build new message array
   const newMessages: GenericMessage[] = [...systemMessages]
 
-  // Add first user message if exists
   if (userMessages.length > 0) {
     newMessages.push(userMessages[0])
   }
 
-  // Compress old iterations into a summary
   if (oldIterations.length > 0 && enableSummarization) {
     const compressedSteps: string[] = []
 
     for (const iter of oldIterations) {
-      const { summary } = compressStepGroup(iter.assistant, iter.tools)
+      const { summary } = compressStepGroup(iter.assistant, iter.tools, preserveErrors)
       compressedSteps.push(summary)
     }
 
@@ -308,12 +284,16 @@ ${compressedSteps.join('\n\n')}
     newMessages.push(compressionSummary)
   }
 
-  // Add recent iterations (with truncated observations)
   for (const iter of recentIterations) {
     newMessages.push(iter.assistant)
 
     for (const toolMsg of iter.tools) {
-      if (typeof toolMsg.content === 'string' && toolMsg.content.length > maxObservationLength) {
+      const content = (toolMsg.content as string) || ''
+      const isError = isErrorObservation(content)
+      
+      if (preserveErrors && isError) {
+        newMessages.push(toolMsg)
+      } else if (typeof toolMsg.content === 'string' && toolMsg.content.length > maxObservationLength) {
         newMessages.push({
           ...toolMsg,
           content: toolMsg.content.slice(0, maxObservationLength) + '...[已截断]'
@@ -324,7 +304,6 @@ ${compressedSteps.join('\n\n')}
     }
   }
 
-  // Add remaining user messages (except the first one which was already added)
   for (let i = 1; i < userMessages.length; i++) {
     newMessages.push(userMessages[i])
   }
@@ -341,9 +320,6 @@ ${compressedSteps.join('\n\n')}
   }
 }
 
-/**
- * Compress OpenAI messages (main export)
- */
 export function compressOpenAIContext(
   messages: OpenAIMessage[],
   maxTokens: number,
@@ -351,6 +327,7 @@ export function compressOpenAIContext(
     keepRecentIterations?: number
     maxObservationLength?: number
     enableSummarization?: boolean
+    preserveErrors?: boolean
   } = {}
 ): CompressionResult<OpenAIMessage> {
   const genericMessages = openaiToGeneric(messages)
@@ -361,14 +338,8 @@ export function compressOpenAIContext(
   }
 }
 
-/**
- * Compress Ollama messages (alias for compressOpenAIContext since Ollama uses OpenAI-compatible format)
- */
 export const compressOllamaContext = compressOpenAIContext
 
-/**
- * Truncate long tool observations in place
- */
 export function truncateObservations(
   messages: GenericMessage[],
   maxLength: number = 2000
@@ -384,93 +355,72 @@ export function truncateObservations(
   })
 }
 
-/**
- * Smart context management configuration
- */
-export interface ContextConfig {
-  /** Maximum tokens before compression triggers */
-  maxContextTokens: number
-  /** Reserve tokens for response generation */
-  reserveTokens: number
-  /** Number of recent iterations to keep uncompressed */
-  keepRecentIterations: number
-  /** Maximum length for single observation */
-  maxObservationLength: number
-  /** Enable compression into summaries */
-  enableSummarization: boolean
-}
-
-/**
- * Default context configuration for different models
- */
 export const DEFAULT_CONTEXT_CONFIGS: Record<string, ContextConfig> = {
-  // OpenAI models
   'gpt-4': {
-    maxContextTokens: 8000, // 8k context, reserve for response
+    maxContextTokens: 8000,
     reserveTokens: 1000,
     keepRecentIterations: 3,
     maxObservationLength: 1500,
     enableSummarization: true,
+    preserveErrors: true,
   },
   'gpt-4-turbo': {
-    maxContextTokens: 120000, // 128k context
+    maxContextTokens: 120000,
     reserveTokens: 4000,
     keepRecentIterations: 5,
     maxObservationLength: 2000,
     enableSummarization: true,
+    preserveErrors: true,
   },
   'gpt-4o': {
-    maxContextTokens: 120000, // 128k context
+    maxContextTokens: 120000,
     reserveTokens: 4000,
     keepRecentIterations: 5,
     maxObservationLength: 2000,
     enableSummarization: true,
+    preserveErrors: true,
   },
   'gpt-3.5-turbo': {
-    maxContextTokens: 4000, // 4k context (old model)
+    maxContextTokens: 4000,
     reserveTokens: 500,
     keepRecentIterations: 2,
     maxObservationLength: 1000,
     enableSummarization: true,
+    preserveErrors: true,
   },
-  // DeepSeek models
   'deepseek-chat': {
-    maxContextTokens: 60000, // 64k context
+    maxContextTokens: 60000,
     reserveTokens: 4000,
     keepRecentIterations: 5,
     maxObservationLength: 2000,
     enableSummarization: true,
+    preserveErrors: true,
   },
   'deepseek-reasoner': {
-    maxContextTokens: 60000, // 64k context
+    maxContextTokens: 60000,
     reserveTokens: 4000,
     keepRecentIterations: 4,
     maxObservationLength: 1500,
     enableSummarization: true,
+    preserveErrors: true,
   },
-  // Default for unknown models
   'default': {
-    maxContextTokens: 100000, // Safe default
+    maxContextTokens: 100000,
     reserveTokens: 4000,
     keepRecentIterations: 4,
     maxObservationLength: 1500,
     enableSummarization: true,
+    preserveErrors: true,
   }
 }
 
-/**
- * Get context configuration for a model
- */
 export function getContextConfig(model: string): ContextConfig {
-  // Normalize model name
   const normalizedModel = model.toLowerCase()
 
-  // Check for exact match first
   if (DEFAULT_CONTEXT_CONFIGS[normalizedModel]) {
     return DEFAULT_CONTEXT_CONFIGS[normalizedModel]
   }
 
-  // Check for partial matches
   for (const [key, config] of Object.entries(DEFAULT_CONTEXT_CONFIGS)) {
     if (normalizedModel.includes(key) || key.includes(normalizedModel.split('-')[0])) {
       return config
@@ -478,4 +428,217 @@ export function getContextConfig(model: string): ContextConfig {
   }
 
   return DEFAULT_CONTEXT_CONFIGS.default
+}
+
+/**
+ * Hybrid compression with LLM support
+ * Falls back to rule-based compression if LLM fails or is disabled
+ */
+export async function compressContextWithLLM(
+  messages: GenericMessage[],
+  maxTokens: number,
+  options: HybridCompressionOptions = {}
+): Promise<CompressionResult<GenericMessage>> {
+  const {
+    keepRecentIterations = 3,
+    maxObservationLength = 1000,
+    enableSummarization = true,
+    preserveErrors = true,
+    enableLLMCompression = false,
+    llmOptions
+  } = options
+
+  const originalTokens = estimateMessageTokens(messages)
+
+  // No compression needed
+  if (originalTokens <= maxTokens) {
+    return {
+      messages,
+      compressed: false,
+      originalTokens,
+      newTokens: originalTokens,
+      compressionRatio: 1,
+    }
+  }
+
+  // Extract iterations
+  const systemMessages = messages.filter(m => m.role === 'system')
+  const conversationMessages = messages.filter(m => m.role !== 'system')
+
+  const iterations: Array<{ assistant: GenericMessage; tools: GenericMessage[] }> = []
+  let currentIteration: { assistant: GenericMessage | null; tools: GenericMessage[] } = { assistant: null, tools: [] }
+  let userMessages: GenericMessage[] = []
+
+  for (const msg of conversationMessages) {
+    if (msg.role === 'user') {
+      if (currentIteration.assistant) {
+        iterations.push({
+          assistant: currentIteration.assistant,
+          tools: [...currentIteration.tools]
+        })
+        currentIteration = { assistant: null, tools: [] }
+      }
+      userMessages.push(msg)
+    } else if (msg.role === 'assistant') {
+      if (currentIteration.assistant) {
+        iterations.push({
+          assistant: currentIteration.assistant,
+          tools: [...currentIteration.tools]
+        })
+        currentIteration = { assistant: null, tools: [] }
+      }
+      currentIteration.assistant = msg
+    } else if (msg.role === 'tool') {
+      if (currentIteration.assistant) {
+        currentIteration.tools.push(msg)
+      }
+    }
+  }
+
+  if (currentIteration.assistant) {
+    iterations.push({
+      assistant: currentIteration.assistant,
+      tools: [...currentIteration.tools]
+    })
+  }
+
+  // No iterations to compress
+  if (iterations.length === 0) {
+    const truncatedMessages = messages.map(msg => {
+      if (typeof msg.content === 'string' && msg.content.length > maxObservationLength) {
+        return {
+          ...msg,
+          content: msg.content.slice(0, maxObservationLength) + '...[已截断]'
+        }
+      }
+      return msg
+    })
+
+    const newTokens = estimateMessageTokens(truncatedMessages)
+    return {
+      messages: truncatedMessages,
+      compressed: true,
+      originalTokens,
+      newTokens,
+      compressionRatio: newTokens / originalTokens,
+    }
+  }
+
+  const recentIterations = iterations.slice(-keepRecentIterations)
+  const oldIterations = iterations.slice(0, -keepRecentIterations)
+
+  const newMessages: GenericMessage[] = [...systemMessages]
+
+  if (userMessages.length > 0) {
+    newMessages.push(userMessages[0])
+  }
+
+  // Try LLM compression if enabled and we have old iterations
+  let compressionSummary: string | null = null
+  let usedLLM = false
+
+  if (oldIterations.length > 0 && enableSummarization) {
+    if (enableLLMCompression && llmOptions) {
+      try {
+        const compressor = new LLMCompressor(llmOptions)
+        const result = await compressor.compressIterations(oldIterations)
+
+        if (result.success && result.summary) {
+          compressionSummary = result.summary
+          usedLLM = true
+        } else {
+          // LLM failed, use rule-based fallback
+          compressionSummary = generateRuleBasedSummary(oldIterations, preserveErrors)
+        }
+      } catch (error) {
+        console.warn('[ContextCompressor] LLM compression failed, using rule-based:', error)
+        compressionSummary = generateRuleBasedSummary(oldIterations, preserveErrors)
+      }
+    } else {
+      // LLM not enabled, use rule-based
+      compressionSummary = generateRuleBasedSummary(oldIterations, preserveErrors)
+    }
+
+    if (compressionSummary) {
+      newMessages.push({
+        role: 'user',
+        content: `[上下文压缩摘要${usedLLM ? '（LLM生成）' : ''}]
+以下是之前 ${oldIterations.length} 个步骤的压缩摘要：
+
+${compressionSummary}
+
+请基于以上历史继续执行任务。`
+      })
+    }
+  }
+
+  // Add recent iterations (unchanged)
+  for (const iter of recentIterations) {
+    newMessages.push(iter.assistant)
+
+    for (const toolMsg of iter.tools) {
+      const content = (toolMsg.content as string) || ''
+      const isError = isErrorObservation(content)
+
+      if (preserveErrors && isError) {
+        newMessages.push(toolMsg)
+      } else if (typeof toolMsg.content === 'string' && toolMsg.content.length > maxObservationLength) {
+        newMessages.push({
+          ...toolMsg,
+          content: toolMsg.content.slice(0, maxObservationLength) + '...[已截断]'
+        })
+      } else {
+        newMessages.push(toolMsg)
+      }
+    }
+  }
+
+  // Add remaining user messages
+  for (let i = 1; i < userMessages.length; i++) {
+    newMessages.push(userMessages[i])
+  }
+
+  const newTokens = estimateMessageTokens(newMessages)
+
+  return {
+    messages: newMessages,
+    compressed: true,
+    originalTokens,
+    newTokens,
+    compressionRatio: newTokens / originalTokens,
+    summary: `压缩了 ${oldIterations.length} 个旧步骤，保留 ${recentIterations.length} 个最近步骤${usedLLM ? '（LLM压缩）' : ''}`,
+  }
+}
+
+/**
+ * Generate rule-based summary for iterations
+ */
+function generateRuleBasedSummary(
+  iterations: Array<{ assistant: GenericMessage; tools: GenericMessage[] }>,
+  preserveErrors: boolean
+): string {
+  const compressedSteps: string[] = []
+
+  for (const iter of iterations) {
+    const { summary } = compressStepGroup(iter.assistant, iter.tools, preserveErrors)
+    compressedSteps.push(summary)
+  }
+
+  return compressedSteps.join('\n\n')
+}
+
+/**
+ * Async hybrid compression for OpenAI messages
+ */
+export async function compressOpenAIContextWithLLM(
+  messages: OpenAIMessage[],
+  maxTokens: number,
+  options: HybridCompressionOptions = {}
+): Promise<CompressionResult<OpenAIMessage>> {
+  const genericMessages = openaiToGeneric(messages)
+  const result = await compressContextWithLLM(genericMessages, maxTokens, options)
+  return {
+    ...result,
+    messages: genericToOpenai(result.messages),
+  }
 }

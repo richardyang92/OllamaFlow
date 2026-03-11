@@ -4,6 +4,8 @@
  * Supports Function Calling for ReAct Agent
  */
 
+import { withRetry, RetryableError, type RetryConfig } from './react-agent/retry-handler'
+
 // OpenAI API Types
 export interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
@@ -91,35 +93,50 @@ export class OpenAIClient {
   /**
    * Non-streaming chat completion
    */
-  async chat(options: OpenAIChatOptions): Promise<OpenAIChatResponse> {
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({
-        model: options.model,
-        messages: options.messages,
-        temperature: options.temperature,
-        max_tokens: options.max_tokens,
-        stream: false,
-        tools: options.tools,
-      }),
-    })
+  async chat(
+    options: OpenAIChatOptions,
+    retryConfig?: Partial<RetryConfig>
+  ): Promise<OpenAIChatResponse> {
+    const executeRequest = async () => {
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          model: options.model,
+          messages: options.messages,
+          temperature: options.temperature,
+          max_tokens: options.max_tokens,
+          stream: false,
+          tools: options.tools,
+        }),
+      })
 
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`OpenAI API error: ${response.status} - ${error}`)
+      if (!response.ok) {
+        const errorText = await response.text()
+        if ([408, 429, 500, 502, 503, 504].includes(response.status)) {
+          throw new RetryableError(response.status, errorText)
+        }
+        throw new Error(`OpenAI API error: ${response.status} - ${errorText}`)
+      }
+
+      const data = await response.json()
+      const choice = data.choices[0]
+      const message = choice.message || {}
+
+      return {
+        content: message.content || '',
+        tool_calls: message.tool_calls,
+        finish_reason: choice.finish_reason,
+        reasoning_content: message.reasoning_content || message.reasoning || '',
+      }
     }
 
-    const data = await response.json()
-    const choice = data.choices[0]
-    const message = choice.message || {}
-
-    return {
-      content: message.content || '',
-      tool_calls: message.tool_calls,
-      finish_reason: choice.finish_reason,
-      reasoning_content: message.reasoning_content || message.reasoning || '',
+    if (retryConfig) {
+      const { result } = await withRetry(executeRequest, retryConfig)
+      return result
     }
+    
+    return executeRequest()
   }
 
   /**
@@ -129,187 +146,179 @@ export class OpenAIClient {
    * @param onContentChunk Callback for content chunks (not called for tool-only responses)
    * @param onToolCallName Callback when tool name is first received (for UI feedback)
    * @param onReasoningChunk Callback for reasoning content chunks (DeepSeek R1, etc.)
+   * @param retryConfig Optional retry configuration
    */
   async chatStreamWithTools(
     options: OpenAIChatOptions,
     onContentChunk?: (chunk: string) => void,
     onToolCallName?: (toolName: string) => void,
-    onReasoningChunk?: (chunk: string) => void
+    onReasoningChunk?: (chunk: string) => void,
+    retryConfig?: Partial<RetryConfig>
   ): Promise<OpenAIChatResponse> {
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({
-        model: options.model,
-        messages: options.messages,
-        temperature: options.temperature,
-        max_tokens: options.max_tokens,
-        stream: true,
-        tools: options.tools,
-      }),
-    })
+    const executeRequest = async () => {
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          model: options.model,
+          messages: options.messages,
+          temperature: options.temperature,
+          max_tokens: options.max_tokens,
+          stream: true,
+          tools: options.tools,
+        }),
+      })
 
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`OpenAI API error: ${response.status} - ${error}`)
-    }
+      if (!response.ok) {
+        const errorText = await response.text()
+        if ([408, 429, 500, 502, 503, 504].includes(response.status)) {
+          throw new RetryableError(response.status, errorText)
+        }
+        throw new Error(`OpenAI API error: ${response.status} - ${errorText}`)
+      }
 
-    const reader = response.body?.getReader()
-    if (!reader) {
-      throw new Error('Failed to get response reader')
-    }
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error('Failed to get response reader')
+      }
 
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let fullContent = ''
-    let reasoningContent = ''
-    const toolCallsMap = new Map<string, StreamingToolCall>()
-    const indexToId = new Map<number, string>() // Map tool call index to actual ID
-    let finishReason = 'stop'
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let fullContent = ''
+      let reasoningContent = ''
+      const toolCallsMap = new Map<string, StreamingToolCall>()
+      const indexToId = new Map<number, string>()
+      let finishReason = 'stop'
 
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
 
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
 
-        for (const line of lines) {
-          const trimmed = line.trim()
-          if (!trimmed || !trimmed.startsWith('data:')) continue
+          for (const line of lines) {
+            const trimmed = line.trim()
+            if (!trimmed || !trimmed.startsWith('data:')) continue
 
-          const data = trimmed.slice(5).trim()
-          if (data === '[DONE]') {
-            continue
-          }
-
-          try {
-            const parsed = JSON.parse(data)
-            const delta = parsed.choices?.[0]?.delta
-            const finish = parsed.choices?.[0]?.finish_reason
-
-            if (finish) {
-              finishReason = finish
+            const data = trimmed.slice(5).trim()
+            if (data === '[DONE]') {
+              continue
             }
 
-            // Handle content
-            if (delta?.content) {
-              fullContent += delta.content
-              onContentChunk?.(delta.content)
-            }
+            try {
+              const parsed = JSON.parse(data)
+              const delta = parsed.choices?.[0]?.delta
+              const finish = parsed.choices?.[0]?.finish_reason
 
-            // Handle reasoning content (DeepSeek) - support both field names
-            if (delta?.reasoning_content) {
-              reasoningContent += delta.reasoning_content
-              onReasoningChunk?.(delta.reasoning_content)
-            } else if (delta?.reasoning) {
-              reasoningContent += delta.reasoning
-              onReasoningChunk?.(delta.reasoning)
-            }
+              if (finish) {
+                finishReason = finish
+              }
 
-            // Handle tool calls streaming
-            if (delta?.tool_calls) {
-              for (const tc of delta.tool_calls) {
-                // OpenAI streaming uses 'index' to identify which tool call this chunk belongs to
-                // DeepSeek and other providers may only send 'id' in the first chunk, then use 'index' for subsequent chunks
-                const index = tc.index !== undefined ? tc.index : 0
-                const indexBasedId = `call_idx_${index}`
+              if (delta?.content) {
+                fullContent += delta.content
+                onContentChunk?.(delta.content)
+              }
 
-                // Determine the ID to use
-                let id: string
+              if (delta?.reasoning_content) {
+                reasoningContent += delta.reasoning_content
+                onReasoningChunk?.(delta.reasoning_content)
+              } else if (delta?.reasoning) {
+                reasoningContent += delta.reasoning
+                onReasoningChunk?.(delta.reasoning)
+              }
 
-                if (tc.id) {
-                  // This chunk has an explicit ID (usually the first chunk)
-                  id = tc.id
-                  // Record the index to ID mapping for future chunks
-                  indexToId.set(index, id)
+              if (delta?.tool_calls) {
+                for (const tc of delta.tool_calls) {
+                  const index = tc.index !== undefined ? tc.index : 0
+                  const indexBasedId = `call_idx_${index}`
 
-                  // Check if we already have an entry for this index with a different ID
-                  // If so, we need to migrate the data
-                  const existingByIndex = toolCallsMap.get(indexBasedId)
-                  if (existingByIndex && !toolCallsMap.has(id)) {
-                    // Migrate from index-based ID to actual ID
-                    toolCallsMap.set(id, existingByIndex)
-                    toolCallsMap.delete(indexBasedId)
-                  }
-                } else {
-                  // No explicit ID - use index to find the correct entry
-                  if (indexToId.has(index)) {
-                    // Found previously recorded ID for this index
-                    id = indexToId.get(index)!
+                  let id: string
+
+                  if (tc.id) {
+                    id = tc.id
+                    indexToId.set(index, id)
+
+                    const existingByIndex = toolCallsMap.get(indexBasedId)
+                    if (existingByIndex && !toolCallsMap.has(id)) {
+                      toolCallsMap.set(id, existingByIndex)
+                      toolCallsMap.delete(indexBasedId)
+                    }
                   } else {
-                    // First time seeing this index without ID, use index-based ID
-                    id = indexBasedId
-                  }
-                }
-
-                if (!toolCallsMap.has(id)) {
-                  const toolName = tc.function?.name || ''
-                  toolCallsMap.set(id, {
-                    id,
-                    name: toolName,
-                    arguments: '',
-                  })
-                }
-
-                const existing = toolCallsMap.get(id)!
-                // Update name if provided in this chunk
-                if (tc.function?.name) {
-                  // Check if this is a new tool name (was empty before)
-                  if (!existing.name && tc.function.name) {
-                    // Notify when tool name is first received
-                    if (onToolCallName) {
-                      onToolCallName(tc.function.name)
+                    if (indexToId.has(index)) {
+                      id = indexToId.get(index)!
+                    } else {
+                      id = indexBasedId
                     }
                   }
-                  existing.name = tc.function.name
-                }
-                if (tc.function?.arguments) {
-                  existing.arguments += tc.function.arguments
+
+                  if (!toolCallsMap.has(id)) {
+                    const toolName = tc.function?.name || ''
+                    toolCallsMap.set(id, {
+                      id,
+                      name: toolName,
+                      arguments: '',
+                    })
+                  }
+
+                  const existing = toolCallsMap.get(id)!
+                  if (tc.function?.name) {
+                    if (!existing.name && tc.function.name) {
+                      if (onToolCallName) {
+                        onToolCallName(tc.function.name)
+                      }
+                    }
+                    existing.name = tc.function.name
+                  }
+                  if (tc.function?.arguments) {
+                    existing.arguments += tc.function.arguments
+                  }
                 }
               }
+            } catch {
+              // Skip invalid JSON
             }
-          } catch {
-            // Skip invalid JSON
           }
         }
+      } finally {
+        reader.releaseLock()
       }
-    } finally {
-      reader.releaseLock()
+
+      const validToolCalls = toolCallsMap.size > 0
+        ? Array.from(toolCallsMap.values())
+            .filter(tc => tc.name && tc.name.trim() !== '')
+            .map(tc => ({
+              id: tc.id,
+              type: 'function' as const,
+              function: {
+                name: tc.name,
+                arguments: tc.arguments,
+              },
+            }))
+        : []
+
+      const toolCalls: OpenAIToolCall[] | undefined = validToolCalls.length > 0 ? validToolCalls : undefined
+
+      if (finishReason === 'tool_calls' && !toolCalls) {
+        console.warn('[OpenAIClient] WARNING: finish_reason is tool_calls but no tool calls were parsed!')
+      }
+
+      return {
+        content: fullContent,
+        tool_calls: toolCalls,
+        finish_reason: finishReason,
+        reasoning_content: reasoningContent || undefined,
+      }
     }
 
-    // Assemble tool calls - filter out entries with empty names
-    // But be careful: if finish_reason is 'tool_calls', we should have some tool calls
-    const validToolCalls = toolCallsMap.size > 0
-      ? Array.from(toolCallsMap.values())
-          .filter(tc => tc.name && tc.name.trim() !== '') // Only include tool calls with valid names
-          .map(tc => ({
-            id: tc.id,
-            type: 'function' as const,
-            function: {
-              name: tc.name,
-              arguments: tc.arguments,
-            },
-          }))
-      : []
-
-    // Only return undefined if we have no valid tool calls
-    // Otherwise return the array (even if empty, to distinguish from "no tool calls at all")
-    const toolCalls: OpenAIToolCall[] | undefined = validToolCalls.length > 0 ? validToolCalls : undefined
-
-    // Sanity check: if finish_reason is 'tool_calls' but we have no tool calls, log a warning
-    if (finishReason === 'tool_calls' && !toolCalls) {
-      console.warn('[OpenAIClient] WARNING: finish_reason is tool_calls but no tool calls were parsed!')
+    if (retryConfig) {
+      const { result } = await withRetry(executeRequest, retryConfig)
+      return result
     }
-
-    return {
-      content: fullContent,
-      tool_calls: toolCalls,
-      finish_reason: finishReason,
-      reasoning_content: reasoningContent || undefined,
-    }
+    
+    return executeRequest()
   }
 
   /**

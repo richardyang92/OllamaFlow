@@ -73,12 +73,14 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
   const fetchOllamaModels = async () => {
     setIsLoadingOllamaModels(true)
     try {
-      const ollama = await import('ollama/browser')
-      const client = new ollama.Ollama({
-        host: localApiEndpoint || 'http://127.0.0.1:11434',
+      const result = await window.electronAPI.globalAI.testConnection({
+        apiEndpoint: localApiEndpoint || 'http://127.0.0.1:11434',
       })
-      const response = await client.list()
-      setOllamaModels(response.models.map(m => m.name))
+      if (result.success && result.models) {
+        setOllamaModels(result.models.map(m => m.id))
+      } else {
+        setOllamaModels([])
+      }
     } catch (error) {
       console.error('Failed to fetch Ollama models:', error)
       setOllamaModels([])

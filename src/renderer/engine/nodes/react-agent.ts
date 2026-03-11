@@ -8,10 +8,21 @@ import { useExecutionStore } from '@/store/execution-store'
 import { OpenAIClient, OpenAIMessage, OpenAIChatResponse, parseToolCallArgs } from '../openai-client'
 import {
   compressOpenAIContext,
+  compressOpenAIContextWithLLM,
   estimateMessageTokens,
-  getContextConfig
+  getContextConfig,
+  type HybridCompressionOptions
 } from '../react-agent/context-compressor'
 import { resolveAIConfig } from '../config-resolver'
+import {
+  validateToolParams,
+  formatValidationErrors,
+  suggestFix,
+  getToolSchema
+} from '../react-agent/tool-validator'
+import {
+  executeToolWithRetry
+} from '../react-agent/retry-handler'
 
 // Tool parameter property type
 interface ToolParamProperty {
@@ -189,110 +200,248 @@ function getToolParameters(toolType: string): {
         },
         required: ['selector']
       }
+    case 'webSearch':
+      return {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '搜索关键词或问题' },
+          maxResults: { type: 'number', description: '最大返回结果数（可选，默认5，最大10）' },
+          engines: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '指定搜索引擎（可选，如 ["google", "bing", "duckduckgo"]）'
+          },
+          timeRange: {
+            type: 'string',
+            enum: ['day', 'week', 'month', 'year'],
+            description: '时间范围过滤（可选）'
+          }
+        },
+        required: ['query']
+      }
+    case 'fetchUrl':
+      return {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: '要获取的网页 URL' },
+          maxContentLength: { type: 'number', description: '最大内容长度（可选，默认5000字符）' },
+          outputFormat: { type: 'string', enum: ['markdown', 'text'], description: '输出格式（可选，默认markdown）' },
+          timeout: { type: 'number', description: '超时时间（毫秒，可选，默认30000）' }
+        },
+        required: ['url']
+      }
     default:
       return { type: 'object', properties: {}, required: [] }
   }
 }
 
-// Detect if the agent is stuck in a loop
-function detectLoop(
-  messages: OpenAIMessage[]
-): { isLoop: boolean; loopType: string | null; suggestion: string | null; blockedActions: string[] } {
-  // Extract tool calls from message history
-  const toolCallsHistory: Array<{ name: string; result: string }> = []
+// Structured tool call history entry
+interface StructuredToolCall {
+  id: string
+  name: string
+  argsHash: string
+  args: Record<string, unknown>
+  result: string
+  timestamp: number
+  success: boolean
+}
+
+// Enhanced loop detection result
+interface EnhancedLoopDetection {
+  isLoop: boolean
+  loopType: 'overPlanning' | 'repeatedAction' | 'semanticDrift' | 'noProgress' | 'taskLikelyComplete' | 'repeatedWriteFile' | null
+  confidence: number
+  suggestion: string | null
+  blockedActions: string[]
+  similarCalls: Array<{ toolName: string; similarity: number; count: number }>
+  progressScore: number
+}
+
+// Default loop detection config
+const DEFAULT_LOOP_CONFIG = {
+  maxRepeatedActions: 5,
+  maxSameToolCalls: 4,
+  maxTodosAddCalls: 4,
+  maxWriteFileCalls: 4,
+  enableSemanticDrift: true,
+  progressCheckInterval: 3,
+}
+
+function hashArgs(args: Record<string, unknown>): string {
+  try {
+    return JSON.stringify(args, Object.keys(args).sort())
+  } catch {
+    return '{}'
+  }
+}
+
+function extractStructuredHistory(messages: OpenAIMessage[]): StructuredToolCall[] {
+  const history: StructuredToolCall[] = []
+  let callId = 0
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i]
     if (msg.role === 'assistant' && msg.tool_calls) {
-      const tc = msg.tool_calls
-      const toolNames = tc.map(t => t.function.name.toLowerCase())
+      for (const tc of msg.tool_calls) {
+        const toolName = tc.function.name.toLowerCase()
+        const args = parseToolCallArgs(tc.function.arguments)
+        const resultMsg = messages.find(
+          (m, idx) => idx > i && m.role === 'tool' && m.tool_call_id === tc.id
+        )
+        const result = resultMsg?.content || ''
+        const success = !result.includes('错误:') && !result.includes('失败') && !result.includes('Error')
 
-      // Find corresponding tool response
-      if (i + 1 < messages.length && messages[i + 1].role === 'tool') {
-        toolCallsHistory.push({
-          name: toolNames[0] || '',
-          result: messages[i + 1].content || ''
+        history.push({
+          id: `call-${callId++}`,
+          name: toolName,
+          argsHash: hashArgs(args),
+          args,
+          result,
+          timestamp: Date.now(),
+          success,
         })
       }
     }
   }
 
-  if (toolCallsHistory.length < 2) {
-    return { isLoop: false, loopType: null, suggestion: null, blockedActions: [] }
-  }
+  return history
+}
 
-  // Count how many times todos was used to add tasks (only 'add', not 'init')
-  const todosAddCount = toolCallsHistory.filter(
-    (h) => h.name === 'todos' && h.result.includes('已添加任务')
-  ).length
+function detectLoop(
+  messages: OpenAIMessage[],
+  config: typeof DEFAULT_LOOP_CONFIG = DEFAULT_LOOP_CONFIG
+): EnhancedLoopDetection {
+  const history = extractStructuredHistory(messages)
 
-  // Check if init was already called - no longer blocking, allow dynamic task addition
-  // const hasInitCall = toolCallsHistory.some(
-  //   (h) => h.name === 'todos' && h.result.includes('已创建')
-  // )
-
-  if (todosAddCount > 4) {
+  if (history.length < 2) {
     return {
-      isLoop: true,
-      loopType: 'overPlanning',
-      suggestion: '你已经规划了足够的任务，现在必须立即执行实际操作！',
-      blockedActions: ['todos']
+      isLoop: false,
+      loopType: null,
+      confidence: 0,
+      suggestion: null,
+      blockedActions: [],
+      similarCalls: [],
+      progressScore: 1,
     }
   }
 
-  // Check if executeCommand was successful
-  const execResults = toolCallsHistory.filter(h => h.name === 'executecommand')
-  const lastExecResult = execResults.length > 0 ? execResults[execResults.length - 1] : null
+  const blockedActions: string[] = []
+  let loopType: EnhancedLoopDetection['loopType'] = null
+  let suggestion: string | null = null
+  let confidence = 0
+  const similarCalls: EnhancedLoopDetection['similarCalls'] = []
 
-  if (lastExecResult) {
-    const successKeywords = ['saved', 'created', 'generated', 'success', 'complete', 'done', '完成', '成功', '保存', '生成', 'image saved']
-    const hadSuccess = successKeywords.some(kw => lastExecResult.result.toLowerCase().includes(kw))
+  const todosAddCount = history.filter(
+    (h) => h.name === 'todos' && h.result.includes('已添加任务')
+  ).length
 
-    if (hadSuccess) {
-      const writeFileCount = toolCallsHistory.filter(
-        (h, idx) => idx > toolCallsHistory.indexOf(lastExecResult) && h.name === 'writefile'
-      ).length
+  if (todosAddCount > config.maxTodosAddCalls) {
+    loopType = 'overPlanning'
+    suggestion = '你已经规划了足够的任务，现在必须立即执行实际操作！'
+    blockedActions.push('todos')
+    confidence = 0.9
+  }
 
-      if (writeFileCount > 0) {
-        return {
-          isLoop: true,
-          loopType: 'taskLikelyComplete',
-          suggestion: '之前的命令执行已成功！请直接给出最终答案。',
-          blockedActions: ['writefile']
+  if (!loopType) {
+    const execResults = history.filter((h) => h.name === 'executecommand')
+    const lastExecResult = execResults.length > 0 ? execResults[execResults.length - 1] : null
+
+    if (lastExecResult) {
+      const successKeywords = ['saved', 'created', 'generated', 'success', 'complete', 'done', '完成', '成功', '保存', '生成', 'image saved']
+      const hadSuccess = successKeywords.some((kw) =>
+        lastExecResult.result.toLowerCase().includes(kw)
+      )
+
+      if (hadSuccess) {
+        const lastExecIndex = history.indexOf(lastExecResult)
+        const writeFileAfter = history.filter(
+          (h, idx) => idx > lastExecIndex && h.name === 'writefile'
+        ).length
+
+        if (writeFileAfter > 0) {
+          loopType = 'taskLikelyComplete'
+          suggestion = '之前的命令执行已成功！请直接给出最终答案。'
+          blockedActions.push('writefile')
+          confidence = 0.85
         }
       }
     }
   }
 
-  // Check for repeated writeFile
-  const writeFileCount = toolCallsHistory.filter(h => h.name === 'writefile').length
+  if (!loopType) {
+    const writeFileCount = history.filter((h) => h.name === 'writefile').length
 
-  if (writeFileCount >= 4) {
-    return {
-      isLoop: true,
-      loopType: 'repeatedWriteFile',
-      suggestion: `你已经写入了 ${writeFileCount} 次文件。现在必须执行脚本或给出最终答案！`,
-      blockedActions: ['writefile']
+    if (writeFileCount >= config.maxWriteFileCalls) {
+      loopType = 'repeatedWriteFile'
+      suggestion = `你已经写入了 ${writeFileCount} 次文件。现在必须执行脚本或给出最终答案！`
+      blockedActions.push('writefile')
+      confidence = 0.85
     }
   }
 
-  // Check for repeated identical actions
-  if (toolCallsHistory.length >= 5) {
-    const recentActions = toolCallsHistory.slice(-5).map((h) => h.name)
-    const firstAction = recentActions[0]
-    const allSame = recentActions.every((a) => a === firstAction)
+  if (!loopType && config.enableSemanticDrift) {
+    const recentHistory = history.slice(-10)
+    const toolCounts = new Map<string, { count: number; argsHashes: Set<string> }>()
 
-    if (allSame && firstAction) {
-      return {
-        isLoop: true,
-        loopType: 'repeatedAction',
-        suggestion: `你已经连续5次执行相同的操作。请使用不同的工具或给出最终答案。`,
-        blockedActions: [firstAction]
+    for (const call of recentHistory) {
+      const existing = toolCounts.get(call.name) || { count: 0, argsHashes: new Set() }
+      existing.count++
+      existing.argsHashes.add(call.argsHash)
+      toolCounts.set(call.name, existing)
+    }
+
+    for (const [toolName, info] of toolCounts) {
+      if (info.count >= config.maxRepeatedActions) {
+        loopType = 'repeatedAction'
+        suggestion = `你已经连续 ${info.count} 次执行 ${toolName}。请使用不同的工具或给出最终答案。`
+        blockedActions.push(toolName)
+        confidence = 0.8
+        similarCalls.push({ toolName, similarity: 1, count: info.count })
+        break
+      }
+
+      if (info.count >= 3 && info.argsHashes.size === 1) {
+        loopType = 'semanticDrift'
+        suggestion = `检测到 ${toolName} 工具被重复调用 ${info.count} 次且参数相同。请尝试不同的方法。`
+        blockedActions.push(toolName)
+        confidence = 0.75
+        similarCalls.push({ toolName, similarity: 1, count: info.count })
+        break
       }
     }
   }
 
-  return { isLoop: false, loopType: null, suggestion: null, blockedActions: [] }
+  if (!loopType) {
+    const todosCalls = history.filter((h) => h.name === 'todos')
+    const hasProgress = todosCalls.some(
+      (h) => h.result.includes('已完成') || h.result.includes('complete')
+    )
+    const addOnlyCalls = todosCalls.filter((h) =>
+      h.result.includes('已添加任务')
+    ).length
+
+    if (addOnlyCalls >= config.progressCheckInterval && !hasProgress) {
+      loopType = 'noProgress'
+      suggestion = '你一直在添加任务但没有完成任何任务。请开始执行任务！'
+      blockedActions.push('todos')
+      confidence = 0.7
+    }
+  }
+
+  let progressScore = 1
+  if (loopType) {
+    progressScore = Math.max(0, 1 - confidence * 0.5)
+  }
+
+  return {
+    isLoop: loopType !== null,
+    loopType,
+    confidence,
+    suggestion,
+    blockedActions,
+    similarCalls,
+    progressScore,
+  }
 }
 
 /**
@@ -416,9 +565,26 @@ function analyzeToolDependencies(
   return groups
 }
 
-// Build full system prompt
+// Build full system prompt with current date/time
 function buildFullSystemPrompt(systemPrompt: string, enableUserInput: boolean): string {
+  const now = new Date()
+  const currentDate = now.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long'
+  })
+  const currentTime = now.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short'
+  })
+
   return `${systemPrompt}
+
+## 📅 当前时间
+今天是 ${currentDate}，当前时间 ${currentTime}。
+在处理涉及时间、日期的任务时，请以这个时间为准。
 
 ## 你的能力
 你是一个高效的 ReAct 智能体，遵循"思考-行动-观察"循环来解决问题。
@@ -457,6 +623,10 @@ function buildFullSystemPrompt(systemPrompt: string, enableUserInput: boolean): 
 
 ### httpRequest - HTTP请求
 输入: {"url": "https://api.example.com", "method": "GET"}
+
+### fetchUrl - 获取网页内容
+获取并解析网页，返回干净的 Markdown 格式内容（自动过滤广告和导航）
+输入: {"url": "https://example.com", "maxContentLength": 5000}
 
 ### 浏览器工具
 - browser_navigate: {"url": "https://example.com"}
@@ -516,24 +686,44 @@ async function generateTaskSummary(
   todosStatus: { total: number; completed: number; pending: number },
   steps: ReActStep[]
 ): Promise<string> {
-  // Build key steps summary (last 5 steps with action and observation)
+  // Build comprehensive steps summary - include all completed steps with FULL observation content
   const keyStepsSummary = steps
     .filter(s => s.action && s.observation)
-    .slice(-5)
-    .map(s => `- 操作: ${s.action}\n  结果: ${(s.observation || '').slice(0, 200)}`)
-    .join('\n')
+    .map(s => {
+      const observation = s.observation || ''
+      // 不截断观察结果，保留完整内容，不包含思考过程
+      return `## 步骤 ${s.iteration}: ${s.action}\n结果: ${observation}`
+    })
+    .join('\n\n')
+
+  // Extract key observations that might contain important results (full content)
+  const keyObservations = steps
+    .filter(s => s.observation && !s.observation.includes('错误') && !s.observation.includes('失败'))
+    .map(s => s.observation)
+    .slice(-3) // 最后3个成功的观察结果
+    .join('\n---\n')
 
   const summaryMessages: OpenAIMessage[] = [
     messages[0], // System prompt
-    messages[1], // Original user message
     {
       role: 'user',
-      content: `任务已全部完成。请根据以上执行过程，用简洁的中文回答用户的原始问题。
+      content: `任务执行已完成，请根据以下执行记录，用中文给用户一个完整、有价值的总结回复。
 
-执行记录摘要:
+## 用户的原始问题
+${messages[1]?.content || '（未知）'}
+
+## 完整执行记录
 ${keyStepsSummary || '（无执行记录）'}
 
-请直接回答用户的问题，总结你的发现和结论。`
+## 关键结果摘录
+${keyObservations || '（无关键结果）'}
+
+## 总结要求
+1. 直接回答用户的问题，不要说"根据执行记录"
+2. 必须包含具体的数值、文件名、路径等所有关键信息，不要遗漏
+3. 如果生成了文件，明确说明文件位置
+4. 如果有数据或结果，完整展示具体内容，不要省略
+5. 回答要完整详尽，确保用户能获得所有需要的信息`
     }
   ]
 
@@ -542,12 +732,14 @@ ${keyStepsSummary || '（无执行记录）'}
       model,
       messages: summaryMessages,
       temperature: 0.3,
-      max_tokens: 1000,
+      max_tokens: 4000, // 大幅增加 token 限制以保留完整信息
     })
     return response.content || `任务已完成 ${todosStatus.completed} 个步骤。`
   } catch (error) {
     console.error('[ReAct] Failed to generate summary:', error)
-    return `任务已完成 ${todosStatus.completed} 个步骤。`
+    // 降级：直接返回最后一个成功的观察结果
+    const lastSuccessObs = steps.filter(s => s.observation && !s.observation.includes('错误')).pop()?.observation
+    return lastSuccessObs || `任务已完成 ${todosStatus.completed} 个步骤。`
   }
 }
 
@@ -660,26 +852,67 @@ async function executeReAct(
         message: `上下文接近限制 (${Math.round(currentTokens / 1000)}k tokens)，正在自动压缩...`,
       })
 
-      const compressionResult = compressOpenAIContext(messages, maxContextTokens, {
+      // 构建 LLM 压缩选项
+      const compressionOptions: HybridCompressionOptions = {
         keepRecentIterations: contextConfig.keepRecentIterations,
         maxObservationLength: contextConfig.maxObservationLength,
         enableSummarization: contextConfig.enableSummarization,
-      })
+        enableLLMCompression: contextConfig.enableLLMCompression ?? true,
+        llmOptions: {
+          model: data.model,
+          apiEndpoint: apiEndpoint,
+          apiKey: apiKey,
+          // 根据 apiEndpoint 判断 provider
+          provider: apiEndpoint.includes('11434') ? 'ollama' : 'openai',
+        },
+      }
 
-      // Replace messages with compressed version
-      messages.length = 0
-      messages.push(...compressionResult.messages)
+      try {
+        // 尝试 LLM 压缩
+        const compressionResult = await compressOpenAIContextWithLLM(messages, maxContextTokens, compressionOptions)
 
-      if (compressionResult.compressed) {
+        // Replace messages with compressed version
+        messages.length = 0
+        messages.push(...compressionResult.messages)
+
+        if (compressionResult.compressed) {
+          context.onLog?.({
+            nodeId: node.id,
+            nodeName: data.label,
+            level: 'info',
+            message: `上下文已压缩: ${Math.round(compressionResult.originalTokens / 1000)}k -> ${Math.round(compressionResult.newTokens / 1000)}k tokens (${Math.round(compressionResult.compressionRatio * 100)}%)`,
+          })
+
+          if (data.stream && compressionResult.summary) {
+            context.onStream?.(node.id, `\n📦 ${compressionResult.summary}\n`)
+          }
+        }
+      } catch (error) {
+        // LLM 压缩失败，降级到规则压缩
         context.onLog?.({
           nodeId: node.id,
           nodeName: data.label,
-          level: 'info',
-          message: `上下文已压缩: ${Math.round(compressionResult.originalTokens / 1000)}k -> ${Math.round(compressionResult.newTokens / 1000)}k tokens (${Math.round(compressionResult.compressionRatio * 100)}%)`,
+          level: 'warn',
+          message: `LLM 压缩失败，使用规则压缩: ${error instanceof Error ? error.message : String(error)}`,
         })
 
-        if (data.stream && compressionResult.summary) {
-          context.onStream?.(node.id, `\n📦 ${compressionResult.summary}\n`)
+        const compressionResult = compressOpenAIContext(messages, maxContextTokens, {
+          keepRecentIterations: contextConfig.keepRecentIterations,
+          maxObservationLength: contextConfig.maxObservationLength,
+          enableSummarization: contextConfig.enableSummarization,
+        })
+
+        // Replace messages with compressed version
+        messages.length = 0
+        messages.push(...compressionResult.messages)
+
+        if (compressionResult.compressed) {
+          context.onLog?.({
+            nodeId: node.id,
+            nodeName: data.label,
+            level: 'info',
+            message: `上下文已压缩: ${Math.round(compressionResult.originalTokens / 1000)}k -> ${Math.round(compressionResult.newTokens / 1000)}k tokens (${Math.round(compressionResult.compressionRatio * 100)}%)`,
+          })
         }
       }
     }
@@ -974,7 +1207,6 @@ async function executeReAct(
             message: `调用工具: ${toolName}`,
           })
 
-          // Find and execute the tool
           const tool = allTools.find(t => t.name === toolName)
 
           let result: { toolCallId: string; toolName: string; success: boolean; observation: string }
@@ -995,13 +1227,59 @@ async function executeReAct(
               observation: blockedObservation,
             }
           } else {
+            const schema = getToolSchema(toolName)
+            if (schema) {
+              const validationResult = validateToolParams(toolName, toolArgs, schema)
+              if (!validationResult.valid) {
+                const errorDetails = formatValidationErrors(validationResult)
+                const suggestion = suggestFix(toolName, toolArgs, validationResult)
+                result = {
+                  toolCallId: toolCall.id,
+                  toolName,
+                  success: false,
+                  observation: `参数验证失败:\n${errorDetails}${suggestion ? `\n建议: ${suggestion}` : ''}`,
+                }
+                allResults.push(result)
+                groupObservations.push(result.observation)
+                return
+              }
+              if (validationResult.warnings.length > 0) {
+                context.onLog?.({
+                  nodeId: node.id,
+                  nodeName: data.label,
+                  level: 'warn',
+                  message: `工具参数警告: ${validationResult.warnings.map(w => w.message).join('; ')}`,
+                })
+              }
+            }
+
             if (data.stream) {
               context.onStream?.(node.id, `🔧 调用: ${toolName}\n`)
             }
 
             try {
-              const toolResult = await executeTool(tool, toolArgs, context, todosManager)
-              let observation = toolResult.success ? toolResult.output : `错误: ${toolResult.error}`
+              const toolResult = await executeToolWithRetry(
+                async () => {
+                  const res = await executeTool(tool, toolArgs, context, todosManager)
+                  return {
+                    success: res.success,
+                    result: res.success ? res.output : res.error || '未知错误',
+                    error: res.success ? undefined : res.error
+                  }
+                },
+                toolName,
+                { maxRetries: 2 },
+                (attempt, error, delay) => {
+                  context.onLog?.({
+                    nodeId: node.id,
+                    nodeName: data.label,
+                    level: 'warn',
+                    message: `工具 ${toolName} 执行${error ? '失败' : '未成功'}，${delay}ms 后重试 (第 ${attempt} 次)...`,
+                  })
+                }
+              )
+              
+              let observation = toolResult.success ? toolResult.result : `错误: ${toolResult.error || toolResult.result}`
 
               if (tool.name.toLowerCase() === 'writefile' && toolResult.success) {
                 const fileMatch = observation.match(/文件已写入:?\s*([^\n💡]+)/iu)

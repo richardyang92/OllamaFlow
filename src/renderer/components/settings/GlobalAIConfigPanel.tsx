@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
-import { X, Loader2, Check, AlertCircle, RefreshCw, Globe } from 'lucide-react'
+import { X, Loader2, Check, AlertCircle, RefreshCw, Globe, Search } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings-store'
 import { AI_PROVIDER_PRESETS, type AIProvider } from '@/types/global-config'
 import { cn } from '@/lib/utils'
@@ -20,6 +20,10 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
     setGlobalAIConfig,
     clearGlobalAIConfig,
     fetchModels,
+    // SimpleXNG 配置
+    simplexngEndpoint,
+    loadSimpleXNGConfig,
+    setSimpleXNGEndpoint,
   } = useSettingsStore()
 
   const [enabled, setEnabled] = useState(false)
@@ -28,6 +32,11 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
   const [apiKey, setApiKey] = useState('')
   const [defaultModel, setDefaultModel] = useState('')
   const [name, setName] = useState('')
+
+  // SimpleXNG 状态
+  const [localSimpleXNGEndpoint, setLocalSimpleXNGEndpoint] = useState('')
+  const [isTestingSimpleXNG, setIsTestingSimpleXNG] = useState(false)
+  const [simpleXNGTestResult, setSimpleXNGTestResult] = useState<{ success: boolean; error?: string } | null>(null)
 
   const [isTesting, setIsTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null)
@@ -50,8 +59,15 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
       window.electronAPI.globalAI.getApiKey().then(key => {
         setApiKey(key || '')
       })
+      // 加载 SimpleXNG 配置
+      loadSimpleXNGConfig()
     }
-  }, [isOpen])
+  }, [isOpen, loadSimpleXNGConfig])
+
+  // 同步 SimpleXNG endpoint
+  useEffect(() => {
+    setLocalSimpleXNGEndpoint(simplexngEndpoint)
+  }, [simplexngEndpoint])
 
   // Provider 变化时自动填充预设
   const handleProviderChange = (newProvider: AIProvider) => {
@@ -139,6 +155,45 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
       setName('')
       setProvider('openai')
       setTestResult(null)
+    }
+  }
+
+  // SimpleXNG 测试连接
+  const handleTestSimpleXNG = async () => {
+    setIsTestingSimpleXNG(true)
+    setSimpleXNGTestResult(null)
+
+    try {
+      const result = await window.electronAPI.http.fetch({
+        url: `${localSimpleXNGEndpoint}/search?q=test&format=json`,
+        method: 'GET',
+        timeout: 10000,
+      })
+
+      if (result.success) {
+        setSimpleXNGTestResult({ success: true })
+      } else {
+        setSimpleXNGTestResult({
+          success: false,
+          error: `HTTP ${result.status}: ${result.statusText || result.error}`,
+        })
+      }
+    } catch (error) {
+      setSimpleXNGTestResult({
+        success: false,
+        error: (error as Error).message,
+      })
+    } finally {
+      setIsTestingSimpleXNG(false)
+    }
+  }
+
+  // 保存 SimpleXNG 配置
+  const handleSaveSimpleXNG = async () => {
+    try {
+      await setSimpleXNGEndpoint(localSimpleXNGEndpoint)
+    } catch (error) {
+      console.error('Failed to save SimpleXNG endpoint:', error)
     }
   }
 
@@ -351,6 +406,76 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
                     )}
                   </>
                 )}
+
+                {/* SimpleXNG 搜索配置 - 始终显示 */}
+                <div className="border-t border-[var(--color-border-subtle)] pt-4 mt-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Search className="w-4 h-4 text-blue-400" />
+                    <h3 className="font-medium text-sm">网页搜索配置</h3>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">SimpleXNG 服务地址</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={localSimpleXNGEndpoint}
+                          onChange={(e) => {
+                            setLocalSimpleXNGEndpoint(e.target.value)
+                            setSimpleXNGTestResult(null)
+                          }}
+                          placeholder="http://localhost:8888"
+                          className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        />
+                        <button
+                          onClick={handleTestSimpleXNG}
+                          disabled={isTestingSimpleXNG || !localSimpleXNGEndpoint}
+                          className="px-3 py-2 rounded-lg bg-[var(--color-bg-input)] hover:bg-[var(--color-bg-hover)] disabled:opacity-50 transition-colors text-sm"
+                        >
+                          {isTestingSimpleXNG ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            '测试'
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* SimpleXNG 测试结果 */}
+                    {simpleXNGTestResult && (
+                      <div
+                        className={cn(
+                          'p-2 rounded-lg flex items-center gap-2',
+                          simpleXNGTestResult.success
+                            ? 'bg-green-500/10 border border-green-500/20'
+                            : 'bg-red-500/10 border border-red-500/20'
+                        )}
+                      >
+                        {simpleXNGTestResult.success ? (
+                          <Check className="w-4 h-4 text-green-400" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-red-400" />
+                        )}
+                        <span className={cn('text-sm', simpleXNGTestResult.success ? 'text-green-400' : 'text-red-400')}>
+                          {simpleXNGTestResult.success ? '连接成功' : simpleXNGTestResult.error}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-[var(--color-text-muted)]">
+                        SimpleXNG 是本地运行的搜索引擎，用于 Agent 网页搜索功能
+                      </p>
+                      <button
+                        onClick={handleSaveSimpleXNG}
+                        className="text-xs text-blue-400 hover:text-blue-300"
+                      >
+                        保存地址
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Footer */}
