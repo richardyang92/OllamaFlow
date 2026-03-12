@@ -478,12 +478,26 @@ export class WorkflowExecutor {
           const routerData = node.data as any
           const selectedBranchId = this.getSelectedBranchId(output, routerData.branches)
           executionStore.setActiveBranches(this.executionId, node.id, [selectedBranchId])
-          
+
           context.onLog?.({
             nodeId,
             nodeName: node.data.label,
             level: 'info',
             message: `激活分支: ${routerData.branches?.find((b: any) => b.id === selectedBranchId)?.name || selectedBranchId}`,
+          })
+        }
+
+        // Track active branches for if nodes
+        if (node.data.nodeType === 'if') {
+          const ifOutput = output as { result: boolean; true: unknown; false: unknown }
+          const activeBranch = ifOutput.result ? 'true' : 'false'
+          executionStore.setActiveBranches(this.executionId, node.id, [activeBranch])
+
+          context.onLog?.({
+            nodeId,
+            nodeName: node.data.label,
+            level: 'info',
+            message: `激活分支: ${activeBranch === 'true' ? '真' : '假'}`,
           })
         }
 
@@ -851,23 +865,33 @@ export class WorkflowExecutor {
   private shouldExecuteNode(nodeId: string): boolean {
     // Find all incoming edges to this node
     const incomingEdges = this.edges.filter((edge) => edge.target === nodeId)
-    
+
     const executionStore = useExecutionStore.getState()
-    
+
     for (const edge of incomingEdges) {
       const sourceNode = this.nodes.find((n) => n.id === edge.source)
-      
+
       // If source node is a smart router
       if (sourceNode?.data.nodeType === 'smartRouter') {
         const activeBranchIds = executionStore.getActiveBranches(this.executionId, sourceNode.id)
-        
+
+        // If source handle is not in active branches, this node should not execute
+        if (activeBranchIds && edge.sourceHandle && !activeBranchIds.includes(edge.sourceHandle)) {
+          return false
+        }
+      }
+
+      // If source node is an if node
+      if (sourceNode?.data.nodeType === 'if') {
+        const activeBranchIds = executionStore.getActiveBranches(this.executionId, sourceNode.id)
+
         // If source handle is not in active branches, this node should not execute
         if (activeBranchIds && edge.sourceHandle && !activeBranchIds.includes(edge.sourceHandle)) {
           return false
         }
       }
     }
-    
+
     return true
   }
 
