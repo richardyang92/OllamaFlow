@@ -51,7 +51,7 @@ export interface ToolDefinition {
   id: string
   name: string
   description: string
-  type: 'readFile' | 'writeFile' | 'executeCommand' | 'httpRequest' | 'todos' | 'getCurrentDate' | 'writeMultipleFiles' | 'executePython' | 'webSearch' | 'fetchUrl' | BrowserToolType
+  type: 'readFile' | 'writeFile' | 'executeCommand' | 'httpRequest' | 'todos' | 'getCurrentDate' | 'writeMultipleFiles' | 'executePython' | 'webSearch' | 'fetchUrl' | 'math_calculate' | 'math_statistics' | BrowserToolType
   config: Record<string, unknown>
 }
 
@@ -220,6 +220,25 @@ export const AVAILABLE_TOOLS = [
     description: '获取并解析网页内容，返回干净的 Markdown 格式文本（自动过滤广告和导航）。输入: {"url": "https://example.com", "maxContentLength": 5000}',
     type: 'fetchUrl' as const,
     builtIn: false,
+  },
+  // Mathematics tools
+  {
+    id: 'math_calculate',
+    name: 'math_calculate',
+    label: '数学计算',
+    description: '执行数学计算。支持基础运算(+,-,*,/,%,**)、平方根(sqrt)、幂运算(^)、三角函数(sin/cos/tan)、对数(log/ln)、阶乘(!)、组合数(C(n,k)或comb(n,k))、排列数(P(n,k)或perm(n,k))等。输入: {"expression": "sqrt(2) + 1", "precision": 4, "outputFormat": "auto"}。outputFormat可选: auto(自动)/decimal(小数)/fraction(分数)/percent(百分比)',
+    type: 'math_calculate' as const,
+    builtIn: false,
+    category: 'math',
+  },
+  {
+    id: 'math_statistics',
+    name: 'math_statistics',
+    label: '统计分析',
+    description: '计算数组的统计量。支持平均值(mean)、中位数(median)、众数(mode)、方差(variance)、标准差(stddev)、求和(sum)、最大值(max)、最小值(min)、极差(range)、计数(count)。输入: {"data": [1,2,3,4,5], "operations": ["mean", "median", "stddev"]}',
+    type: 'math_statistics' as const,
+    builtIn: false,
+    category: 'math',
   },
 ] as const
 

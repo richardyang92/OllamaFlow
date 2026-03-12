@@ -1,6 +1,7 @@
 import type { ToolDefinition, TodoItem, TodosAction, AvailableToolId } from '@/types/node'
 import { AVAILABLE_TOOLS as availableTools } from '@/types/node'
 import type { ExecutionContext } from '../executor'
+import { mathCalculate, mathStatistics } from './math'
 
 // Tool execution result
 export interface ToolResult {
@@ -1037,6 +1038,142 @@ async function executeFetchUrl(
   }
 }
 
+// Execute math calculate tool
+async function executeMathCalculate(
+  actionInput: string | Record<string, unknown>
+): Promise<ToolResult> {
+  try {
+    // Parse input parameters
+    let expression: string
+    let precision: number | undefined
+    let outputFormat: 'auto' | 'decimal' | 'fraction' | 'percent' = 'auto'
+
+    if (typeof actionInput === 'object') {
+      expression = (actionInput.expression as string) || ''
+      precision = actionInput.precision as number | undefined
+      outputFormat = (actionInput.outputFormat as 'auto' | 'decimal' | 'fraction' | 'percent') || 'auto'
+    } else {
+      // Try to parse as JSON first, then use as raw expression
+      try {
+        const parsed = JSON.parse(actionInput)
+        expression = parsed.expression || actionInput
+        precision = parsed.precision
+        outputFormat = parsed.outputFormat || 'auto'
+      } catch {
+        expression = actionInput
+      }
+    }
+
+    if (!expression.trim()) {
+      return { success: false, output: '', error: '数学表达式不能为空' }
+    }
+
+    const result = mathCalculate({
+      expression,
+      precision,
+      outputFormat,
+    })
+
+    if (!result.success) {
+      return {
+        success: false,
+        output: '',
+        error: result.error || '计算失败',
+      }
+    }
+
+    // Format output with additional context
+    let output = result.result
+    if (result.isExact !== undefined) {
+      output += result.isExact ? ' (精确值)' : ''
+    }
+
+    return {
+      success: true,
+      output,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      error: `数学计算错误: ${(error as Error).message}`,
+    }
+  }
+}
+
+// Execute math statistics tool
+async function executeMathStatistics(
+  actionInput: string | Record<string, unknown>
+): Promise<ToolResult> {
+  try {
+    // Parse input parameters
+    let data: number[] = []
+    let operations: string[] = []
+
+    if (typeof actionInput === 'object') {
+      data = (actionInput.data as number[]) || []
+      operations = (actionInput.operations as string[]) || []
+    } else {
+      // Try to parse as JSON
+      try {
+        const parsed = JSON.parse(actionInput)
+        data = parsed.data || []
+        operations = parsed.operations || []
+      } catch {
+        return {
+          success: false,
+          output: '',
+          error: '无法解析统计数据，请使用 JSON 格式: {"data": [1,2,3], "operations": ["mean", "median"]}',
+        }
+      }
+    }
+
+    if (!Array.isArray(data) || data.length === 0) {
+      return { success: false, output: '', error: '数据必须是非空数组' }
+    }
+
+    if (!Array.isArray(operations) || operations.length === 0) {
+      return {
+        success: false,
+        output: '',
+        error: '请指定至少一个统计操作 (mean, median, mode, variance, stddev, sum, max, min, range, count)',
+      }
+    }
+
+    const result = mathStatistics({
+      data,
+      operations: operations as Array<
+        'mean' | 'median' | 'mode' | 'variance' | 'stddev' | 'sum' | 'max' | 'min' | 'range' | 'count'
+      >,
+    })
+
+    if (!result.success) {
+      return {
+        success: false,
+        output: '',
+        error: result.error || '统计计算失败',
+      }
+    }
+
+    // Format output as readable text
+    const lines: string[] = ['统计结果:']
+    for (const [op, value] of Object.entries(result.results)) {
+      lines.push(`  ${op}: ${value}`)
+    }
+
+    return {
+      success: true,
+      output: lines.join('\n'),
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      error: `统计计算错误: ${(error as Error).message}`,
+    }
+  }
+}
+
 // Main tool execution function
 export async function executeTool(
   tool: ToolDefinition,
@@ -1100,6 +1237,12 @@ export async function executeTool(
 
     case 'fetchUrl':
       return executeFetchUrl(actionInput, tool.config)
+
+    case 'math_calculate':
+      return executeMathCalculate(actionInput)
+
+    case 'math_statistics':
+      return executeMathStatistics(actionInput)
 
     default:
       return { success: false, output: '', error: `未知工具类型: ${tool.type}` }

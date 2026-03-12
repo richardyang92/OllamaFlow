@@ -33,6 +33,7 @@
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
+    "safe-expr-eval": "^1.0.0",
     "tailwind-merge": "^2.2.0",
     "zundo": "^2.3.0",
     "zustand": "^4.5.0"
