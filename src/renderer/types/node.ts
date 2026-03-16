@@ -319,6 +319,7 @@ export type ReActStepStatus = 'thinking' | 'acting' | 'observing' | 'completed' 
 export interface ReActStep {
   id: string
   iteration: number
+  maxIterations?: number  // 最大迭代次数（用于显示 X/XX 格式）
   status: ReActStepStatus
   thought: string
   thoughtStreaming: boolean
@@ -446,6 +447,7 @@ export interface SmartRouterNodeData extends BaseNodeData {
   model: string
   routingPrompt: string
   temperature: number
+  debugMode?: DebugModeConfig
 }
 
 // Output Node
@@ -491,6 +493,12 @@ export interface ExecuteCommandNodeData extends BaseNodeData {
   continueOnError: boolean
 }
 
+// Debug mode configuration for ReAct Agent and Plan nodes
+export interface DebugModeConfig {
+  enabled: boolean
+  model: string
+}
+
 // ReAct Agent Node
 export interface ReactAgentNodeData extends BaseNodeData {
   nodeType: 'reactAgent'
@@ -503,6 +511,7 @@ export interface ReactAgentNodeData extends BaseNodeData {
   enabledTools: AvailableToolId[]
   stream: boolean
   enableUserInput?: boolean
+  debugMode?: DebugModeConfig
 }
 
 // Plan Node
@@ -512,6 +521,7 @@ export interface PlanNodeData extends BaseNodeData {
   systemPrompt: string
   temperature: number
   maxTokens: number
+  debugMode?: DebugModeConfig
 }
 
 // Queue Node - collects multiple inputs into an array

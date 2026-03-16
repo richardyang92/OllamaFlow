@@ -98,6 +98,9 @@ export interface AgentCallbacks {
   onComplete?: (response: string, generatedFiles?: GeneratedFileInfo[]) => void
   onError?: (error: string) => void
 
+  // 迭代限制回调
+  onIterationLimitReached?: (currentIteration: number, maxIterations: number) => void
+
   // 兼容旧回调
   onThought?: (thought: string) => void
   onAction?: (action: string, input: unknown) => void
@@ -190,6 +193,7 @@ export class IntelligentAgentExecutor {
         const thinkingStep: AgentStep = {
           id: this.currentStepId,
           iteration: this.currentIteration,
+          maxIterations: MAX_ITERATIONS,
           status: 'thinking',
           thought: '',
           thoughtStreaming: true,
@@ -310,13 +314,17 @@ export class IntelligentAgentExecutor {
       }
 
       // 达到最大迭代次数
-      const finalResponse = '抱歉，我无法在有限的步骤内完成您的请求。请尝试简化您的问题。'
-      console.log('[🏖️ AGENT_EXECUTOR] 达到最大迭代，onComplete 调用', {
+      console.log('[🏖️ AGENT_EXECUTOR] 达到最大迭代', {
+        currentIteration: this.currentIteration,
+        maxIterations: MAX_ITERATIONS,
         generatedFilesCount: this.generatedFiles.length,
-        generatedFiles: this.generatedFiles,
       })
-      this.callbacks.onComplete?.(finalResponse, this.generatedFiles)
-      return finalResponse
+
+      // 触发迭代限制回调
+      this.callbacks.onIterationLimitReached?.(this.currentIteration, MAX_ITERATIONS)
+
+      // 不再直接调用 onComplete，让 AgentPage 处理
+      return ''  // 返回空字符串，表示需要用户确认
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
@@ -1373,25 +1381,19 @@ ${truncatedSource}
               log('SubAgent 状态变化:', status)
               this.callbacks.onToolCallUpdate?.(toolCallId, {
                 subAgentProgress: {
-                  workflowName: workflow.name,
-                  workflowPath: workflow.workspacePath,
                   status,
-                  startedAt: Date.now(),
                   updatedAt: Date.now(),
-                },
+                } as any,
               })
             },
             onNodeStart: (nodeName, _nodeId, nodeType) => {
               this.callbacks.onToolCallUpdate?.(toolCallId, {
                 subAgentProgress: {
-                  workflowName: workflow.name,
-                  workflowPath: workflow.workspacePath,
                   status: 'running',
                   currentNode: nodeName,
                   currentNodeType: nodeType,
-                  startedAt: Date.now(),
                   updatedAt: Date.now(),
-                },
+                } as any,
               })
             },
             onNodeComplete: (_nodeName, _nodeId, _success) => {
@@ -1400,34 +1402,27 @@ ${truncatedSource}
             onProgress: (completedNodes, totalNodes) => {
               this.callbacks.onToolCallUpdate?.(toolCallId, {
                 subAgentProgress: {
-                  workflowName: workflow.name,
-                  workflowPath: workflow.workspacePath,
                   status: 'running',
                   completedNodes,
                   totalNodes,
-                  startedAt: Date.now(),
                   updatedAt: Date.now(),
-                },
+                } as any,
               })
             },
             onLog: (msg) => {
               log(`[${workflow.name}] ${msg}`)
             },
             onReActStepsUpdate: (nodeName, _nodeId, steps, iteration, maxIterations) => {
-              // 更新 ReAct Agent 的嵌套步骤
+              // 更新 ReAct Agent 的嵌套步骤（保留现有进度信息）
               this.callbacks.onToolCallUpdate?.(toolCallId, {
                 subAgentProgress: {
-                  workflowName: workflow.name,
-                  workflowPath: workflow.workspacePath,
-                  status: 'running',
                   currentNode: nodeName,
                   currentNodeType: 'reactAgent',
                   reactAgentSteps: steps,
                   reactAgentIteration: iteration,
                   reactAgentMaxIterations: maxIterations,
-                  startedAt: Date.now(),
                   updatedAt: Date.now(),
-                },
+                } as any,
               })
             },
           },

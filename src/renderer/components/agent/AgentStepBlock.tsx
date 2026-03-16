@@ -256,7 +256,7 @@ export const AgentStepBlock = memo(function AgentStepBlock({
             </>
           ) : (
             <span className="text-xs font-medium text-[var(--color-text)]">
-              迭代 {step.iteration}
+              思考轮次 {step.iteration}/{step.maxIterations ?? '?'}
             </span>
           )}
 
@@ -401,7 +401,7 @@ export const AgentStepBlock = memo(function AgentStepBlock({
                   {reactAgentSteps.slice(-3).map((reactStep) => (
                     <div key={reactStep.id} className="text-xs">
                       <div className="flex items-center gap-2 text-[var(--color-text-muted)]">
-                        <span>迭代 {reactStep.iteration}</span>
+                        <span>思考轮次 {reactStep.iteration}/{reactStep.maxIterations ?? '?'}</span>
                         <StepStatusBadge status={reactStep.status} />
                       </div>
                       {reactStep.thought && (

@@ -58,7 +58,7 @@ function ReActStepsPanel({ state }: ReActStepsPanelProps) {
     <div className="space-y-2">
       {/* Progress indicator */}
       <div className="flex items-center justify-between text-[10px] text-[var(--color-text-subtle)] mb-2">
-        <span>迭代进度</span>
+        <span>思考进度</span>
         <span className="font-mono">
           {state.currentIteration} / {state.maxIterations}
         </span>

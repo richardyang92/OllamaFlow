@@ -120,7 +120,7 @@ function ReactAgentNode(props: NodeProps) {
 
         <div className="node-secondary-info flex justify-between items-center">
           <span className="text-[var(--color-text-muted)]">工具: {totalToolsCount}</span>
-          <span className="text-[var(--color-text-muted)]">最大迭代: {data.maxIterations}</span>
+          <span className="text-[var(--color-text-muted)]">最大思考轮次: {data.maxIterations}</span>
         </div>
 
         <motion.div
@@ -212,9 +212,21 @@ function ReactAgentNode(props: NodeProps) {
                       prefix: '观察: ',
                       color: 'text-[var(--color-node-input)]',
                       anim: { opacity: [1, 0.5, 1] }
+                    },
+                    error: {
+                      icon: '❌',
+                      prefix: '错误: ',
+                      color: 'text-red-400',
+                      anim: { opacity: [1, 0.5, 1] }
+                    },
+                    completed: {
+                      icon: '✅',
+                      prefix: '完成: ',
+                      color: 'text-green-400',
+                      anim: { scale: [1, 1.1, 1] }
                     }
                   }
-                  const config = statusConfig[latestStep.status] || statusConfig.thinking
+                  const config = statusConfig[latestStep.status as keyof typeof statusConfig] || statusConfig.thinking
                   const content = latestStep.thought || latestStep.action || latestStep.observation || ''
 
                   return (

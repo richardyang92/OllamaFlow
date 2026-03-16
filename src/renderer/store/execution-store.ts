@@ -10,6 +10,14 @@ import type { ReActExecutionState, ReActStep, TodoItem, PlanExecutionState, Plan
 const DEBUG = true
 const log = (...args: unknown[]) => DEBUG && console.log('[ExecutionStore]', ...args)
 
+// 节点生命周期回调类型（用于事件驱动的进度通知）
+export interface NodeLifecycleCallback {
+  onNodeStart?: (nodeId: string, nodeName: string, nodeType: string) => void
+  onNodeComplete?: (nodeId: string, nodeName: string, success: boolean) => void
+  onNodeProgress?: (completedNodes: number, totalNodes: number) => void
+  onReActStepUpdate?: (nodeId: string, steps: ReActStep[]) => void
+}
+
 interface PendingQuestion {
   executionId: string // Store executionId to ensure correct execution is updated
   nodeId: string
@@ -34,7 +42,9 @@ interface ExecutionInstanceState {
   queueStates: Map<string, unknown[]>
   activeBranches: Map<string, string[]>
   pendingQuestion: PendingQuestion | null
+  lifecycleCallbacks?: Set<NodeLifecycleCallback> // 事件驱动：生命周期回调
   createdAt: number // Timestamp for stable sorting
+  nodes?: any[] // 节点列表（用于获取节点信息）
 }
 
 interface ExecutionState {
@@ -116,6 +126,10 @@ interface ExecutionState {
   clearPendingQuestion: (executionId: string) => void
   getPendingQuestion: (executionId: string) => PendingQuestion | null
 
+  // 事件驱动：生命周期回调注册
+  registerLifecycleCallback: (executionId: string, callback: NodeLifecycleCallback) => () => void
+  setNodes: (executionId: string, nodes: any[]) => void
+
   getQueue: (executionId: string, nodeId: string) => unknown[]
   enqueue: (executionId: string, nodeId: string, item: unknown) => void
   dequeue: (executionId: string, nodeId: string) => unknown | undefined
@@ -172,6 +186,18 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
 
     log('createExecution - created:', executionId, 'for workspace:', workspacePath)
     return executionId
+  },
+
+  // 事件驱动：设置节点列表（用于回调时获取节点信息）
+  setNodes: (executionId: string, nodes: any[]) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) return
+
+    const executions = new Map(get().executions)
+    executions.set(executionId, { ...execution, nodes })
+
+    set({ executions })
+    log('setNodes - set', nodes.length, 'nodes for execution:', executionId)
   },
 
   getExecution: (executionId) => {
@@ -290,6 +316,10 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       return
     }
 
+    // 检查状态是否真正变化
+    const oldResult = execution.context.nodeResults.get(nodeId)
+    const isStatusChange = oldResult?.status !== result.status
+
     const newResults = new Map(execution.context.nodeResults)
     newResults.set(nodeId, result)
     const newContext = { ...execution.context, nodeResults: newResults }
@@ -299,6 +329,34 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
 
     set({ executions })
     log('updateNodeStatus - updated, new size:', newResults.size)
+
+    // 事件驱动：状态变化时触发回调
+    if (isStatusChange && execution.lifecycleCallbacks && execution.lifecycleCallbacks.size > 0) {
+      // 获取节点信息
+      const node = execution.nodes?.find((n: any) => n.id === nodeId)
+      const nodeName = node?.data?.label || nodeId
+      const nodeType = node?.type || 'unknown'
+
+      // 计算总体进度
+      const completedNodes = Array.from(newResults.values()).filter(
+        r => r.status === 'success' || r.status === 'error'
+      ).length
+      const totalNodes = execution.nodes?.length || 0
+
+      // 触发所有回调
+      execution.lifecycleCallbacks.forEach(callback => {
+        try {
+          if (result.status === 'running') {
+            callback.onNodeStart?.(nodeId, nodeName, nodeType)
+          } else if (result.status === 'success' || result.status === 'error') {
+            callback.onNodeComplete?.(nodeId, nodeName, result.status === 'success')
+          }
+          callback.onNodeProgress?.(completedNodes, totalNodes)
+        } catch (error) {
+          console.error('[ExecutionStore] Lifecycle callback error:', error)
+        }
+      })
+    }
   },
 
   getNodeStatus: (executionId, nodeId) => {
@@ -497,24 +555,41 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     const newReactAgentStates = new Map(execution.reactAgentStates)
     const stepIndex = state.steps.findIndex((s: ReActStep) => s.id === stepUpdate.id)
 
+    let updatedState: ReActExecutionState
+
     if (stepIndex >= 0) {
+      // 更新现有步骤
       const newSteps = [...state.steps]
       newSteps[stepIndex] = { ...newSteps[stepIndex], ...stepUpdate }
-      newReactAgentStates.set(nodeId, { ...state, steps: newSteps })
+      updatedState = { ...state, steps: newSteps }
     } else {
+      // 添加新步骤
       const newStep = stepUpdate as ReActStep
       const newSteps = [...state.steps, newStep]
-      newReactAgentStates.set(nodeId, {
+      updatedState = {
         ...state,
         steps: newSteps,
         currentIteration: newStep.iteration || state.currentIteration,
-      })
+      }
     }
+
+    newReactAgentStates.set(nodeId, updatedState)
 
     const executions = new Map(get().executions)
     executions.set(executionId, { ...execution, reactAgentStates: newReactAgentStates })
 
     set({ executions })
+
+    // 事件驱动：触发 ReAct 步骤变化回调
+    if (execution.lifecycleCallbacks && execution.lifecycleCallbacks.size > 0) {
+      execution.lifecycleCallbacks.forEach(callback => {
+        try {
+          callback.onReActStepUpdate?.(nodeId, updatedState.steps)
+        } catch (error) {
+          console.error('[ExecutionStore] ReAct step callback error:', error)
+        }
+      })
+    }
   },
 
   appendReActThought: (executionId, nodeId, chunk) => {
@@ -526,18 +601,34 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
 
     const newReactAgentStates = new Map(execution.reactAgentStates)
     const lastStep = state.steps[state.steps.length - 1]
+    const newThought = lastStep.thought + chunk
     const newSteps = [...state.steps]
     newSteps[newSteps.length - 1] = {
       ...lastStep,
-      thought: lastStep.thought + chunk,
+      thought: newThought,
       thoughtStreaming: true,
     }
-    newReactAgentStates.set(nodeId, { ...state, steps: newSteps })
+    const updatedState = { ...state, steps: newSteps }
+    newReactAgentStates.set(nodeId, updatedState)
 
     const executions = new Map(get().executions)
     executions.set(executionId, { ...execution, reactAgentStates: newReactAgentStates })
 
     set({ executions })
+
+    // 事件驱动：只在句子完成时触发回调（减少触发频率）
+    // 检测句子结束标记：。！？\n
+    const shouldTrigger = chunk.endsWith('。') || chunk.endsWith('！') || chunk.endsWith('？') || chunk.includes('\n')
+
+    if (shouldTrigger && execution.lifecycleCallbacks && execution.lifecycleCallbacks.size > 0) {
+      execution.lifecycleCallbacks.forEach(callback => {
+        try {
+          callback.onReActStepUpdate?.(nodeId, newSteps)
+        } catch (error) {
+          console.error('[ExecutionStore] ReAct thought callback error:', error)
+        }
+      })
+    }
   },
 
   appendReActObservation: (executionId, nodeId, chunk, isError = false) => {
@@ -599,12 +690,24 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
           }
         : s
     )
-    newReactAgentStates.set(nodeId, { ...state, steps: newSteps })
+    const updatedState = { ...state, steps: newSteps }
+    newReactAgentStates.set(nodeId, updatedState)
 
     const executions = new Map(get().executions)
     executions.set(executionId, { ...execution, reactAgentStates: newReactAgentStates })
 
     set({ executions })
+
+    // 事件驱动：触发 ReAct 步骤变化回调
+    if (execution.lifecycleCallbacks && execution.lifecycleCallbacks.size > 0) {
+      execution.lifecycleCallbacks.forEach(callback => {
+        try {
+          callback.onReActStepUpdate?.(nodeId, newSteps)
+        } catch (error) {
+          console.error('[ExecutionStore] ReAct step callback error:', error)
+        }
+      })
+    }
   },
 
   getReActState: (executionId, nodeId) => {
@@ -629,6 +732,45 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     executions.set(executionId, { ...execution, reactAgentStates: newReactAgentStates })
 
     set({ executions })
+  },
+
+  // 事件驱动：注册生命周期回调
+  registerLifecycleCallback: (executionId, callback) => {
+    const execution = get().executions.get(executionId)
+    if (!execution) {
+      console.warn('[ExecutionStore] Cannot register callback: execution not found', executionId)
+      return () => {}
+    }
+
+    const callbacks = execution.lifecycleCallbacks || new Set()
+    callbacks.add(callback)
+
+    const executions = new Map(get().executions)
+    executions.set(executionId, {
+      ...execution,
+      lifecycleCallbacks: callbacks
+    })
+    set({ executions })
+
+    log('registerLifecycleCallback - registered for execution:', executionId)
+
+    // 返回注销函数
+    return () => {
+      const currentExecution = get().executions.get(executionId)
+      if (!currentExecution?.lifecycleCallbacks) return
+
+      const newCallbacks = new Set(currentExecution.lifecycleCallbacks)
+      newCallbacks.delete(callback)
+
+      const updatedExecutions = new Map(get().executions)
+      updatedExecutions.set(executionId, {
+        ...currentExecution,
+        lifecycleCallbacks: newCallbacks.size > 0 ? newCallbacks : undefined
+      })
+      set({ executions: updatedExecutions })
+
+      log('registerLifecycleCallback - unregistered for execution:', executionId)
+    }
   },
 
   updateReActTodos: (executionId, nodeId, todos) => {

@@ -150,7 +150,7 @@ export default function ReactAgentProperties({ node, updateNodeData }: Props) {
 
       {/* Max Iterations */}
       <div>
-        <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">最大迭代次数</label>
+        <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">最大思考轮次</label>
         <input
           type="number"
           min="1"

@@ -28,6 +28,7 @@ import {
   AgentInlineTodos,
   AgentInlineGeneratedFiles,
   AgentSidePanel,
+  AgentIterationLimitPrompt,
 } from '@/components/agent'
 import AgentSidebar from '@/components/agent/AgentSidebar'
 import { AppHeader } from '@/components/layout'
@@ -173,7 +174,15 @@ export default function AgentPage() {
     createConversation,
     loadConversationHistory,
     saveCurrentConversation,
+    saveCurrentConversationIncremental,
+    setIncrementalSaveEnabled,
     updateCurrentConversationMeta,
+    // 迭代限制
+    iterationLimitReached,
+    currentIteration,
+    setIterationLimitReached,
+    continueExecution,
+    clearIterationLimit,
   } = useAgentStore()
 
   const [input, setInput] = useState('')
@@ -182,6 +191,8 @@ export default function AgentPage() {
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const currentStepIdRef = useRef<string | null>(null)
+  const lastSaveTimeRef = useRef(0) // 用于控制保存频率
+  const SAVE_MIN_INTERVAL = 10000 // 最小保存间隔10秒
 
   // 加载配置、工作流列表和对话历史
   useEffect(() => {
@@ -197,16 +208,27 @@ export default function AgentPage() {
     }
   }, [isHistoryLoaded, conversationHistory.currentConversationId, createConversation, isRunning])
 
-  // 自动保存当前对话
+  // 自动保存当前对话（优化版本：执行中不保存，增加保存间隔）
   useEffect(() => {
-    if (messages.length > 0 && conversationHistory.currentConversationId) {
-      updateCurrentConversationMeta()
-      const timer = setTimeout(() => {
-        saveCurrentConversation()
-      }, 1000)
-      return () => clearTimeout(timer)
+    // 【关键】执行中不保存，避免频繁序列化
+    if (isRunning) return
+
+    if (messages.length === 0 || !conversationHistory.currentConversationId) return
+
+    const now = Date.now()
+    // 【关键】距离上次保存太近则跳过，避免频繁保存
+    if (now - lastSaveTimeRef.current < SAVE_MIN_INTERVAL) {
+      return
     }
-  }, [messages, conversationHistory.currentConversationId, updateCurrentConversationMeta, saveCurrentConversation])
+
+    updateCurrentConversationMeta()
+    const timer = setTimeout(() => {
+      lastSaveTimeRef.current = Date.now()
+      saveCurrentConversation()
+    }, 3000) // 增加到3秒
+
+    return () => clearTimeout(timer)
+  }, [messages, conversationHistory.currentConversationId, isRunning, updateCurrentConversationMeta, saveCurrentConversation])
 
   // 滚动到底部（仅当用户已在底部附近时）
   useEffect(() => {
@@ -261,6 +283,9 @@ export default function AgentPage() {
     try {
       // 获取流式追加方法
       const { appendThoughtChunk, appendReasoningChunk } = useAgentStore.getState()
+
+      // 启用增量保存模式
+      setIncrementalSaveEnabled(true)
 
       // 获取沙箱路径
       let sandboxPath: string | undefined
@@ -362,6 +387,8 @@ export default function AgentPage() {
             updateStep(assistantMsgId, stepId, {
               thoughtStreaming: false,
             })
+            // 【关键】步骤完成后立即增量保存
+            saveCurrentConversationIncremental()
           },
 
           // 工具调用开始（单个，兼容旧模式）
@@ -426,6 +453,8 @@ export default function AgentPage() {
                 level: 'info',
                 message: `工具执行完成`,
               })
+              // 【关键】工具执行完成后立即增量保存
+              saveCurrentConversationIncremental()
             } else if (update.status === 'error') {
               addExecutionLog({
                 level: 'error',
@@ -468,6 +497,9 @@ export default function AgentPage() {
               message: `任务完成${generatedFiles?.length ? `，生成了 ${generatedFiles.length} 个文件` : ''}`,
             })
 
+            // 【关键】禁用增量保存模式，恢复正常的保存逻辑
+            setIncrementalSaveEnabled(false)
+
             // 检查所有任务是否都已完成，如果是则自动清空任务列表
             const currentTodos = useAgentStore.getState().todos.items
             if (currentTodos.length > 0 && currentTodos.every(t => t.completed)) {
@@ -488,6 +520,22 @@ export default function AgentPage() {
               level: 'error',
               message: error,
             })
+            // 【关键】错误时也要禁用增量保存模式
+            setIncrementalSaveEnabled(false)
+          },
+
+          // 迭代限制
+          onIterationLimitReached: (current, max) => {
+            setIterationLimitReached(true, current, max)
+            updateMessage(assistantMsgId, {
+              isStreaming: false,
+            })
+            addExecutionLog({
+              level: 'warn',
+              message: `已达到最大迭代次数 (${current}/${max})，等待用户确认`,
+            })
+            // 【关键】达到迭代限制时也要禁用增量保存模式
+            setIncrementalSaveEnabled(false)
           },
         }
       )
@@ -507,6 +555,8 @@ export default function AgentPage() {
           message: errorMessage,
         })
       }
+      // 【关键】catch 块中也要禁用增量保存模式
+      setIncrementalSaveEnabled(false)
     } finally {
       setRunning(false)
     }
@@ -525,6 +575,8 @@ export default function AgentPage() {
     updateTodos,
     addExecutionLog,
     setSettingsOpen,
+    setIterationLimitReached,
+    setIncrementalSaveEnabled,
     currentWorkspace,
     conversationHistory.currentConversationId,
   ])
@@ -562,6 +614,24 @@ export default function AgentPage() {
     setFeedback('已停止执行')
     setTimeout(() => setFeedback(null), 2000)
   }, [setRunning])
+
+  // 处理继续执行
+  const handleContinueExecution = useCallback(() => {
+    continueExecution()
+    // 重新执行最后一个用户消息
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop()
+    if (lastUserMessage) {
+      const msgIndex = messages.indexOf(lastUserMessage)
+      executeAgent(lastUserMessage.content, messages.slice(0, msgIndex))
+    }
+  }, [messages, executeAgent, continueExecution])
+
+  // 处理停止执行（在迭代限制提示中）
+  const handleStopExecution = useCallback(() => {
+    clearIterationLimit()
+    setFeedback('已停止执行')
+    setTimeout(() => setFeedback(null), 2000)
+  }, [clearIterationLimit])
 
   // Platform detection
   const isMac = useMemo(() => window.electronAPI.platform.isMac(), [])
@@ -686,6 +756,17 @@ export default function AgentPage() {
                   }}
                 />
               ))}
+
+              {/* 迭代限制提示 */}
+              <AnimatePresence>
+                {iterationLimitReached && (
+                  <AgentIterationLimitPrompt
+                    currentIteration={currentIteration}
+                    onContinue={handleContinueExecution}
+                    onStop={handleStopExecution}
+                  />
+                )}
+              </AnimatePresence>
 
               <div ref={messagesEndRef} />
             </div>

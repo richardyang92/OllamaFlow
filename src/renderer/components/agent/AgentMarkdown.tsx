@@ -1,13 +1,16 @@
 /**
  * Agent 专用的轻量级 Markdown 渲染组件
- * 支持代码高亮、GFM 语法
+ * 支持代码高亮、GFM 语法、数学公式（LaTeX/KaTeX）
  */
 
 import { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
 import 'highlight.js/styles/github-dark.css'
+import 'katex/dist/katex.min.css'
 
 interface AgentMarkdownProps {
   content: string
@@ -21,8 +24,8 @@ export const AgentMarkdown = memo(function AgentMarkdown({
   return (
     <div className={className}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeHighlight, rehypeKatex]}
       components={{
         // 代码块
         code({ className, children, ...props }) {

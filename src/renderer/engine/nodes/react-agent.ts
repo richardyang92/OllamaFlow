@@ -598,6 +598,11 @@ function buildFullSystemPrompt(systemPrompt: string, enableUserInput: boolean): 
 
 ## 可用工具
 
+**⚠️ 调用工具时的重要提示**:
+- 所有工具参数都必须严格按 JSON 格式提供
+- 必填参数不能省略，否则工具调用会失败
+- 调用前请确认已包含所有必需的参数
+
 ### todos - 任务规划工具（推荐首先使用）
 **重要**: 调用此工具时必须提供 action 参数！
 
@@ -615,7 +620,7 @@ function buildFullSystemPrompt(systemPrompt: string, enableUserInput: boolean): 
 ### readFile - 读取文件
 输入: {"filePath": "data/input.txt"}
 
-### writeFile - 写入文件
+### writeFile - 写入文件（重要：必须同时提供 filename 和 content 参数！）
 输入: {"filename": "output.py", "content": "print('hello')"}
 
 ### writeMultipleFiles - 批量写入
@@ -932,6 +937,7 @@ async function executeReAct(
     const newStep: ReActStep = {
       id: stepId,
       iteration,
+      maxIterations,
       status: 'thinking',
       thought: '',
       thoughtStreaming: true,
@@ -1193,6 +1199,16 @@ async function executeReAct(
                 toolName,
                 success: false,
                 observation: `错误: 调用 executeCommand 工具时未提供参数。必须提供 command 参数。例如: {"command": "ls -la"}`,
+              }
+              allResults.push(errorResult)
+              groupObservations.push(errorResult.observation)
+              return
+            } else if (toolName === 'writeFile') {
+              const errorResult = {
+                toolCallId: toolCall.id,
+                toolName,
+                success: false,
+                observation: `错误: 调用 writeFile 工具时未提供参数。必须提供 filename 和 content 参数。例如: {"filename": "output.txt", "content": "文件内容"}`,
               }
               allResults.push(errorResult)
               groupObservations.push(errorResult.observation)
@@ -1517,6 +1533,7 @@ export async function continueReactAgentWithUserInput(
     const newStep: ReActStep = {
       id: stepId,
       iteration,
+      maxIterations,
       status: 'thinking',
       thought: '',
       thoughtStreaming: true,

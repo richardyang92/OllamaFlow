@@ -164,18 +164,13 @@ export async function executeWorkflowAsSubAgent(
 
     // 获取节点名称映射
     const nodeNameMap = new Map<string, string>()
-    const nodeTypeMap = new Map<string, string>() // 新增：节点类型映射
     nodes.forEach((node) => {
       nodeNameMap.set(node.id, (node.data.label as string) || node.type || node.id)
-      nodeTypeMap.set(node.id, node.type || 'unknown')
     })
 
     // 计算需要执行的节点总数（排除 trigger 类型的节点，因为它们是自动触发的）
     const executableNodes = nodes.filter((n) => n.type !== 'trigger')
     const totalNodesCount = executableNodes.length
-    const completedNodeIds = new Set<string>() // 跟踪已完成的节点
-    const trackedNodeIds = new Set<string>() // 跟踪已发送开始事件的节点
-    const nodeStartTimes = new Map<string, number>() // 记录节点开始时间
 
     // 通知开始执行，传递总节点数
     options?.onProgress?.onStatusChange('running')
@@ -195,54 +190,32 @@ export async function executeWorkflowAsSubAgent(
 
     addLog('开始执行工作流...')
 
-    // 定期检查执行进度并回调
-    const progressInterval = setInterval(() => {
-      const currentExecution = executionStore.getExecution(executionId)
-      if (!currentExecution?.context?.nodeResults) return
+    // 【事件驱动】注册生命周期回调，替代轮询
+    // 设置节点列表（用于回调时获取节点信息）
+    executionStore.setNodes(executionId, nodes)
 
-      // 计算已完成的节点数
-      let runningNodeName: string | null = null
-      let runningNodeId: string | null = null
-      let runningNodeType: string | null = null
+    const unregisterCallback = executionStore.registerLifecycleCallback(executionId, {
+      onNodeStart: (nodeId, nodeName, nodeType) => {
+        options?.onProgress?.onNodeStart(nodeName, nodeId, nodeType)
+      },
 
-      currentExecution.context.nodeResults.forEach((result, nodeId) => {
-        const nodeName = nodeNameMap.get(nodeId) || nodeId
-        const nodeType = nodeTypeMap.get(nodeId) || 'unknown'
+      onNodeComplete: (nodeId, nodeName, success) => {
+        options?.onProgress?.onNodeComplete(nodeName, nodeId, success)
+      },
 
-        // 检查节点是否刚开始运行
-        if (result.status === 'running' && !trackedNodeIds.has(nodeId)) {
-          trackedNodeIds.add(nodeId)
-          nodeStartTimes.set(nodeId, Date.now())
-          runningNodeName = nodeName
-          runningNodeId = nodeId
-          runningNodeType = nodeType
-        }
+      onNodeProgress: (completedNodes, totalNodes) => {
+        options?.onProgress?.onProgress(completedNodes, totalNodes)
+      },
 
-        // 检查节点是否刚完成
-        if ((result.status === 'success' || result.status === 'error') && !completedNodeIds.has(nodeId)) {
-          completedNodeIds.add(nodeId)
-          const success = result.status === 'success'
-          options?.onProgress?.onNodeComplete(nodeName, nodeId, success)
-        }
-
-        // 检查正在运行的节点
-        if (result.status === 'running') {
-          runningNodeName = nodeName
-          runningNodeId = nodeId
-          runningNodeType = nodeType
-        }
-      })
-
-      // 通知当前节点和进度
-      if (runningNodeName !== null && runningNodeId !== null) {
-        options?.onProgress?.onNodeStart(runningNodeName, runningNodeId, runningNodeType ?? undefined)
-
-        // 如果当前节点是 ReAct Agent，检查其执行状态
-        if (runningNodeType === 'reactAgent') {
-          const reactState = currentExecution.reactAgentStates?.get(runningNodeId)
-          if (reactState && reactState.steps.length > 0) {
+      onReActStepUpdate: (nodeId, steps) => {
+        // 只在节点类型为 ReAct Agent 时处理
+        const node = nodes.find(n => n.id === nodeId)
+        if (node?.type === 'reactAgent') {
+          const nodeName = nodeNameMap.get(nodeId) || nodeId
+          const reactState = executionStore.getExecution(executionId)?.reactAgentStates?.get(nodeId)
+          if (reactState) {
             // 转换 ReAct 步骤为摘要格式
-            const stepSummaries: ReActStepSummary[] = reactState.steps.map(step => ({
+            const stepSummaries: ReActStepSummary[] = steps.map(step => ({
               iteration: step.iteration,
               status: step.status,
               thought: step.thought ? step.thought.slice(0, 100) + (step.thought.length > 100 ? '...' : '') : undefined,
@@ -250,8 +223,8 @@ export async function executeWorkflowAsSubAgent(
               observation: step.observation ? step.observation.slice(0, 100) + (step.observation.length > 100 ? '...' : '') : undefined,
             }))
             options?.onProgress?.onReActStepsUpdate?.(
-              runningNodeName,
-              runningNodeId,
+              nodeName,
+              nodeId,
               stepSummaries,
               reactState.currentIteration,
               reactState.maxIterations
@@ -259,33 +232,18 @@ export async function executeWorkflowAsSubAgent(
           }
         }
       }
-      options?.onProgress?.onProgress(completedNodeIds.size, totalNodesCount)
-    }, 200) // 每200ms检查一次
+    })
 
     // 执行工作流
     let success = false
     try {
       success = await executor.execute()
     } finally {
-      clearInterval(progressInterval)
+      // 清理：注销回调
+      unregisterCallback()
     }
 
     addLog(`工作流执行${success ? '成功' : '失败'}`)
-
-    // 执行完成后，进行最后一次节点状态检查，确保所有节点状态都被更新
-    const finalExecutionForCheck = executionStore.getExecution(executionId)
-    const finalNodeResults = finalExecutionForCheck?.context?.nodeResults
-    if (finalNodeResults) {
-      finalNodeResults.forEach((result, nodeId) => {
-        const nodeName = nodeNameMap.get(nodeId) || nodeId
-        // 检查是否有节点已完成但还没发送完成回调
-        if ((result.status === 'success' || result.status === 'error') && !completedNodeIds.has(nodeId)) {
-          completedNodeIds.add(nodeId)
-          const success = result.status === 'success'
-          options?.onProgress?.onNodeComplete(nodeName, nodeId, success)
-        }
-      })
-    }
 
     // 执行完成后，确保进度更新到 100%
     options?.onProgress?.onProgress(totalNodesCount, totalNodesCount)

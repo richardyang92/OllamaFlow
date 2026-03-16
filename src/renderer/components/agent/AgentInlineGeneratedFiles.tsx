@@ -379,14 +379,7 @@ export default function AgentInlineGeneratedFiles({ messages }: AgentInlineGener
         }
       }
     }
-    const result = Array.from(fileMap.values())
-    console.log('[🏖️ FILE_LIST] 聚合生成文件', {
-      totalMessages: messages.length,
-      messagesWithFiles: messages.filter(m => m.generatedFiles && m.generatedFiles.length > 0).length,
-      totalFiles: result.length,
-      files: result.map(f => ({ workspace: f.workspacePath, path: f.path, size: f.size })),
-    })
-    return result
+    return Array.from(fileMap.values())
   }, [messages])
 
   if (allFiles.length === 0) return null

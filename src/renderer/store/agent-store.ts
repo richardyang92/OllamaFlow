@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { immer } from 'zustand/middleware/immer'
 import type { LLMProvider } from '@/engine/react-agent/llm/types'
 import type { TodoItem } from '@/types/node'
 import { useWorkspaceStore } from './workspace-store'
@@ -44,6 +45,7 @@ export interface ReActToolCallInfo {
 export interface ReActStepDetail {
   id: string
   iteration: number
+  maxIterations?: number   // 最大迭代次数（用于显示 X/XX 格式）
   status: 'thinking' | 'acting' | 'observing' | 'completed' | 'error'
   thought?: string         // 思考内容
   thoughtStreaming?: boolean
@@ -115,6 +117,12 @@ export interface SubAgentProgress {
   reactAgentMaxIterations?: number  // 最大迭代次数
 }
 
+// SubAgent 进度的部分更新类型
+export type PartialSubAgentProgress = Partial<Omit<SubAgentProgress, 'workflowName' | 'workflowPath'>> & {
+  workflowName?: string
+  workflowPath?: string
+}
+
 // 生成的文件信息
 export interface GeneratedFileInfo {
   path: string           // 文件路径（相对工作区）
@@ -152,6 +160,7 @@ export type AgentStepStatus = 'thinking' | 'acting' | 'observing' | 'completed' 
 export interface AgentStep {
   id: string
   iteration: number
+  maxIterations?: number  // 最大迭代次数（用于显示 X/XX 格式）
   status: AgentStepStatus
   thought?: string
   thoughtStreaming?: boolean
@@ -237,6 +246,9 @@ interface AgentState {
   isRunning: boolean
   executionStatus: ExecutionStatus
 
+  // 增量保存控制
+  incrementalSaveEnabled: boolean  // 是否启用增量保存
+
   // 任务状态
   todos: AgentTodoState
 
@@ -267,6 +279,11 @@ interface AgentState {
   // 对话历史
   conversationHistory: ConversationHistory
   searchQuery: string
+
+  // 迭代限制状态
+  iterationLimitReached: boolean    // 是否达到迭代上限
+  currentIteration: number           // 当前迭代次数
+  maxIterations: number              // 最大迭代次数
 
   // ========== Actions ==========
 
@@ -342,10 +359,17 @@ interface AgentState {
   loadConversationHistory: () => Promise<void>
   saveConversationHistory: () => Promise<void>
   saveCurrentConversation: () => Promise<void>
+  saveCurrentConversationIncremental: () => Promise<void>  // 增量保存
+  setIncrementalSaveEnabled: (enabled: boolean) => void  // 启用/禁用增量保存
 
   // 兼容性操作（保留旧API）
   addWorkflowCall: (messageId: string, call: WorkflowCallRecord) => void
   updateWorkflowCall: (messageId: string, index: number, update: Partial<WorkflowCallRecord>) => void
+
+  // 迭代限制操作
+  setIterationLimitReached: (reached: boolean, current: number, max: number) => void
+  continueExecution: () => void
+  clearIterationLimit: () => void
 }
 
 // ============ ID 生成器 ============
@@ -362,13 +386,45 @@ export const generateToolCallId = () => `tc_${Date.now()}_${++toolCallIdCounter}
 const generateLogId = () => `log_${Date.now()}_${++logIdCounter}`
 const generateConversationId = () => `conv_${Date.now()}_${++conversationIdCounter}`
 
+// ============ 工具函数 ============
+
+/**
+ * 将 ConversationHistory 转换为纯对象，用于 IPC 通信
+ * Immer 的 proxy 对象不能通过 structured clone，需要先转换为纯对象
+ */
+function serializeConversationHistory(history: ConversationHistory): {
+  conversations: Array<{
+    id: string
+    title: string
+    createdAt: number
+    updatedAt: number
+    messageCount: number
+    preview?: string
+  }>
+  currentConversationId: string | null
+} {
+  return {
+    conversations: history.conversations.map((c) => ({
+      id: c.id,
+      title: c.title,
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+      messageCount: c.messageCount,
+      preview: c.preview,
+    })),
+    currentConversationId: history.currentConversationId,
+  }
+}
+
 // ============ Store 实现 ============
 
-export const useAgentStore = create<AgentState>((set, _get) => ({
+export const useAgentStore = create<AgentState>()(
+  immer((set, _get) => ({
   // 初始状态
   messages: [],
   isRunning: false,
   executionStatus: 'idle',
+  incrementalSaveEnabled: false,  // 增量保存开关
   todos: { items: [], lastUpdated: 0 },
   executionLogs: [],
   provider: 'ollama',
@@ -388,6 +444,11 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
   },
   searchQuery: '',
 
+  // 迭代限制状态
+  iterationLimitReached: false,
+  currentIteration: 0,
+  maxIterations: 10,
+
   // ========== 消息操作 ==========
 
   addMessage: (message) => {
@@ -406,11 +467,13 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
 
   updateMessage: (id, update) => {
     log('updateMessage', id, update)
-    set((state) => ({
-      messages: state.messages.map((msg) =>
-        msg.id === id ? { ...msg, ...update } : msg
-      ),
-    }))
+    set((state) => {
+      const msg = state.messages.find(m => m.id === id)
+      if (!msg) return
+
+      // 使用 immer 直接修改
+      Object.assign(msg, update)
+    })
   },
 
   deleteMessage: (id) => {
@@ -452,15 +515,16 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
 
   updateStep: (messageId, stepId, update) => {
     log('updateStep', messageId, stepId, update)
-    set((state) => ({
-      messages: state.messages.map((msg) => {
-        if (msg.id !== messageId) return msg
-        const steps = msg.steps?.map((step) =>
-          step.id === stepId ? { ...step, ...update } : step
-        )
-        return { ...msg, steps }
-      }),
-    }))
+    set((state) => {
+      const msg = state.messages.find(m => m.id === messageId)
+      if (!msg?.steps) return
+
+      const step = msg.steps.find(s => s.id === stepId)
+      if (!step) return
+
+      // 使用 immer 直接修改
+      Object.assign(step, update)
+    })
   },
 
   updateLastStep: (messageId, update) => {
@@ -478,29 +542,26 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
   // ========== 流式更新操作 ==========
 
   appendThoughtChunk: (messageId, chunk) => {
-    set((state) => ({
-      messages: state.messages.map((msg) => {
-        if (msg.id !== messageId || !msg.steps?.length) return msg
-        const steps = [...msg.steps]
-        const lastStep = steps[steps.length - 1]
-        if (lastStep.status === 'thinking') {
-          steps[steps.length - 1] = {
-            ...lastStep,
-            thought: (lastStep.thought || '') + chunk,
-          }
-        }
-        return { ...msg, steps }
-      }),
-    }))
+    set((state) => {
+      const msg = state.messages.find(m => m.id === messageId)
+      if (!msg?.steps?.length) return
+
+      const lastStep = msg.steps[msg.steps.length - 1]
+      if (lastStep.status === 'thinking') {
+        // 使用 immer 直接修改，避免创建新数组
+        lastStep.thought = (lastStep.thought || '') + chunk
+      }
+    })
   },
 
   appendResponseChunk: (messageId, chunk) => {
-    set((state) => ({
-      messages: state.messages.map((msg) => {
-        if (msg.id !== messageId) return msg
-        return { ...msg, content: (msg.content || '') + chunk }
-      }),
-    }))
+    set((state) => {
+      const msg = state.messages.find(m => m.id === messageId)
+      if (!msg) return
+
+      // 使用 immer 直接修改
+      msg.content = (msg.content || '') + chunk
+    })
   },
 
   setThoughtStreaming: (messageId, streaming) => {
@@ -528,16 +589,14 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
 
   appendReasoningChunk: (messageId, chunk) => {
     log('appendReasoningChunk', messageId, chunk.substring(0, 50) + '...')
-    set((state) => ({
-      messages: state.messages.map((msg) => {
-        if (msg.id !== messageId) return msg
-        return {
-          ...msg,
-          reasoningContent: (msg.reasoningContent || '') + chunk,
-          reasoningStreaming: true,
-        }
-      }),
-    }))
+    set((state) => {
+      const msg = state.messages.find(m => m.id === messageId)
+      if (!msg) return
+
+      // 使用 immer 直接修改
+      msg.reasoningContent = (msg.reasoningContent || '') + chunk
+      msg.reasoningStreaming = true
+    })
   },
 
   setReasoningStreaming: (messageId, streaming) => {
@@ -576,19 +635,37 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
 
   updateToolCall: (messageId, stepId, toolCallId, update) => {
     log('updateToolCall', messageId, stepId, toolCallId, update)
-    set((state) => ({
-      messages: state.messages.map((msg) => {
-        if (msg.id !== messageId) return msg
-        const steps = msg.steps?.map((step) => {
-          if (step.id !== stepId || !step.toolCall || step.toolCall.id !== toolCallId) return step
-          return {
-            ...step,
-            toolCall: { ...step.toolCall, ...update },
-          }
-        })
-        return { ...msg, steps }
-      }),
-    }))
+    set((state) => {
+      const msg = state.messages.find(m => m.id === messageId)
+      if (!msg?.steps) return state
+
+      const step = msg.steps.find(s => s.id === stepId)
+      if (!step?.toolCall || step.toolCall.id !== toolCallId) return state
+
+      // 使用 immer 直接修改
+      Object.assign(step.toolCall, update)
+
+      // 如果 update 包含 subAgentProgress，进行深度合并以保留现有字段
+      if (update.subAgentProgress) {
+        if (step.toolCall.subAgentProgress) {
+          // 如果已有 subAgentProgress，合并更新字段
+          Object.assign(step.toolCall.subAgentProgress, update.subAgentProgress)
+        } else {
+          // 如果没有 subAgentProgress，创建新的（使用合理的默认值）
+          const progressData = update.subAgentProgress as Partial<SubAgentProgress>
+          step.toolCall.subAgentProgress = {
+            workflowName: progressData.workflowName || '',
+            workflowPath: progressData.workflowPath || '',
+            status: progressData.status || 'loading',
+            startedAt: progressData.startedAt || Date.now(),
+            updatedAt: progressData.updatedAt || Date.now(),
+            ...progressData,
+          } as SubAgentProgress
+        }
+      }
+
+      return state
+    })
   },
 
   // ========== 并行工具调用操作 ==========
@@ -609,18 +686,36 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
 
   updateToolCallByIndex: (messageId, stepId, index, update) => {
     log('updateToolCallByIndex', messageId, stepId, index, update)
-    set((state) => ({
-      messages: state.messages.map((msg) => {
-        if (msg.id !== messageId) return msg
-        const steps = msg.steps?.map((step) => {
-          if (step.id !== stepId || !step.toolCalls?.[index]) return step
-          const newToolCalls = [...step.toolCalls]
-          newToolCalls[index] = { ...newToolCalls[index], ...update }
-          return { ...step, toolCalls: newToolCalls }
-        })
-        return { ...msg, steps }
-      }),
-    }))
+    set((state) => {
+      const msg = state.messages.find(m => m.id === messageId)
+      if (!msg?.steps) return
+
+      const step = msg.steps.find(s => s.id === stepId)
+      if (!step?.toolCalls?.[index]) return
+
+      const toolCall = step.toolCalls[index]
+      // 使用 immer 直接修改，无需手动创建新对象
+      Object.assign(toolCall, update)
+
+      // 如果 update 包含 subAgentProgress，进行深度合并以保留现有字段
+      if (update.subAgentProgress) {
+        if (toolCall.subAgentProgress) {
+          // 如果已有 subAgentProgress，合并更新字段
+          Object.assign(toolCall.subAgentProgress, update.subAgentProgress)
+        } else {
+          // 如果没有 subAgentProgress，创建新的（使用合理的默认值）
+          const progressData = update.subAgentProgress as Partial<SubAgentProgress>
+          toolCall.subAgentProgress = {
+            workflowName: progressData.workflowName || '',
+            workflowPath: progressData.workflowPath || '',
+            status: progressData.status || 'loading',
+            startedAt: progressData.startedAt || Date.now(),
+            updatedAt: progressData.updatedAt || Date.now(),
+            ...progressData,
+          } as SubAgentProgress
+        }
+      }
+    })
   },
 
   // ========== 任务操作 ==========
@@ -790,6 +885,28 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
 
   // ========== 对话历史操作 ==========
 
+  // 增量保存：保存当前对话消息（用于执行过程中实时保存）
+  saveCurrentConversationIncremental: async () => {
+    try {
+      const state = _get()
+      const { messages, conversationHistory, incrementalSaveEnabled } = state
+      const currentId = conversationHistory.currentConversationId
+      // 如果未启用增量保存，则跳过
+      if (!incrementalSaveEnabled || !currentId || messages.length === 0) return
+
+      await window.electronAPI.agent.saveConversation(currentId, messages)
+      log('saveCurrentConversationIncremental - saved', currentId)
+    } catch (error) {
+      console.error('[AgentStore] saveCurrentConversationIncremental error:', error)
+    }
+  },
+
+  // 启用/禁用增量保存
+  setIncrementalSaveEnabled: (enabled: boolean) => {
+    log('setIncrementalSaveEnabled', enabled)
+    set({ incrementalSaveEnabled: enabled })
+  },
+
   createConversation: async () => {
     const id = generateConversationId()
     const now = Date.now()
@@ -804,7 +921,8 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
 
     // 先获取当前状态
     const state = _get()
-    const newHistory = {
+
+    const newHistory: ConversationHistory = {
       conversations: [newConversation, ...state.conversationHistory.conversations],
       currentConversationId: id,
     }
@@ -826,7 +944,7 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
     }
 
     // 持久化对话列表
-    window.electronAPI.agent.saveConversationHistory(newHistory).catch((error) => {
+    window.electronAPI.agent.saveConversationHistory(serializeConversationHistory(newHistory)).catch((error) => {
       console.error('[AgentStore] Failed to save conversation history:', error)
     })
 
@@ -880,7 +998,7 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
     const state = _get()
 
     // 构建新的历史记录
-    const newHistory = {
+    const newHistory: ConversationHistory = {
       conversations: state.conversationHistory.conversations.filter((c) => c.id !== id),
       currentConversationId:
         state.conversationHistory.currentConversationId === id
@@ -916,7 +1034,7 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
 
     // 持久化对话列表
     try {
-      await window.electronAPI.agent.saveConversationHistory(newHistory)
+      await window.electronAPI.agent.saveConversationHistory(serializeConversationHistory(newHistory))
     } catch (error) {
       console.error('[AgentStore] Failed to save conversation history:', error)
     }
@@ -924,59 +1042,67 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
 
   renameConversation: (id, title) => {
     log('renameConversation', id, title)
-    set((state) => {
-      const newHistory = {
-        ...state.conversationHistory,
-        conversations: state.conversationHistory.conversations.map((c) =>
-          c.id === id ? { ...c, title, updatedAt: Date.now() } : c
-        ),
-      }
 
-      // 持久化对话列表
-      window.electronAPI.agent.saveConversationHistory(newHistory).catch((error) => {
-        console.error('[AgentStore] Failed to save conversation history:', error)
-      })
+    // 先在 Immer 外部计算需要的数据
+    const state = useAgentStore.getState()
 
-      return { conversationHistory: newHistory }
+    const newHistory: ConversationHistory = {
+      ...state.conversationHistory,
+      conversations: state.conversationHistory.conversations.map((c) =>
+        c.id === id ? { ...c, title, updatedAt: Date.now() } : c
+      ),
+    }
+
+    // 持久化对话列表
+    window.electronAPI.agent.saveConversationHistory(serializeConversationHistory(newHistory)).catch((error) => {
+      console.error('[AgentStore] Failed to save conversation history:', error)
+    })
+
+    // 更新状态
+    set({
+      conversationHistory: newHistory,
     })
   },
 
   updateCurrentConversationMeta: () => {
-    set((state) => {
-      const { messages, conversationHistory } = state
-      if (!conversationHistory.currentConversationId) return state
+    // 先在 Immer 外部计算需要的数据
+    const state = useAgentStore.getState()
+    const { messages, conversationHistory } = state
+    if (!conversationHistory.currentConversationId) return
 
-      const lastMessage = messages[messages.length - 1]
-      const preview = lastMessage?.content?.slice(0, 50) || ''
-      const currentConv = conversationHistory.conversations.find(
-        (c) => c.id === conversationHistory.currentConversationId
-      )
-      const title =
-        messages.length > 0 && currentConv?.title === '新对话'
-          ? messages[0].content.slice(0, 30) || '新对话'
-          : undefined
+    const lastMessage = messages[messages.length - 1]
+    const preview = lastMessage?.content?.slice(0, 50) || ''
+    const currentConv = conversationHistory.conversations.find(
+      (c) => c.id === conversationHistory.currentConversationId
+    )
+    const title =
+      messages.length > 0 && currentConv?.title === '新对话'
+        ? messages[0].content.slice(0, 30) || '新对话'
+        : undefined
 
-      const newHistory = {
-        ...conversationHistory,
-        conversations: conversationHistory.conversations.map((c) =>
-          c.id === conversationHistory.currentConversationId
-            ? {
-                ...c,
-                ...(title && { title }),
-                messageCount: messages.length,
-                preview,
-                updatedAt: Date.now(),
-              }
-            : c
-        ),
-      }
+    const newHistory: ConversationHistory = {
+      ...conversationHistory,
+      conversations: conversationHistory.conversations.map((c) =>
+        c.id === conversationHistory.currentConversationId
+          ? {
+              ...c,
+              ...(title && { title }),
+              messageCount: messages.length,
+              preview,
+              updatedAt: Date.now(),
+            }
+          : c
+      ),
+    }
 
-      // 持久化对话列表（debounce 由调用方控制）
-      window.electronAPI.agent.saveConversationHistory(newHistory).catch((error) => {
-        console.error('[AgentStore] Failed to save conversation history:', error)
-      })
+    // 持久化对话列表（debounce 由调用方控制）
+    window.electronAPI.agent.saveConversationHistory(serializeConversationHistory(newHistory)).catch((error) => {
+      console.error('[AgentStore] Failed to save conversation history:', error)
+    })
 
-      return { conversationHistory: newHistory }
+    // 更新状态
+    set({
+      conversationHistory: newHistory,
     })
   },
 
@@ -1023,7 +1149,7 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
   saveConversationHistory: async () => {
     try {
       const state = _get()
-      await window.electronAPI.agent.saveConversationHistory(state.conversationHistory)
+      await window.electronAPI.agent.saveConversationHistory(serializeConversationHistory(state.conversationHistory))
       log('saveConversationHistory - saved')
     } catch (error) {
       console.error('[AgentStore] saveConversationHistory error:', error)
@@ -1043,4 +1169,34 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
       console.error('[AgentStore] saveCurrentConversation error:', error)
     }
   },
-}))
+
+  // ========== 迭代限制操作 ==========
+
+  setIterationLimitReached: (reached: boolean, current: number, max: number) => {
+    log('setIterationLimitReached', { reached, current, max })
+    set({
+      iterationLimitReached: reached,
+      currentIteration: current,
+      maxIterations: max,
+      isRunning: false,  // 暂停执行
+    })
+  },
+
+  continueExecution: () => {
+    log('continueExecution')
+    set({
+      iterationLimitReached: false,
+      maxIterations: (_get().maxIterations + 10),  // 增加10轮
+      isRunning: true,  // 恢复执行
+    })
+  },
+
+  clearIterationLimit: () => {
+    log('clearIterationLimit')
+    set({
+      iterationLimitReached: false,
+      currentIteration: 0,
+      maxIterations: 10,
+    })
+  },
+})))

@@ -71,17 +71,14 @@ export class TodosManager {
           }
         }
 
-        // Clear existing and add all tasks
-        this.todos = []
+        // Clear existing and add all tasks using immutable pattern
         const now = Date.now()
-        for (let i = 0; i < taskList.length; i++) {
-          this.todos.push({
-            id: `todo-${now + i}`,
-            content: taskList[i].trim(),
-            completed: false,
-            createdAt: now + i,
-          })
-        }
+        this.todos = taskList.map((task, i) => ({
+          id: `todo-${now + i}`,
+          content: task.trim(),
+          completed: false,
+          createdAt: now + i,
+        }))
 
         if (this.todos.length === 0) {
           return { success: false, output: '', error: '未提供有效的任务列表' }
@@ -102,7 +99,7 @@ export class TodosManager {
           completed: false,
           createdAt: Date.now(),
         }
-        this.todos.push(newTodo)
+        this.todos = [...this.todos, newTodo]
         return {
           success: true,
           output: `已添加任务: "${newTodo.content}" (ID: ${newTodo.id})`,
@@ -111,14 +108,19 @@ export class TodosManager {
 
       case 'complete': {
         // Mark task as completed
-        const todoToComplete = this.todos.find(
+        const index = this.todos.findIndex(
           (t) => t.id === taskId || (content && t.content.includes(content))
         )
-        if (todoToComplete) {
-          todoToComplete.completed = true
+        if (index !== -1) {
+          // Create a new array with the updated item to avoid issues with frozen objects
+          this.todos = [
+            ...this.todos.slice(0, index),
+            { ...this.todos[index], completed: true },
+            ...this.todos.slice(index + 1),
+          ]
           return {
             success: true,
-            output: `已完成任务: "${todoToComplete.content}"`,
+            output: `已完成任务: "${this.todos[index].content}"`,
           }
         }
         return { success: false, output: '', error: '未找到指定任务' }
@@ -148,7 +150,8 @@ export class TodosManager {
           (t) => t.id === taskId || (content && t.content.includes(content))
         )
         if (index !== -1) {
-          const removed = this.todos.splice(index, 1)[0]
+          const removed = this.todos[index]
+          this.todos = [...this.todos.slice(0, index), ...this.todos.slice(index + 1)]
           return { success: true, output: `已删除任务: "${removed.content}"` }
         }
         return { success: false, output: '', error: '未找到指定任务' }
