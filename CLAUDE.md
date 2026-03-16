@@ -280,10 +280,77 @@ The `json` node ([json.ts](src/renderer/engine/nodes/json.ts)) processes JSON da
 - **extract**: Extract nested values using JSONPath-like syntax (supports dot notation and array indices like `items[0].name`)
 - **merge**: Merge multiple input objects into one
 
+### Math Tools
+The Agent executor includes comprehensive mathematical tools via [tools/index.ts](src/renderer/engine/tools/index.ts):
+- **Basic Math** ([math.ts](src/renderer/engine/tools/math.ts)): Arithmetic, statistics, basic operations
+- **Number Theory** ([math-number.ts](src/renderer/engine/tools/math-number.ts)): Primes, GCD/LCM, factorials, Fibonacci, combinatorics
+- **Linear Algebra** ([math-linear.ts](src/renderer/engine/tools/math-linear.ts)): Matrix operations, eigenvalues, decomposition methods
+- **Probability** ([math-probability.ts](src/renderer/engine/tools/math-probability.ts)): Distributions, regression, correlation analysis
+- **Unit Conversion** ([math-unit.ts](src/renderer/engine/tools/math-unit.ts)): Physical unit conversions (length, mass, temperature, etc.)
+- **Calculus** ([math-calculus.ts](src/renderer/engine/tools/math-calculus.ts)): Derivatives, integrals, limits, Taylor series
+- **Equation Solving** ([math-equation.ts](src/renderer/engine/tools/math-equation.ts)): Symbolic/numeric equation solving
+
+All math tools use **mathjs** library for computation. Tools are registered in `AVAILABLE_TOOLS` in [types/node.ts](src/renderer/types/node.ts) and exposed to the ReAct Agent via the tool registry.
+
 ## UI Localization
 The application UI uses Chinese localization throughout:
 - Node labels, descriptions, and log messages are in Chinese
 - Example: "Ollama 对话" (Ollama Chat), "读取文件" (Read File)
 
+## Performance Optimization
+
+### Virtualized Message List
+[VirtualizedMessageList.tsx](src/renderer/components/agent/VirtualizedMessageList.tsx) uses react-window for efficient rendering of long conversation histories:
+- Only renders visible messages, reducing DOM nodes significantly
+- Single ResizeObserver instance for all message items
+- Height change threshold detection to avoid frequent updates
+- Throttled streaming scroll optimization
+
+### Performance Tracing
+[performance-trace.ts](src/renderer/utils/performance-trace.ts) provides Chrome DevTools-compatible performance tracing:
+- Captures performance marks and measures
+- Exports to Chrome Trace Event Format
+- Use for debugging performance bottlenecks in Agent execution
+
+### Agent Execution Optimization
+The [agent-executor.ts](src/renderer/engine/agent-executor.ts) includes several optimizations:
+- **Context Compression**: Reduces token usage via `compressOpenAIContext()` and LLM-based compression
+- **Tool Dependency Analysis**: `analyzeToolDependencies()` pre-fetches data for dependent tools
+- **Streaming Callbacks**: Separate callbacks for thoughts, reasoning, and responses to reduce UI re-renders
+- **Loop Detection**: Prevents infinite loops in ReAct Agent execution
+
+### Store Optimization Patterns
+When working with Zustand stores:
+- Use workspace-specific state isolation via `workspaces` Map
+- Call `switchWorkspaceContext()` when switching between workspaces
+- Check node existence before updates: `workflowStore.nodes.some(n => n.id === nodeId)`
+- Use guards in async operations that may complete after node deletion
+
 ## Testing
-No test framework is currently configured. When adding tests, you'll need to set up a test runner (e.g., Vitest for the renderer process).
+**Vitest** is configured for testing the renderer process:
+- `npm run test` - Run tests once
+- `npm run test:watch` - Run tests in watch mode
+- `npm run test:ui` - Run tests with UI interface
+
+Test files are located in [src/renderer/__tests__/](src/renderer/__tests__/). The test setup ([setup.ts](src/renderer/__tests__/setup.ts)) mocks `window.crypto` for UUID generation and `window.electronAPI` for IPC calls.
+
+### Writing Tests
+Tests use Vitest with jsdom environment and @testing-library. Key patterns:
+- Import from `@/` alias (mapped to `src/renderer/`)
+- Mock electronAPI for main process interactions
+- Use `beforeEach`/`afterEach` to reset Zustand stores
+- Test files follow the pattern `*.test.ts`
+
+### Example Test Structure
+```typescript
+import { describe, it, expect, beforeEach } from 'vitest'
+import { useExecutionStore } from '@/store/execution-store'
+
+describe('Workflow Execution', () => {
+  beforeEach(() => {
+    // Reset stores before each test
+    const store = useExecutionStore.getState()
+    store.executions.clear()
+  })
+})
+```
