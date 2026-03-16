@@ -12,16 +12,12 @@ import type {
   ToolCallRecord,
   ToolType,
   AgentStep,
-  WorkflowCallRecord,
-  SubAgentProgress,
   GeneratedFileInfo,
-  ReActStepDetail,
-  ReActToolCallInfo,
-  NodeExecutionEvent,
+  WorkflowCallRecord,
 } from '@/store/agent-store'
 import { generateStepId } from '@/store/agent-store'
 import { OpenAIClient, type OpenAIMessage, type OpenAITool, type OpenAIToolCall } from './openai-client'
-import type { TodoItem, ReActStep } from '@/types/node'
+import type { TodoItem } from '@/types/node'
 import {
   compressOpenAIContext,
   compressOpenAIContextWithLLM,
@@ -87,29 +83,6 @@ export interface AgentCallbacks {
   onToolCallComplete?: (toolCallId: string, result: { output?: unknown; error?: string }, index?: number) => void
   // 并行工具调用回调
   onToolCallsStart?: (toolCalls: ToolCallRecord[]) => void
-
-  // SubAgent 进度回调
-  onSubAgentProgress?: (toolCallId: string, progress: Partial<SubAgentProgress>) => void
-  onSubAgentLog?: (toolCallId: string, log: { message: string; type: 'info' | 'node_start' | 'node_complete' | 'node_error' | 'error'; nodeName?: string }) => void
-  // 节点步骤回调（新增 - 用于 SubAgent 工作流节点执行展示）
-  onSubAgentNodeStep?: (toolCallId: string, step: SubAgentProgress['nodeSteps'][0]) => void
-  onSubAgentNodeStepUpdate?: (toolCallId: string, nodeId: string, update: {
-    thought?: string
-    observation?: string
-    reactAgentSteps?: ReActStepDetail[]
-  }) => void
-  // 时间线事件回调（新增 - 保留兼容性）
-  onSubAgentTimelineEvent?: (toolCallId: string, event: NodeExecutionEvent) => void
-  // 节点流式更新回调（新增 - 保留兼容性）
-  onSubAgentStreamUpdate?: (toolCallId: string, nodeId: string, nodeName: string, update: {
-    reasoningChunk?: string
-    outputChunk?: string
-    toolUpdate?: {
-      toolName: string
-      output: string
-      error?: string
-    }
-  }) => void
 
   // 任务回调
   onTodosUpdate?: (items: TodoItem[]) => void
@@ -1345,10 +1318,6 @@ ${truncatedSource}
           if (matchResult.needsTransform) {
             // 记录转换日志
             log(`格式转换: ${matchResult.reason}`)
-            this.callbacks.onSubAgentLog?.(toolCallId, {
-              message: `🔄 数据格式转换: ${matchResult.reason}`,
-              type: 'info',
-            })
 
             // 执行转换
             inputValue = await this.transformDataForSubAgent(
@@ -1377,21 +1346,19 @@ ${truncatedSource}
 
     log('工作流输入参数:', workflowInput)
 
-    // 初始化 SubAgent 进度
-    const initialProgress: SubAgentProgress = {
-      workflowName: workflow.name,
-      workflowPath: workflow.workspacePath,
-      status: 'loading',
-      logs: [],
-      startedAt: Date.now(),
-      updatedAt: Date.now(),
-      nodeSteps: [], // 初始化空节点步骤列表
-    }
-    log('初始化 SubAgent 进度:', toolCallId, initialProgress)
-    this.callbacks.onSubAgentProgress?.(toolCallId, initialProgress)
+    // 更新工具调用状态为运行中（用于进度展示）
+    this.callbacks.onToolCallUpdate?.(toolCallId, {
+      subAgentProgress: {
+        workflowName: workflow.name,
+        workflowPath: workflow.workspacePath,
+        status: 'loading',
+        startedAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    })
 
     try {
-      // 执行工作流
+      // 执行工作流（简化版回调）
       const result = await executeWorkflowAsSubAgent(
         workflow.workspacePath,
         workflowInput,
@@ -1400,138 +1367,68 @@ ${truncatedSource}
           apiKey: this.config.apiKey,
           onLog: (msg) => {
             log(`[${workflow.name}] ${msg}`)
-            // 添加日志到进度
-            this.callbacks.onSubAgentLog?.(toolCallId, {
-              message: msg,
-              type: 'info',
-            })
           },
           onProgress: {
             onStatusChange: (status) => {
               log('SubAgent 状态变化:', status)
-              this.callbacks.onSubAgentProgress?.(toolCallId, { status })
-            },
-            onNodeStart: (nodeName, _nodeId) => {
-              this.callbacks.onSubAgentProgress?.(toolCallId, {
-                currentNode: nodeName,
-                nodeStatus: 'running',
-              })
-              this.callbacks.onSubAgentLog?.(toolCallId, {
-                message: `开始执行节点: ${nodeName}`,
-                type: 'node_start',
-                nodeName,
+              this.callbacks.onToolCallUpdate?.(toolCallId, {
+                subAgentProgress: {
+                  workflowName: workflow.name,
+                  workflowPath: workflow.workspacePath,
+                  status,
+                  startedAt: Date.now(),
+                  updatedAt: Date.now(),
+                },
               })
             },
-            onNodeComplete: (nodeName, _nodeId, success) => {
-              this.callbacks.onSubAgentProgress?.(toolCallId, {
-                nodeStatus: success ? 'completed' : 'error',
-                // 清除 ReAct Agent 详情，因为节点已完成
-                reactAgentDetail: undefined,
+            onNodeStart: (nodeName, _nodeId, nodeType) => {
+              this.callbacks.onToolCallUpdate?.(toolCallId, {
+                subAgentProgress: {
+                  workflowName: workflow.name,
+                  workflowPath: workflow.workspacePath,
+                  status: 'running',
+                  currentNode: nodeName,
+                  currentNodeType: nodeType,
+                  startedAt: Date.now(),
+                  updatedAt: Date.now(),
+                },
               })
-              this.callbacks.onSubAgentLog?.(toolCallId, {
-                message: success ? `节点执行完成: ${nodeName}` : `节点执行失败: ${nodeName}`,
-                type: success ? 'node_complete' : 'node_error',
-                nodeName,
-              })
+            },
+            onNodeComplete: (_nodeName, _nodeId, _success) => {
+              // 节点完成，不需要特殊处理
             },
             onProgress: (completedNodes, totalNodes) => {
-              this.callbacks.onSubAgentProgress?.(toolCallId, {
-                completedNodes,
-                totalNodes,
+              this.callbacks.onToolCallUpdate?.(toolCallId, {
+                subAgentProgress: {
+                  workflowName: workflow.name,
+                  workflowPath: workflow.workspacePath,
+                  status: 'running',
+                  completedNodes,
+                  totalNodes,
+                  startedAt: Date.now(),
+                  updatedAt: Date.now(),
+                },
               })
             },
             onLog: (msg) => {
-              this.callbacks.onSubAgentLog?.(toolCallId, {
-                message: msg,
-                type: 'info',
-              })
+              log(`[${workflow.name}] ${msg}`)
             },
-            onReactAgentUpdate: (nodeId, nodeName, detail) => {
-              // 辅助函数：将 ReActStep 映射为 ReActStepDetail
-              const mapReActStepToDetail = (step: ReActStep): ReActStepDetail => {
-                let toolCallInfo: ReActToolCallInfo | undefined
-
-                if (step.action) {
-                  // 解析输入参数
-                  let parsedInput: unknown = null
-                  try {
-                    parsedInput = step.actionInput ? JSON.parse(step.actionInput) : null
-                  } catch {
-                    parsedInput = step.actionInput
-                  }
-
-                  toolCallInfo = {
-                    toolName: step.action,
-                    input: parsedInput,
-                    output: step.observation,
-                    error: step.observationError ? step.observation || undefined : undefined,
-                  }
-                }
-
-                // 截取过长内容（性能优化）
-                const maxLen = 500
-                const truncate = (s: string | null): string | undefined =>
-                  s && s.length > maxLen ? s.slice(0, maxLen) + '...' : (s || undefined)
-
-                return {
-                  id: step.id,
-                  iteration: step.iteration,
-                  status: step.status,
-                  thought: truncate(step.thought),
-                  thoughtStreaming: step.thoughtStreaming,
-                  toolCall: toolCallInfo,
-                  observation: truncate(step.observation),
-                  observationStreaming: step.observationStreaming,
-                  observationError: step.observationError,
-                  startedAt: step.startedAt,
-                  completedAt: step.completedAt,
-                }
-              }
-
-              // 映射所有历史步骤（不包括当前步骤）
-              const historySteps = detail.steps
-                .slice(0, -1)
-                .map(step => mapReActStepToDetail(step))
-                .slice(-5)  // 只保留最近 5 个历史步骤
-
-              // 映射当前步骤
-              const currentStep = detail.currentStep
-                ? mapReActStepToDetail(detail.currentStep)
-                : undefined
-
-              this.callbacks.onSubAgentProgress?.(toolCallId, {
-                reactAgentDetail: {
-                  nodeId,
-                  nodeName,
-                  currentIteration: detail.currentIteration,
-                  maxIterations: detail.maxIterations,
-                  currentStep,
-                  historySteps,
-                  totalSteps: detail.totalSteps,
+            onReActStepsUpdate: (nodeName, _nodeId, steps, iteration, maxIterations) => {
+              // 更新 ReAct Agent 的嵌套步骤
+              this.callbacks.onToolCallUpdate?.(toolCallId, {
+                subAgentProgress: {
+                  workflowName: workflow.name,
+                  workflowPath: workflow.workspacePath,
+                  status: 'running',
+                  currentNode: nodeName,
+                  currentNodeType: 'reactAgent',
+                  reactAgentSteps: steps,
+                  reactAgentIteration: iteration,
+                  reactAgentMaxIterations: maxIterations,
+                  startedAt: Date.now(),
+                  updatedAt: Date.now(),
                 },
               })
-            },
-            onOllamaChatUpdate: (nodeId, nodeName, detail) => {
-              this.callbacks.onSubAgentProgress?.(toolCallId, {
-                ollamaChatDetail: {
-                  nodeId,
-                  nodeName,
-                  model: detail.model,
-                  reasoningContent: detail.reasoningContent,
-                  reasoningStreaming: detail.reasoningStreaming,
-                  responseContent: detail.responseContent,
-                  responseStreaming: detail.responseStreaming,
-                },
-              })
-            },
-            // 节点步骤回调（新增）
-            onNodeStep: (step) => {
-              log('onNodeStep', step)
-              this.callbacks.onSubAgentNodeStep?.(toolCallId, step)
-            },
-            onNodeStepUpdate: (nodeId, update) => {
-              log('onNodeStepUpdate', nodeId, update)
-              this.callbacks.onSubAgentNodeStepUpdate?.(toolCallId, nodeId, update)
             },
           },
         }
@@ -1544,14 +1441,17 @@ ${truncatedSource}
           this.callbacks.onFilesGenerated?.(result.generatedFiles)
         }
 
-        // 更新 SubAgent 状态为完成，确保进度为 100%
-        this.callbacks.onSubAgentProgress?.(toolCallId, {
-          status: 'completed',
-          nodeStatus: 'completed',
-          completedNodes: result.totalNodes,
-          totalNodes: result.totalNodes,
-          reactAgentDetail: undefined, // 清除 ReAct Agent 详情
-          ollamaChatDetail: undefined, // 清除 Ollama Chat 详情
+        // 更新 SubAgent 状态为完成
+        this.callbacks.onToolCallUpdate?.(toolCallId, {
+          subAgentProgress: {
+            workflowName: workflow.name,
+            workflowPath: workflow.workspacePath,
+            status: 'completed',
+            completedNodes: result.totalNodes,
+            totalNodes: result.totalNodes,
+            startedAt: Date.now(),
+            updatedAt: Date.now(),
+          },
         })
 
         // 更新状态为完成
@@ -1567,18 +1467,15 @@ ${truncatedSource}
         this.callbacks.onObservation?.(`工作流执行成功:\n${outputStr.slice(0, 1000)}`)
         return `工作流 "${workflow.name}" 执行成功。结果:\n${outputStr}`
       } else {
-        // 更新 SubAgent 状态为错误，确保进度更新
-        this.callbacks.onSubAgentProgress?.(toolCallId, {
-          status: 'error',
-          nodeStatus: 'error',
-          completedNodes: result.totalNodes,
-          totalNodes: result.totalNodes,
-          reactAgentDetail: undefined, // 清除 ReAct Agent 详情
-          ollamaChatDetail: undefined, // 清除 Ollama Chat 详情
-        })
-        this.callbacks.onSubAgentLog?.(toolCallId, {
-          message: result.error || '未知错误',
-          type: 'error',
+        // 更新 SubAgent 状态为错误
+        this.callbacks.onToolCallUpdate?.(toolCallId, {
+          subAgentProgress: {
+            workflowName: workflow.name,
+            workflowPath: workflow.workspacePath,
+            status: 'error',
+            startedAt: Date.now(),
+            updatedAt: Date.now(),
+          },
         })
 
         // 更新状态为错误
@@ -1594,15 +1491,15 @@ ${truncatedSource}
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
 
-      // 更新 SubAgent 状态为错误
-      this.callbacks.onSubAgentProgress?.(toolCallId, {
-        status: 'error',
-        nodeStatus: 'error',
-        reactAgentDetail: undefined, // 清除 ReAct Agent 详情
-      })
-      this.callbacks.onSubAgentLog?.(toolCallId, {
-        message: errorMsg,
-        type: 'error',
+      // 更新工具调用状态为错误
+      this.callbacks.onToolCallUpdate?.(toolCallId, {
+        subAgentProgress: {
+          workflowName: workflow.name,
+          workflowPath: workflow.workspacePath,
+          status: 'error',
+          startedAt: Date.now(),
+          updatedAt: Date.now(),
+        },
       })
 
       // 更新状态为错误

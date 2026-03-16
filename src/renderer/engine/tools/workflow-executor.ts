@@ -3,68 +3,23 @@
  */
 
 import type { Node, Edge } from '@xyflow/react'
-import type { WorkflowNodeData, ReActStep } from '@/types/node'
-import type { GeneratedFileInfo, ReActStepDetail } from '@/store/agent-store'
+import type { WorkflowNodeData } from '@/types/node'
+import type { GeneratedFileInfo, ReActStepSummary } from '@/store/agent-store'
 import { useExecutionStore } from '@/store/execution-store'
 import { takeFileSnapshot, compareSnapshots } from './file-snapshot'
 
 const DEBUG = false
 const log = (...args: unknown[]) => DEBUG && console.log('[WorkflowExecutor]', ...args)
 
-// 进度回调类型
+// 简化的进度回调类型
 export interface SubAgentProgressCallback {
   onStatusChange: (status: 'loading' | 'running' | 'completed' | 'error') => void
-  onNodeStart: (nodeName: string, nodeId: string) => void
+  onNodeStart: (nodeName: string, nodeId: string, nodeType?: string) => void
   onNodeComplete: (nodeName: string, nodeId: string, success: boolean) => void
   onProgress: (completedNodes: number, totalNodes: number) => void
   onLog: (message: string) => void
-  // ReAct Agent 状态更新回调
-  onReactAgentUpdate?: (
-    nodeId: string,
-    nodeName: string,
-    detail: {
-      currentIteration: number
-      maxIterations: number
-      steps: ReActStep[]           // 所有步骤（新增）
-      currentStep?: ReActStep
-      totalSteps: number
-    }
-  ) => void
-  // Ollama Chat 节点状态更新回调
-  onOllamaChatUpdate?: (
-    nodeId: string,
-    nodeName: string,
-    detail: {
-      model: string
-      reasoningContent?: string
-      reasoningStreaming?: boolean
-      responseContent?: string
-      responseStreaming?: boolean
-    }
-  ) => void
-  // 节点步骤回调（新增）- 将工作流节点执行作为步骤发送
-  onNodeStep?: (step: {
-    id: string
-    nodeId: string
-    nodeName: string
-    nodeType: string
-    status: 'pending' | 'running' | 'completed' | 'error'
-    startTime: number
-    endTime?: number
-    thought?: string
-    thoughtStreaming?: boolean
-    observation?: string
-    observationStreaming?: boolean
-    observationError?: boolean
-    reactAgentSteps?: ReActStepDetail[]
-    error?: string
-  }) => void
-  // 节点步骤更新回调（新增）
-  onNodeStepUpdate?: (nodeId: string, update: {
-    thought?: string
-    observation?: string
-    reactAgentSteps?: ReActStepDetail[]
-  }) => void
+  // ReAct Agent 步骤更新
+  onReActStepsUpdate?: (nodeName: string, nodeId: string, steps: ReActStepSummary[], iteration?: number, maxIterations?: number) => void
 }
 
 // 工作流执行结果
@@ -209,8 +164,10 @@ export async function executeWorkflowAsSubAgent(
 
     // 获取节点名称映射
     const nodeNameMap = new Map<string, string>()
+    const nodeTypeMap = new Map<string, string>() // 新增：节点类型映射
     nodes.forEach((node) => {
       nodeNameMap.set(node.id, (node.data.label as string) || node.type || node.id)
+      nodeTypeMap.set(node.id, node.type || 'unknown')
     })
 
     // 计算需要执行的节点总数（排除 trigger 类型的节点，因为它们是自动触发的）
@@ -246,135 +203,61 @@ export async function executeWorkflowAsSubAgent(
       // 计算已完成的节点数
       let runningNodeName: string | null = null
       let runningNodeId: string | null = null
+      let runningNodeType: string | null = null
+
       currentExecution.context.nodeResults.forEach((result, nodeId) => {
         const nodeName = nodeNameMap.get(nodeId) || nodeId
-        const node = nodes.find(n => n.id === nodeId)
-        const nodeType = node?.type || 'unknown'
+        const nodeType = nodeTypeMap.get(nodeId) || 'unknown'
 
-        // 检查节点是否刚开始运行（发送节点步骤）
+        // 检查节点是否刚开始运行
         if (result.status === 'running' && !trackedNodeIds.has(nodeId)) {
           trackedNodeIds.add(nodeId)
           nodeStartTimes.set(nodeId, Date.now())
-
-          // 创建节点步骤
-          const stepId = `nodestep_${Date.now()}_${nodeId}`
-          const startTime = Date.now()
-
-          options?.onProgress?.onNodeStep?.({
-            id: stepId,
-            nodeId,
-            nodeName,
-            nodeType,
-            status: 'running',
-            startTime,
-            thought: typeof result.input === 'string' ? result.input : JSON.stringify(result.input),
-          })
-
           runningNodeName = nodeName
           runningNodeId = nodeId
+          runningNodeType = nodeType
         }
 
-        // 检查节点是否刚完成（更新节点步骤）
+        // 检查节点是否刚完成
         if ((result.status === 'success' || result.status === 'error') && !completedNodeIds.has(nodeId)) {
           completedNodeIds.add(nodeId)
-          const startTime = nodeStartTimes.get(nodeId) || Date.now()
-          const endTime = Date.now()
-
-          // 更新节点步骤为完成状态
-          options?.onProgress?.onNodeStep?.({
-            id: `nodestep_${nodeId}`,
-            nodeId,
-            nodeName,
-            nodeType,
-            status: result.status === 'success' ? 'completed' : 'error',
-            startTime,
-            endTime,
-            observation: typeof result.output === 'string' ? result.output : JSON.stringify(result.output),
-            error: result.error,
-          })
+          const success = result.status === 'success'
+          options?.onProgress?.onNodeComplete(nodeName, nodeId, success)
         }
 
-        // 检查正在运行的节点（用于流式更新）
+        // 检查正在运行的节点
         if (result.status === 'running') {
           runningNodeName = nodeName
           runningNodeId = nodeId
-
-          // 处理 ReAct Agent 节点的内部状态
-          if (nodeType === 'reactAgent') {
-            const reactState = executionStore.getReActState(executionId, nodeId)
-            if (reactState && reactState.steps.length > 0) {
-              const lastStep = reactState.steps[reactState.steps.length - 1]
-
-              // 发送思考流式更新
-              if (lastStep.thoughtStreaming && lastStep.thought) {
-                options?.onProgress?.onNodeStepUpdate?.(nodeId, {
-                  thought: lastStep.thought,
-                })
-              }
-
-              // 发送工具调用更新
-              if (lastStep.action && lastStep.observation) {
-                options?.onProgress?.onNodeStepUpdate?.(nodeId, {
-                  observation: lastStep.observation,
-                })
-              }
-            }
-
-            // 发送 ReAct Agent 状态更新（只在 reactState 存在时）
-            if (reactState) {
-              options?.onProgress?.onReactAgentUpdate?.(
-                nodeId,
-                nodeName,
-                {
-                  currentIteration: reactState.currentIteration,
-                  maxIterations: reactState.maxIterations,
-                  steps: reactState.steps,
-                  currentStep: reactState.steps[reactState.steps.length - 1],
-                  totalSteps: reactState.steps.length,
-                }
-              )
-            }
-          }
-          // 处理 Ollama Chat 节点的流式输出
-          else if (nodeType === 'ollamaChat') {
-            const reasoningContent = executionStore.getReasoningStreamOutput(executionId, nodeId)
-            const streamOutput = executionStore.getStreamOutput(executionId, nodeId)
-
-            // 发送推理流式更新
-            if (reasoningContent) {
-              options?.onProgress?.onNodeStepUpdate?.(nodeId, {
-                thought: reasoningContent,
-              })
-            }
-
-            // 发送输出流式更新
-            if (streamOutput) {
-              options?.onProgress?.onNodeStepUpdate?.(nodeId, {
-                observation: streamOutput,
-              })
-            }
-
-            const nodeData = node?.data as { model?: string; label?: string }
-
-            // 发送 Ollama Chat 状态更新
-            options?.onProgress?.onOllamaChatUpdate?.(
-              nodeId,
-              nodeName,
-              {
-                model: nodeData?.model || 'unknown',
-                reasoningContent: reasoningContent || undefined,
-                reasoningStreaming: !!reasoningContent,
-                responseContent: streamOutput || undefined,
-                responseStreaming: !!streamOutput,
-              }
-            )
-          }
+          runningNodeType = nodeType
         }
       })
 
       // 通知当前节点和进度
       if (runningNodeName !== null && runningNodeId !== null) {
-        options?.onProgress?.onNodeStart(runningNodeName, runningNodeId)
+        options?.onProgress?.onNodeStart(runningNodeName, runningNodeId, runningNodeType ?? undefined)
+
+        // 如果当前节点是 ReAct Agent，检查其执行状态
+        if (runningNodeType === 'reactAgent') {
+          const reactState = currentExecution.reactAgentStates?.get(runningNodeId)
+          if (reactState && reactState.steps.length > 0) {
+            // 转换 ReAct 步骤为摘要格式
+            const stepSummaries: ReActStepSummary[] = reactState.steps.map(step => ({
+              iteration: step.iteration,
+              status: step.status,
+              thought: step.thought ? step.thought.slice(0, 100) + (step.thought.length > 100 ? '...' : '') : undefined,
+              action: step.action || undefined,
+              observation: step.observation ? step.observation.slice(0, 100) + (step.observation.length > 100 ? '...' : '') : undefined,
+            }))
+            options?.onProgress?.onReActStepsUpdate?.(
+              runningNodeName,
+              runningNodeId,
+              stepSummaries,
+              reactState.currentIteration,
+              reactState.maxIterations
+            )
+          }
+        }
       }
       options?.onProgress?.onProgress(completedNodeIds.size, totalNodesCount)
     }, 200) // 每200ms检查一次
@@ -395,27 +278,11 @@ export async function executeWorkflowAsSubAgent(
     if (finalNodeResults) {
       finalNodeResults.forEach((result, nodeId) => {
         const nodeName = nodeNameMap.get(nodeId) || nodeId
-        const node = nodes.find(n => n.id === nodeId)
-        const nodeType = node?.type || 'unknown'
-
         // 检查是否有节点已完成但还没发送完成回调
         if ((result.status === 'success' || result.status === 'error') && !completedNodeIds.has(nodeId)) {
           completedNodeIds.add(nodeId)
-          const startTime = nodeStartTimes.get(nodeId) || Date.now()
-          const endTime = Date.now()
-
-          // 更新节点步骤为完成状态
-          options?.onProgress?.onNodeStep?.({
-            id: `nodestep_${nodeId}`,
-            nodeId,
-            nodeName,
-            nodeType,
-            status: result.status === 'success' ? 'completed' : 'error',
-            startTime,
-            endTime,
-            observation: typeof result.output === 'string' ? result.output : JSON.stringify(result.output),
-            error: result.error,
-          })
+          const success = result.status === 'success'
+          options?.onProgress?.onNodeComplete(nodeName, nodeId, success)
         }
       })
     }

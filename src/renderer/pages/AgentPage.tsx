@@ -149,13 +149,9 @@ export default function AgentPage() {
     availableWorkflows,
     isSettingsOpen,
     showLogsPanel,
-    // 新增
-    showSubAgentDetailsPanel,
     todos,
     setSettingsOpen,
     setShowLogsPanel,
-    // 新增
-    setShowSubAgentDetailsPanel,
     addMessage,
     updateMessage,
     deleteMessage,
@@ -168,14 +164,9 @@ export default function AgentPage() {
     updateLastStep,
     updateTodos,
     addExecutionLog,
-    updateSubAgentProgress,
-    addSubAgentLog,
     updateToolCall,
     addToolCalls,
     updateToolCallByIndex,
-    addTimelineEvent,
-    addNodeStep,
-    updateNodeStep,
     // 对话历史
     conversationHistory,
     isHistoryLoaded,
@@ -414,11 +405,19 @@ export default function AgentPage() {
                 // 并行模式：使用索引更新
                 updateToolCallByIndex(assistantMsgId, stepId, index, update)
               } else {
-                // 兼容旧模式：使用 toolCallId 更新
+                // 查找工具调用位置：先检查单个 toolCall，再检查 toolCalls 数组
                 const currentMessage = useAgentStore.getState().messages.find(m => m.id === assistantMsgId)
                 const currentStep = currentMessage?.steps?.find(s => s.id === stepId)
+
                 if (currentStep?.toolCall?.id === toolCallId) {
+                  // 单个工具调用（旧格式）
                   updateToolCall(assistantMsgId, stepId, toolCallId, update)
+                } else if (currentStep?.toolCalls) {
+                  // 在 toolCalls 数组中查找并更新
+                  const toolCallIndex = currentStep.toolCalls.findIndex(tc => tc.id === toolCallId)
+                  if (toolCallIndex !== -1) {
+                    updateToolCallByIndex(assistantMsgId, stepId, toolCallIndex, update)
+                  }
                 }
               }
             }
@@ -442,105 +441,6 @@ export default function AgentPage() {
                 level: 'error',
                 message: result.error,
               })
-            }
-          },
-
-          // SubAgent 进度更新
-          onSubAgentProgress: (toolCallId: string, progress) => {
-            // 使用当前步骤 ID
-            const stepId = currentStepIdRef.current
-            if (stepId) {
-              updateSubAgentProgress(assistantMsgId, stepId, toolCallId, progress)
-            }
-          },
-
-          // SubAgent 日志
-          onSubAgentLog: (toolCallId: string, logEntry) => {
-            // 使用当前步骤 ID
-            const stepId = currentStepIdRef.current
-            if (stepId) {
-              addSubAgentLog(assistantMsgId, stepId, toolCallId, logEntry)
-            }
-          },
-
-          // 时间线事件（新增）
-          onSubAgentTimelineEvent: (toolCallId: string, event) => {
-            const stepId = currentStepIdRef.current
-            if (stepId) {
-              addTimelineEvent(assistantMsgId, stepId, toolCallId, event)
-            }
-          },
-
-          // 节点步骤回调（新增）
-          onSubAgentNodeStep: (toolCallId: string, nodeStep) => {
-            const stepId = currentStepIdRef.current
-            if (stepId) {
-              addNodeStep(assistantMsgId, stepId, toolCallId, nodeStep)
-            }
-          },
-
-          onSubAgentNodeStepUpdate: (toolCallId: string, nodeId: string, update) => {
-            const stepId = currentStepIdRef.current
-            if (stepId) {
-              updateNodeStep(assistantMsgId, stepId, toolCallId, nodeId, update)
-            }
-          },
-
-          // 节点流式更新（新增）
-          onSubAgentStreamUpdate: (toolCallId: string, nodeId: string, nodeName: string, update) => {
-            const stepId = currentStepIdRef.current
-            if (stepId) {
-              // 为流式更新创建或更新时间线事件
-              if (update.reasoningChunk) {
-                // 使用特定的 event ID 来标识这个节点的思考流
-                const eventId = `thinking_${nodeId}`
-                addTimelineEvent(assistantMsgId, stepId, toolCallId, {
-                  id: eventId,
-                  nodeId,
-                  nodeName,
-                  nodeType: 'reactAgent', // 默认为 reactAgent，实际应根据节点类型
-                  eventType: 'thinking_stream',
-                  timestamp: Date.now(),
-                  data: {
-                    reasoning: update.reasoningChunk,
-                    reasoningStreaming: true,
-                  },
-                })
-              }
-              if (update.outputChunk) {
-                const eventId = `output_${nodeId}`
-                addTimelineEvent(assistantMsgId, stepId, toolCallId, {
-                  id: eventId,
-                  nodeId,
-                  nodeName,
-                  nodeType: 'ollamaChat',
-                  eventType: 'output_stream',
-                  timestamp: Date.now(),
-                  data: {
-                    output: update.outputChunk,
-                    outputStreaming: true,
-                  },
-                })
-              }
-              if (update.toolUpdate) {
-                const eventId = `tool_${nodeId}_${Date.now()}`
-                addTimelineEvent(assistantMsgId, stepId, toolCallId, {
-                  id: eventId,
-                  nodeId,
-                  nodeName,
-                  nodeType: 'reactAgent',
-                  eventType: 'tool_call_complete',
-                  timestamp: Date.now(),
-                  data: {
-                    toolCall: {
-                      toolName: update.toolUpdate.toolName,
-                      input: null,
-                      output: update.toolUpdate.output,
-                      error: update.toolUpdate.error,
-                    },
-                  },
-                })
-              }
             }
           },
 
@@ -835,17 +735,9 @@ export default function AgentPage() {
           </div>
         </motion.div>
 
-        {/* 右侧：Tab 面板（日志和 SubAgent） */}
+        {/* 右侧：日志面板 */}
         <AgentSidePanel
           visible={showLogsPanel}
-          activeTab={showSubAgentDetailsPanel ? 'subagent' : 'logs'}
-          onTabChange={(tab) => {
-            if (tab === 'subagent') {
-              setShowSubAgentDetailsPanel(true)
-            } else {
-              setShowSubAgentDetailsPanel(false)
-            }
-          }}
           onClose={() => setShowLogsPanel(false)}
         />
       </div>

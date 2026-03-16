@@ -89,87 +89,30 @@ export type NodeEventType =
   | 'tool_call_start'
   | 'tool_call_complete'
 
-// 节点执行事件
-export interface NodeExecutionEvent {
-  id: string
-  nodeId: string
-  nodeName: string
-  nodeType: string
-  eventType: NodeEventType
-  timestamp: number
-  duration?: number
-  data?: {
-    // 思考/推理内容
-    reasoning?: string
-    reasoningStreaming?: boolean
-    // 普通输出
-    output?: string
-    outputStreaming?: boolean
-    // 工具调用（用于 ReAct Agent）
-    toolCall?: {
-      toolName: string
-      input: unknown
-      output?: string
-      error?: string
-    }
-    // ReAct 迭代信息
-    iteration?: number
-    // 错误信息
-    error?: string
-    // 节点输入/输出
-    nodeInput?: unknown
-    nodeOutput?: unknown
-  }
+// ReAct Agent 步骤摘要（用于 SubAgent 进度展示）
+export interface ReActStepSummary {
+  iteration: number
+  status: 'thinking' | 'acting' | 'observing' | 'completed' | 'error'
+  thought?: string       // 思考内容摘要
+  action?: string        // 执行的工具名称
+  observation?: string   // 观察结果摘要
 }
 
-// SubAgent 执行进度
+// SubAgent 执行进度（简化版 - 仅用于基本进度展示）
 export interface SubAgentProgress {
   workflowName: string
   workflowPath: string
   status: 'loading' | 'running' | 'completed' | 'error'
   currentNode?: string        // 当前执行的节点名称
-  nodeStatus?: 'pending' | 'running' | 'completed' | 'error'  // 当前节点状态
+  currentNodeType?: string    // 当前执行的节点类型（如 'reactAgent', 'ollamaChat' 等）
   totalNodes?: number         // 总节点数
   completedNodes?: number     // 已完成节点数
-  logs: SubAgentLogEntry[]    // 执行日志
   startedAt: number
   updatedAt: number
-  // ReAct Agent 详细执行信息（当当前节点是 ReAct Agent 时）
-  reactAgentDetail?: ReActAgentDetail
-  // Ollama Chat 详细执行信息（当当前节点是 Ollama Chat 时）
-  ollamaChatDetail?: OllamaChatDetail
-  // 时间线事件（用于详细展示节点执行过程）
-  timeline?: NodeExecutionEvent[]
-  // 工作流节点执行步骤（新增）- 类似 AgentStep 的时间线
-  nodeSteps: {
-    id: string                    // 步骤 ID
-    nodeId: string               // 工作流节点 ID
-    nodeName: string             // 节点名称
-    nodeType: string             // 节点类型
-    status: 'pending' | 'running' | 'completed' | 'error'
-    startTime: number
-    endTime?: number
-    // 思考/输入内容
-    thought?: string
-    thoughtStreaming?: boolean
-    // 观察/输出内容
-    observation?: string
-    observationStreaming?: boolean
-    observationError?: boolean
-    // ReAct Agent 的内部步骤（仅当节点是 reactAgent 时）
-    reactAgentSteps?: ReActStepDetail[]
-    // 错误信息
-    error?: string
-  }[]
-}
-
-// SubAgent 日志条目
-export interface SubAgentLogEntry {
-  id: string
-  timestamp: number
-  message: string
-  type: 'info' | 'node_start' | 'node_complete' | 'node_error' | 'error'
-  nodeName?: string
+  // ReAct Agent 嵌套步骤（当 currentNodeType === 'reactAgent' 时使用）
+  reactAgentSteps?: ReActStepSummary[]
+  reactAgentIteration?: number  // 当前迭代次数
+  reactAgentMaxIterations?: number  // 最大迭代次数
 }
 
 // 生成的文件信息
@@ -313,9 +256,6 @@ interface AgentState {
   isSettingsOpen: boolean
   showTodosPanel: boolean
   showLogsPanel: boolean
-  // SubAgent 详情面板状态
-  showSubAgentDetailsPanel: boolean
-  selectedSubAgentKey: string | null  // 格式: "{messageId}_{stepId}_{toolCallId}"
 
   // AbortController for stopping execution
   abortController?: AbortController
@@ -359,18 +299,6 @@ interface AgentState {
   addToolCalls: (messageId: string, stepId: string, toolCalls: ToolCallRecord[]) => void
   updateToolCallByIndex: (messageId: string, stepId: string, index: number, update: Partial<ToolCallRecord>) => void
 
-  // SubAgent 进度操作
-  updateSubAgentProgress: (messageId: string, stepId: string, toolCallId: string, progress: Partial<SubAgentProgress>) => void
-  addSubAgentLog: (messageId: string, stepId: string, toolCallId: string, log: Omit<SubAgentLogEntry, 'id' | 'timestamp'>) => void
-
-  // 节点步骤操作（新增 - 用于 SubAgent 工作流节点执行展示）
-  addNodeStep: (messageId: string, stepId: string, toolCallId: string, nodeStep: SubAgentProgress['nodeSteps'][0]) => void
-  updateNodeStep: (messageId: string, stepId: string, toolCallId: string, nodeId: string, update: Partial<SubAgentProgress['nodeSteps'][0]>) => void
-
-  // 时间线操作（新增）
-  addTimelineEvent: (messageId: string, stepId: string, toolCallId: string, event: NodeExecutionEvent) => void
-  updateTimelineEvent: (messageId: string, stepId: string, toolCallId: string, eventId: string, update: Partial<NodeExecutionEvent>) => void
-
   // 任务操作
   updateTodos: (items: TodoItem[]) => void
   clearTodos: () => void
@@ -400,9 +328,6 @@ interface AgentState {
   setSettingsOpen: (open: boolean) => void
   setShowTodosPanel: (show: boolean) => void
   setShowLogsPanel: (show: boolean) => void
-  // SubAgent 详情面板控制
-  setShowSubAgentDetailsPanel: (show: boolean) => void
-  setSelectedSubAgentKey: (key: string | null) => void
 
   // 持久化
   loadConfig: () => Promise<void>
@@ -430,14 +355,12 @@ let stepIdCounter = 0
 let toolCallIdCounter = 0
 let logIdCounter = 0
 let conversationIdCounter = 0
-let subAgentLogIdCounter = 0
 
 const generateMessageId = () => `msg_${Date.now()}_${++messageIdCounter}`
 export const generateStepId = () => `step_${Date.now()}_${++stepIdCounter}`
 export const generateToolCallId = () => `tc_${Date.now()}_${++toolCallIdCounter}`
 const generateLogId = () => `log_${Date.now()}_${++logIdCounter}`
 const generateConversationId = () => `conv_${Date.now()}_${++conversationIdCounter}`
-export const generateSubAgentLogId = () => `salog_${Date.now()}_${++subAgentLogIdCounter}`
 
 // ============ Store 实现 ============
 
@@ -456,9 +379,6 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
   isSettingsOpen: false,
   showTodosPanel: true,
   showLogsPanel: false,
-  // SubAgent 详情面板初始状态
-  showSubAgentDetailsPanel: false,
-  selectedSubAgentKey: null,
   abortController: undefined,
   isInitialized: false,
   isHistoryLoaded: false,
@@ -703,334 +623,6 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
     }))
   },
 
-  // ========== SubAgent 进度操作 ==========
-
-  updateSubAgentProgress: (messageId, stepId, toolCallId, progress) => {
-    log('updateSubAgentProgress', messageId, stepId, toolCallId, progress)
-    set((state) => ({
-      messages: state.messages.map((msg) => {
-        if (msg.id !== messageId) return msg
-        const steps = msg.steps?.map((step) => {
-          if (step.id !== stepId) return step
-
-          // 处理单个 toolCall（旧模式）
-          if (step.toolCall && step.toolCall.id === toolCallId) {
-            const existingProgress = step.toolCall.subAgentProgress
-            return {
-              ...step,
-              toolCall: {
-                ...step.toolCall,
-                subAgentProgress: {
-                  ...existingProgress,
-                  ...progress,
-                  nodeSteps: progress.nodeSteps ?? existingProgress?.nodeSteps ?? [],
-                  updatedAt: Date.now(),
-                } as SubAgentProgress,
-              },
-            }
-          }
-
-          // 处理 toolCalls 数组（并行模式）
-          if (step.toolCalls) {
-            const toolCallIndex = step.toolCalls.findIndex(tc => tc.id === toolCallId)
-            if (toolCallIndex !== -1) {
-              const newToolCalls = [...step.toolCalls]
-              const existingProgress = newToolCalls[toolCallIndex].subAgentProgress
-              newToolCalls[toolCallIndex] = {
-                ...newToolCalls[toolCallIndex],
-                subAgentProgress: {
-                  ...existingProgress,
-                  ...progress,
-                  nodeSteps: progress.nodeSteps ?? existingProgress?.nodeSteps ?? [],
-                  updatedAt: Date.now(),
-                } as SubAgentProgress,
-              }
-              return { ...step, toolCalls: newToolCalls }
-            }
-          }
-
-          return step
-        })
-        return { ...msg, steps }
-      }),
-    }))
-  },
-
-  addSubAgentLog: (messageId, stepId, toolCallId, logEntry) => {
-    log('addSubAgentLog', messageId, stepId, toolCallId, logEntry)
-    set((state) => ({
-      messages: state.messages.map((msg) => {
-        if (msg.id !== messageId) return msg
-        const steps = msg.steps?.map((step) => {
-          if (step.id !== stepId) return step
-
-          const newLog: SubAgentLogEntry = {
-            ...logEntry,
-            id: generateSubAgentLogId(),
-            timestamp: Date.now(),
-          }
-
-          // 处理单个 toolCall（旧模式）
-          if (step.toolCall && step.toolCall.id === toolCallId) {
-            const existingProgress = step.toolCall.subAgentProgress
-            return {
-              ...step,
-              toolCall: {
-                ...step.toolCall,
-                subAgentProgress: {
-                  ...existingProgress,
-                  logs: [...(existingProgress?.logs || []), newLog],
-                  updatedAt: Date.now(),
-                } as SubAgentProgress,
-              },
-            }
-          }
-
-          // 处理 toolCalls 数组（并行模式）
-          if (step.toolCalls) {
-            const toolCallIndex = step.toolCalls.findIndex(tc => tc.id === toolCallId)
-            if (toolCallIndex !== -1) {
-              const newToolCalls = [...step.toolCalls]
-              const existingProgress = newToolCalls[toolCallIndex].subAgentProgress
-              newToolCalls[toolCallIndex] = {
-                ...newToolCalls[toolCallIndex],
-                subAgentProgress: {
-                  ...existingProgress,
-                  logs: [...(existingProgress?.logs || []), newLog],
-                  updatedAt: Date.now(),
-                } as SubAgentProgress,
-              }
-              return { ...step, toolCalls: newToolCalls }
-            }
-          }
-
-          return step
-        })
-        return { ...msg, steps }
-      }),
-    }))
-  },
-
-  // ========== 节点步骤操作 ==========
-
-  addNodeStep: (messageId, stepId, toolCallId, nodeStep) => {
-    log('addNodeStep', messageId, stepId, toolCallId, nodeStep)
-    set((state) => ({
-      messages: state.messages.map((msg) => {
-        if (msg.id !== messageId) return msg
-        const steps = msg.steps?.map((step) => {
-          if (step.id !== stepId) return step
-
-          // 辅助函数：添加或更新节点步骤（根据 nodeId 匹配）
-          const addOrUpdateNodeStepToProgress = (progress: SubAgentProgress | undefined) => {
-            if (!progress) return progress
-
-            // 检查是否已存在相同 nodeId 的步骤
-            const existingIndex = progress.nodeSteps?.findIndex(ns => ns.nodeId === nodeStep.nodeId) ?? -1
-
-            if (existingIndex !== -1 && progress.nodeSteps) {
-              // 已存在，更新该步骤
-              const newNodeSteps = [...progress.nodeSteps]
-              newNodeSteps[existingIndex] = { ...newNodeSteps[existingIndex], ...nodeStep }
-              return {
-                ...progress,
-                nodeSteps: newNodeSteps,
-                updatedAt: Date.now(),
-              }
-            } else {
-              // 不存在，添加新步骤
-              return {
-                ...progress,
-                nodeSteps: [...(progress.nodeSteps || []), nodeStep],
-                updatedAt: Date.now(),
-              }
-            }
-          }
-
-          // 处理单个 toolCall（旧模式）
-          if (step.toolCall && step.toolCall.id === toolCallId) {
-            return {
-              ...step,
-              toolCall: {
-                ...step.toolCall,
-                subAgentProgress: addOrUpdateNodeStepToProgress(step.toolCall.subAgentProgress),
-              },
-            }
-          }
-
-          // 处理 toolCalls 数组（并行模式）
-          if (step.toolCalls) {
-            const toolCallIndex = step.toolCalls.findIndex(tc => tc.id === toolCallId)
-            if (toolCallIndex !== -1) {
-              const newToolCalls = [...step.toolCalls]
-              newToolCalls[toolCallIndex] = {
-                ...newToolCalls[toolCallIndex],
-                subAgentProgress: addOrUpdateNodeStepToProgress(newToolCalls[toolCallIndex].subAgentProgress),
-              }
-              return { ...step, toolCalls: newToolCalls }
-            }
-          }
-
-          return step
-        })
-        return { ...msg, steps }
-      }),
-    }))
-  },
-
-  updateNodeStep: (messageId, stepId, toolCallId, nodeId, update) => {
-    log('updateNodeStep', messageId, stepId, toolCallId, nodeId, update)
-    set((state) => ({
-      messages: state.messages.map((msg) => {
-        if (msg.id !== messageId) return msg
-        const steps = msg.steps?.map((step) => {
-          if (step.id !== stepId) return step
-
-          // 辅助函数：更新 SubAgentProgress 中的节点步骤
-          const updateNodeStepInProgress = (progress: SubAgentProgress | undefined) => {
-            if (!progress) return progress
-            return {
-              ...progress,
-              nodeSteps: progress.nodeSteps?.map(ns =>
-                ns.nodeId === nodeId ? { ...ns, ...update } : ns
-              ) || [],
-              updatedAt: Date.now(),
-            }
-          }
-
-          // 处理单个 toolCall（旧模式）
-          if (step.toolCall && step.toolCall.id === toolCallId) {
-            return {
-              ...step,
-              toolCall: {
-                ...step.toolCall,
-                subAgentProgress: updateNodeStepInProgress(step.toolCall.subAgentProgress),
-              },
-            }
-          }
-
-          // 处理 toolCalls 数组（并行模式）
-          if (step.toolCalls) {
-            const toolCallIndex = step.toolCalls.findIndex(tc => tc.id === toolCallId)
-            if (toolCallIndex !== -1) {
-              const newToolCalls = [...step.toolCalls]
-              newToolCalls[toolCallIndex] = {
-                ...newToolCalls[toolCallIndex],
-                subAgentProgress: updateNodeStepInProgress(newToolCalls[toolCallIndex].subAgentProgress),
-              }
-              return { ...step, toolCalls: newToolCalls }
-            }
-          }
-
-          return step
-        })
-        return { ...msg, steps }
-      }),
-    }))
-  },
-
-  // ========== 时间线操作 ==========
-
-  addTimelineEvent: (messageId, stepId, toolCallId, event) => {
-    log('addTimelineEvent', messageId, stepId, toolCallId, event)
-    set((state) => ({
-      messages: state.messages.map((msg) => {
-        if (msg.id !== messageId) return msg
-        const steps = msg.steps?.map((step) => {
-          if (step.id !== stepId) return step
-
-          // 处理单个 toolCall（旧模式）
-          if (step.toolCall && step.toolCall.id === toolCallId) {
-            const existingProgress = step.toolCall.subAgentProgress
-            return {
-              ...step,
-              toolCall: {
-                ...step.toolCall,
-                subAgentProgress: {
-                  ...existingProgress,
-                  timeline: [...(existingProgress?.timeline || []), event],
-                  updatedAt: Date.now(),
-                } as SubAgentProgress,
-              },
-            }
-          }
-
-          // 处理 toolCalls 数组（并行模式）
-          if (step.toolCalls) {
-            const toolCallIndex = step.toolCalls.findIndex(tc => tc.id === toolCallId)
-            if (toolCallIndex !== -1) {
-              const newToolCalls = [...step.toolCalls]
-              const existingProgress = newToolCalls[toolCallIndex].subAgentProgress
-              newToolCalls[toolCallIndex] = {
-                ...newToolCalls[toolCallIndex],
-                subAgentProgress: {
-                  ...existingProgress,
-                  timeline: [...(existingProgress?.timeline || []), event],
-                  updatedAt: Date.now(),
-                } as SubAgentProgress,
-              }
-              return { ...step, toolCalls: newToolCalls }
-            }
-          }
-
-          return step
-        })
-        return { ...msg, steps }
-      }),
-    }))
-  },
-
-  updateTimelineEvent: (messageId, stepId, toolCallId, eventId, update) => {
-    log('updateTimelineEvent', messageId, stepId, toolCallId, eventId, update)
-    set((state) => ({
-      messages: state.messages.map((msg) => {
-        if (msg.id !== messageId) return msg
-        const steps = msg.steps?.map((step) => {
-          if (step.id !== stepId) return step
-
-          // 辅助函数：更新进度对象中的时间线
-          const updateTimelineInProgress = (progress: SubAgentProgress | undefined) => {
-            if (!progress) return progress
-            return {
-              ...progress,
-              timeline: (progress.timeline || []).map(evt =>
-                evt.id === eventId ? { ...evt, ...update } : evt
-              ),
-              updatedAt: Date.now(),
-            }
-          }
-
-          // 处理单个 toolCall（旧模式）
-          if (step.toolCall && step.toolCall.id === toolCallId) {
-            return {
-              ...step,
-              toolCall: {
-                ...step.toolCall,
-                subAgentProgress: updateTimelineInProgress(step.toolCall.subAgentProgress),
-              },
-            }
-          }
-
-          // 处理 toolCalls 数组（并行模式）
-          if (step.toolCalls) {
-            const toolCallIndex = step.toolCalls.findIndex(tc => tc.id === toolCallId)
-            if (toolCallIndex !== -1) {
-              const newToolCalls = [...step.toolCalls]
-              newToolCalls[toolCallIndex] = {
-                ...newToolCalls[toolCallIndex],
-                subAgentProgress: updateTimelineInProgress(newToolCalls[toolCallIndex].subAgentProgress),
-              }
-              return { ...step, toolCalls: newToolCalls }
-            }
-          }
-
-          return step
-        })
-        return { ...msg, steps }
-      }),
-    }))
-  },
-
   // ========== 任务操作 ==========
 
   updateTodos: (items) => {
@@ -1145,15 +737,6 @@ export const useAgentStore = create<AgentState>((set, _get) => ({
 
   setShowLogsPanel: (show) => {
     set({ showLogsPanel: show })
-  },
-
-  // SubAgent 详情面板控制
-  setShowSubAgentDetailsPanel: (show) => {
-    set({ showSubAgentDetailsPanel: show })
-  },
-
-  setSelectedSubAgentKey: (key) => {
-    set({ selectedSubAgentKey: key })
   },
 
   // ========== 持久化 ==========

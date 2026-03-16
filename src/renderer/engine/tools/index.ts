@@ -2,6 +2,12 @@ import type { ToolDefinition, TodoItem, TodosAction, AvailableToolId } from '@/t
 import { AVAILABLE_TOOLS as availableTools } from '@/types/node'
 import type { ExecutionContext } from '../executor'
 import { mathCalculate, mathStatistics } from './math'
+import { mathNumberTheory } from './math-number'
+import { mathLinearAlgebra } from './math-linear'
+import { mathUnitConvert } from './math-unit'
+import { mathProbability } from './math-probability'
+import { mathCalculus } from './math-calculus'
+import { mathEquation } from './math-equation'
 
 // Tool execution result
 export interface ToolResult {
@@ -1174,6 +1180,292 @@ async function executeMathStatistics(
   }
 }
 
+// Execute math number theory tool
+function executeMathNumberTheory(
+  actionInput: string | Record<string, unknown>
+): ToolResult {
+  try {
+    let params: Record<string, unknown> = {}
+
+    if (typeof actionInput === 'object') {
+      params = actionInput
+    } else {
+      try {
+        params = JSON.parse(actionInput)
+      } catch {
+        return {
+          success: false,
+          output: '',
+          error: '无法解析输入，请使用 JSON 格式',
+        }
+      }
+    }
+
+    const result = mathNumberTheory(params as unknown as Parameters<typeof mathNumberTheory>[0])
+
+    if (!result.success) {
+      return {
+        success: false,
+        output: '',
+        error: result.error || '数论计算失败',
+      }
+    }
+
+    return {
+      success: true,
+      output: typeof result.result === 'object'
+        ? JSON.stringify(result.result, null, 2)
+        : String(result.result),
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      error: `数论计算错误: ${(error as Error).message}`,
+    }
+  }
+}
+
+// Execute math linear algebra tool
+function executeMathLinearAlgebra(
+  actionInput: string | Record<string, unknown>
+): ToolResult {
+  try {
+    let params: Record<string, unknown> = {}
+
+    if (typeof actionInput === 'object') {
+      params = actionInput
+    } else {
+      try {
+        params = JSON.parse(actionInput)
+      } catch {
+        return {
+          success: false,
+          output: '',
+          error: '无法解析输入，请使用 JSON 格式',
+        }
+      }
+    }
+
+    const result = mathLinearAlgebra(params as unknown as Parameters<typeof mathLinearAlgebra>[0])
+
+    if (!result.success) {
+      return {
+        success: false,
+        output: '',
+        error: result.error || '线性代数计算失败',
+      }
+    }
+
+    return {
+      success: true,
+      output: typeof result.result === 'object'
+        ? JSON.stringify(result.result, null, 2)
+        : String(result.result),
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      error: `线性代数计算错误: ${(error as Error).message}`,
+    }
+  }
+}
+
+// Execute math unit convert tool
+function executeMathUnitConvert(
+  actionInput: string | Record<string, unknown>
+): ToolResult {
+  try {
+    let params: { value?: number; from?: string; to?: string } = {}
+
+    if (typeof actionInput === 'object') {
+      params = actionInput as { value?: number; from?: string; to?: string }
+    } else {
+      try {
+        params = JSON.parse(actionInput)
+      } catch {
+        return {
+          success: false,
+          output: '',
+          error: '无法解析输入，请使用 JSON 格式: {"value": 100, "from": "km", "to": "mile"}',
+        }
+      }
+    }
+
+    if (params.value === undefined || !params.from || !params.to) {
+      return {
+        success: false,
+        output: '',
+        error: '需要 value、from 和 to 参数',
+      }
+    }
+
+    const result = mathUnitConvert({
+      value: params.value,
+      from: params.from,
+      to: params.to,
+    })
+
+    if (!result.success || !result.result) {
+      return {
+        success: false,
+        output: '',
+        error: result.error || '单位转换失败',
+      }
+    }
+
+    return {
+      success: true,
+      output: result.result.expression || `${result.result.value} ${result.result.to}`,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      error: `单位转换错误: ${(error as Error).message}`,
+    }
+  }
+}
+
+// Execute math probability tool
+function executeMathProbability(
+  actionInput: string | Record<string, unknown>
+): ToolResult {
+  try {
+    let params: Record<string, unknown> = {}
+
+    if (typeof actionInput === 'object') {
+      params = actionInput
+    } else {
+      try {
+        params = JSON.parse(actionInput)
+      } catch {
+        return {
+          success: false,
+          output: '',
+          error: '无法解析输入，请使用 JSON 格式',
+        }
+      }
+    }
+
+    const result = mathProbability(params as unknown as Parameters<typeof mathProbability>[0])
+
+    if (!result.success) {
+      return {
+        success: false,
+        output: '',
+        error: result.error || '概率计算失败',
+      }
+    }
+
+    return {
+      success: true,
+      output: typeof result.result === 'object'
+        ? JSON.stringify(result.result, null, 2)
+        : String(result.result),
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      error: `概率计算错误: ${(error as Error).message}`,
+    }
+  }
+}
+
+// Execute math calculus tool
+function executeMathCalculus(
+  actionInput: string | Record<string, unknown>
+): ToolResult {
+  try {
+    let params: Record<string, unknown> = {}
+
+    if (typeof actionInput === 'object') {
+      params = actionInput
+    } else {
+      try {
+        params = JSON.parse(actionInput)
+      } catch {
+        return {
+          success: false,
+          output: '',
+          error: '无法解析输入，请使用 JSON 格式',
+        }
+      }
+    }
+
+    const result = mathCalculus(params as unknown as Parameters<typeof mathCalculus>[0])
+
+    if (!result.success) {
+      return {
+        success: false,
+        output: '',
+        error: result.error || '微积分计算失败',
+      }
+    }
+
+    return {
+      success: true,
+      output: typeof result.result === 'object'
+        ? JSON.stringify(result.result, null, 2)
+        : String(result.result),
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      error: `微积分计算错误: ${(error as Error).message}`,
+    }
+  }
+}
+
+// Execute math equation tool
+function executeMathEquation(
+  actionInput: string | Record<string, unknown>
+): ToolResult {
+  try {
+    let params: Record<string, unknown> = {}
+
+    if (typeof actionInput === 'object') {
+      params = actionInput
+    } else {
+      try {
+        params = JSON.parse(actionInput)
+      } catch {
+        return {
+          success: false,
+          output: '',
+          error: '无法解析输入，请使用 JSON 格式',
+        }
+      }
+    }
+
+    const result = mathEquation(params as unknown as Parameters<typeof mathEquation>[0])
+
+    if (!result.success) {
+      return {
+        success: false,
+        output: '',
+        error: result.error || '方程求解失败',
+      }
+    }
+
+    return {
+      success: true,
+      output: typeof result.result === 'object'
+        ? JSON.stringify(result.result, null, 2)
+        : String(result.result),
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      error: `方程求解错误: ${(error as Error).message}`,
+    }
+  }
+}
+
 // Main tool execution function
 export async function executeTool(
   tool: ToolDefinition,
@@ -1243,6 +1535,24 @@ export async function executeTool(
 
     case 'math_statistics':
       return executeMathStatistics(actionInput)
+
+    case 'math_number_theory':
+      return executeMathNumberTheory(actionInput)
+
+    case 'math_linear_algebra':
+      return executeMathLinearAlgebra(actionInput)
+
+    case 'math_unit_convert':
+      return executeMathUnitConvert(actionInput)
+
+    case 'math_probability':
+      return executeMathProbability(actionInput)
+
+    case 'math_calculus':
+      return executeMathCalculus(actionInput)
+
+    case 'math_equation':
+      return executeMathEquation(actionInput)
 
     default:
       return { success: false, output: '', error: `未知工具类型: ${tool.type}` }

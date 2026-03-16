@@ -291,7 +291,6 @@ function AssistantMessage({
                   isLast={index === message.steps!.length - 1}
                   defaultExpanded={step.status === 'thinking' || step.status === 'acting'}
                   forceCollapsed={shouldCollapseSteps}
-                  messageId={message.id}
                 />
               ))}
             </div>

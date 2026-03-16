@@ -32,7 +32,6 @@ interface AgentStepBlockProps {
   errorMessage?: string     // 错误信息
   reactAgentSteps?: ReActStepDetail[]  // ReAct Agent 内部步骤（用于嵌套展示）
   isRunning?: boolean       // 是否正在运行（用于流式效果）
-  messageId?: string        // 消息ID，用于打开详情面板
 }
 
 // 状态配置（类似 SubAgentDetailsDrawer 的 TimelineNode）
@@ -131,7 +130,6 @@ export const AgentStepBlock = memo(function AgentStepBlock({
   errorMessage,
   reactAgentSteps,
   isRunning: _isRunning = false, // 保留参数但不使用
-  messageId,
 }: AgentStepBlockProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const thoughtContainerRef = useRef<HTMLDivElement>(null)
@@ -333,8 +331,6 @@ export const AgentStepBlock = memo(function AgentStepBlock({
                   <ToolCallBlock
                     toolCall={step.toolCall}
                     defaultExpanded={step.toolCall.status === 'error'}
-                    messageId={messageId}
-                    stepId={step.id}
                   />
                 )}
                 {/* 多个并行工具调用 */}
@@ -352,8 +348,6 @@ export const AgentStepBlock = memo(function AgentStepBlock({
                           defaultExpanded={tc.status === 'error' || step.toolCalls!.length === 1}
                           showParallelBadge={step.toolCalls!.length > 1}
                           parallelIndex={index + 1}
-                          messageId={messageId}
-                          stepId={step.id}
                         />
                       </div>
                     ))}

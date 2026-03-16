@@ -47,11 +47,22 @@ export type BrowserToolType =
   | 'browser_evaluate'
   | 'browser_wait'
 
+// Math tool types
+export type MathToolType =
+  | 'math_calculate'
+  | 'math_statistics'
+  | 'math_number_theory'
+  | 'math_linear_algebra'
+  | 'math_unit_convert'
+  | 'math_probability'
+  | 'math_calculus'
+  | 'math_equation'
+
 export interface ToolDefinition {
   id: string
   name: string
   description: string
-  type: 'readFile' | 'writeFile' | 'executeCommand' | 'httpRequest' | 'todos' | 'getCurrentDate' | 'writeMultipleFiles' | 'executePython' | 'webSearch' | 'fetchUrl' | 'math_calculate' | 'math_statistics' | BrowserToolType
+  type: 'readFile' | 'writeFile' | 'executeCommand' | 'httpRequest' | 'todos' | 'getCurrentDate' | 'writeMultipleFiles' | 'executePython' | 'webSearch' | 'fetchUrl' | MathToolType | BrowserToolType
   config: Record<string, unknown>
 }
 
@@ -237,6 +248,60 @@ export const AVAILABLE_TOOLS = [
     label: '统计分析',
     description: '计算数组的统计量。支持平均值(mean)、中位数(median)、众数(mode)、方差(variance)、标准差(stddev)、求和(sum)、最大值(max)、最小值(min)、极差(range)、计数(count)。输入: {"data": [1,2,3,4,5], "operations": ["mean", "median", "stddev"]}',
     type: 'math_statistics' as const,
+    builtIn: false,
+    category: 'math',
+  },
+  {
+    id: 'math_number_theory',
+    name: 'math_number_theory',
+    label: '数论计算',
+    description: '数论相关计算。支持操作: is_prime(素数检测)、prime_factors(质因数分解)、prime_sieve(素数筛)、next_prime(下一个素数)、prev_prime(上一个素数)、gcd(最大公约数)、lcm(最小公倍数)、mod_exp(模幂运算)、mod_inverse(模逆元)、fibonacci(斐波那契数)、factorial(阶乘)、permutations(排列数P(n,k))、combinations(组合数C(n,k))、digit_sum(数位和)、is_perfect(完全数检测)、divisors(所有因子)、totient(欧拉函数)、is_coprime(互质检测)、catalan(卡特兰数)。输入示例: {"operation": "prime_factors", "number": 60}',
+    type: 'math_number_theory' as const,
+    builtIn: false,
+    category: 'math',
+  },
+  {
+    id: 'math_linear_algebra',
+    name: 'math_linear_algebra',
+    label: '线性代数',
+    description: '矩阵和向量运算。支持操作: add(矩阵加法)、subtract(矩阵减法)、multiply(矩阵乘法)、transpose(转置)、determinant/det(行列式)、inverse/inv(逆矩阵)、eigenvalues(特征值)、eigenvectors(特征向量)、eigs(完整特征分解)、rank(秩)、norm(范数)、dot(向量点积)、cross(向量叉积)、trace(迹)、lu(LU分解)、qr(QR分解)、solve_linear(解线性方程组)、identity(单位矩阵)、zeros(零矩阵)、ones(全1矩阵)、size(矩阵维度)。输入示例: {"operation": "multiply", "matrixA": [[1,2],[3,4]], "matrixB": [[5,6],[7,8]]}',
+    type: 'math_linear_algebra' as const,
+    builtIn: false,
+    category: 'math',
+  },
+  {
+    id: 'math_unit_convert',
+    name: 'math_unit_convert',
+    label: '单位转换',
+    description: '物理单位转换。支持: 长度(m/km/mile/ft/in等)、质量(kg/g/lb/oz等)、时间(s/min/h/day/year等)、温度(C/F/K)、面积(m²/km²/acre等)、体积(L/gal/m³等)、速度(m/s/km/h/mph等)、压力(Pa/bar/psi/atm等)、能量(J/cal/kWh/BTU等)、功率(W/kW/hp等)、数据(B/KB/MB/GB/TB等)、角度(deg/rad等)。输入: {"value": 100, "from": "km", "to": "mile"}',
+    type: 'math_unit_convert' as const,
+    builtIn: false,
+    category: 'math',
+  },
+  {
+    id: 'math_probability',
+    name: 'math_probability',
+    label: '概率统计',
+    description: '概率分布和统计分析。支持操作: normal_pdf(正态分布PDF)、normal_cdf(正态分布CDF)、normal_quantile(正态分位数)、binomial_pmf(二项分布PMF)、binomial_cdf(二项分布CDF)、poisson_pmf(泊松分布PMF)、poisson_cdf(泊松分布CDF)、exponential_pdf(指数分布PDF)、exponential_cdf(指数分布CDF)、correlation(相关系数)、covariance(协方差)、linear_regression(线性回归)、describe(描述性统计)、quantile(分位数)、skewness(偏度)、kurtosis(峰度)。输入示例: {"operation": "normal_cdf", "x": 1.96, "mean": 0, "stddev": 1}',
+    type: 'math_probability' as const,
+    builtIn: false,
+    category: 'math',
+  },
+  {
+    id: 'math_calculus',
+    name: 'math_calculus',
+    label: '微积分',
+    description: '微积分运算。支持操作: derivative(符号求导)、evaluate_derivative(求导数值)、integral(不定积分提示)、evaluate_integral(定积分数值计算)、limit(极限)、simplify(化简)、expand(展开)、factor(因式分解)、taylor(泰勒展开)、nth_derivative(n阶导数)。输入示例: {"operation": "derivative", "expression": "x^2 + 2*x + 1", "variable": "x"}',
+    type: 'math_calculus' as const,
+    builtIn: false,
+    category: 'math',
+  },
+  {
+    id: 'math_equation',
+    name: 'math_equation',
+    label: '方程求解',
+    description: '方程和方程组求解。支持操作: solve(符号方程求解)、solve_linear(线性方程组矩阵求解)、roots(多项式求根)、numeric_solve(数值求解)、inequality(不等式化简)、system(方程组求解)。输入示例: {"operation": "solve", "equation": "x^2 - 5*x + 6 = 0", "variable": "x"}，或 {"operation": "solve_linear", "matrixA": [[2,1],[1,3]], "vectorB": [5,7]}',
+    type: 'math_equation' as const,
     builtIn: false,
     category: 'math',
   },
