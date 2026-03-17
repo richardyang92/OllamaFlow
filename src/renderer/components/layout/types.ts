@@ -21,6 +21,7 @@ export interface AppHeaderProps {
   onToggleLogs?: () => void
   showLogsPanel?: boolean
   isRunning?: boolean
+  conversationTitle?: string
 }
 
 export interface AppHeaderButtonProps {

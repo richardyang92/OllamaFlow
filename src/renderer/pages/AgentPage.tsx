@@ -185,6 +185,15 @@ export default function AgentPage() {
     clearIterationLimit,
   } = useAgentStore()
 
+  // 获取当前对话标题
+  const currentConversationTitle = useMemo(() => {
+    if (!conversationHistory.currentConversationId) return null
+    const currentConversation = conversationHistory.conversations.find(
+      c => c.id === conversationHistory.currentConversationId
+    )
+    return currentConversation?.title || null
+  }, [conversationHistory.currentConversationId, conversationHistory.conversations])
+
   const [input, setInput] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -656,6 +665,7 @@ export default function AgentPage() {
         onToggleLogs={() => setShowLogsPanel(!showLogsPanel)}
         showLogsPanel={showLogsPanel}
         isRunning={isRunning}
+        conversationTitle={currentConversationTitle || undefined}
       />
 
       {/* Main content */}

@@ -29,6 +29,7 @@ export function AppHeader({
   onToggleLogs,
   showLogsPanel = false,
   isRunning = false,
+  conversationTitle,
 }: AppHeaderProps) {
   // Platform detection
   const isMac = useMemo(() => window.electronAPI.platform.isMac(), [])
@@ -112,6 +113,18 @@ export function AppHeader({
           </div>
         ) : (
           <Logo compact onBack={showWorkflowActions ? onClose : undefined} />
+        )}
+
+        {/* Flexible spacer */}
+        <div className="flex-1" />
+
+        {/* Center section: Conversation Title (Agent only) */}
+        {showAgentActions && conversationTitle && (
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+            <h1 className="text-sm font-medium text-[var(--color-text)] truncate max-w-[200px]">
+              {conversationTitle}
+            </h1>
+          </div>
         )}
 
         {/* Flexible spacer */}
