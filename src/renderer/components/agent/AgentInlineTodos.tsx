@@ -1,6 +1,6 @@
 import { Check, Circle, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { TodoItem } from '@/types/node'
 import { cn } from '@/lib/utils'
 
@@ -11,19 +11,29 @@ interface AgentInlineTodosProps {
 
 export default function AgentInlineTodos({ todos, isRunning }: AgentInlineTodosProps) {
   const [isExpanded, setIsExpanded] = useState(true)
-
-  if (todos.length === 0) return null
+  const [contentHeight, setContentHeight] = useState<number>(0)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   const completedCount = todos.filter((t) => t.completed).length
   const totalCount = todos.length
   const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0
+
+  useEffect(() => {
+    if (contentRef.current && isExpanded) {
+      setContentHeight(contentRef.current.scrollHeight)
+    } else if (!isExpanded) {
+      setContentHeight(0)
+    }
+  }, [todos, isExpanded])
+
+  if (todos.length === 0) return null
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      className="glass-panel rounded-xl p-3 mb-2"
+      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-3 mb-2"
     >
       {/* 标题栏 - 可点击收起 */}
       <button
@@ -32,13 +42,13 @@ export default function AgentInlineTodos({ todos, isRunning }: AgentInlineTodosP
       >
         <div className="flex items-center gap-2 text-sm">
           <span className="text-[var(--color-text-muted)]">任务进度</span>
-          <span className="text-purple-400 font-medium">
+          <span className="text-[var(--color-text)] font-medium">
             {completedCount}/{totalCount}
           </span>
         </div>
         <div className="flex items-center gap-2">
           {isRunning && (
-            <Loader2 className="w-3.5 h-3.5 text-purple-400 animate-spin" />
+            <Loader2 className="w-3.5 h-3.5 text-[var(--color-accent)] animate-spin" />
           )}
           {isExpanded ? (
             <ChevronUp className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
@@ -54,7 +64,7 @@ export default function AgentInlineTodos({ todos, isRunning }: AgentInlineTodosP
           initial={{ width: 0 }}
           animate={{ width: `${progress}%` }}
           transition={{ duration: 0.3 }}
-          className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full"
+          className="h-full bg-[var(--color-accent)] rounded-full"
         />
       </div>
 
@@ -63,12 +73,12 @@ export default function AgentInlineTodos({ todos, isRunning }: AgentInlineTodosP
         {isExpanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
+            animate={{ height: contentHeight, opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="space-y-1.5 max-h-32 overflow-y-auto mt-3">
+            <div ref={contentRef} className="space-y-1.5 max-h-32 overflow-y-auto mt-3">
               <AnimatePresence mode="popLayout">
                 {todos.map((todo, index) => (
                   <motion.div
@@ -83,7 +93,7 @@ export default function AgentInlineTodos({ todos, isRunning }: AgentInlineTodosP
                     )}
                   >
                     {todo.completed ? (
-                      <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+                      <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
                     ) : (
                       <Circle className="w-3.5 h-3.5 opacity-40 flex-shrink-0" />
                     )}

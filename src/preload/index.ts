@@ -246,6 +246,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     readPdf: (workspacePath: string, relativePath: string): Promise<{ success: boolean; dataUrl?: string; error?: string }> =>
       ipcRenderer.invoke('file:readPdf', workspacePath, relativePath),
+
+    copy: (sourcePath: string, destPath: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('file:copy', sourcePath, destPath),
+
+    copyFiles: (files: Array<{ sourcePath: string; destPath: string }>): Promise<{ 
+      success: boolean; 
+      results?: Array<{ sourcePath: string; destPath: string; success: boolean; error?: string }>;
+      error?: string 
+    }> => ipcRenderer.invoke('file:copyFiles', files),
   },
 
   // Command execution
@@ -535,6 +544,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  // Agent Execution Analytics
+  analytics: {
+    getHistory: (): Promise<Array<{
+      executionId: string
+      timestamp: number
+      query: string
+      duration: number
+      iterationCount: number
+      toolCallCount: number
+      success: boolean
+      overallScore: number
+    }> | null> => ipcRenderer.invoke('analytics:getHistory'),
+
+    saveHistory: (history: Array<{
+      executionId: string
+      timestamp: number
+      query: string
+      duration: number
+      iterationCount: number
+      toolCallCount: number
+      success: boolean
+      overallScore: number
+    }>): Promise<boolean> => ipcRenderer.invoke('analytics:saveHistory', history),
+
+    clearHistory: (): Promise<boolean> => ipcRenderer.invoke('analytics:clearHistory'),
+  },
+
   // SimpleXNG Config
   simplexng: {
     getEndpoint: (): Promise<string> =>
@@ -602,6 +638,12 @@ declare global {
         exists: (workspacePath: string, relativePath: string) => Promise<boolean>
         readImage: (workspacePath: string, relativePath: string) => Promise<{ success: boolean; dataUrl?: string; error?: string }>
         readPdf: (workspacePath: string, relativePath: string) => Promise<{ success: boolean; dataUrl?: string; error?: string }>
+        copy: (sourcePath: string, destPath: string) => Promise<{ success: boolean; error?: string }>
+        copyFiles: (files: Array<{ sourcePath: string; destPath: string }>) => Promise<{ 
+          success: boolean; 
+          results?: Array<{ sourcePath: string; destPath: string; success: boolean; error?: string }>;
+          error?: string 
+        }>
       }
       command: {
         execute: (workspacePath: string, options: CommandOptions) => Promise<CommandResult>
@@ -746,6 +788,29 @@ declare global {
         start: (workspacePath: string) => Promise<{ success: boolean; message?: string; error?: string }>
         stop: (workspacePath: string) => Promise<{ success: boolean; message?: string }>
         onChanged: (callback: (data: { workspacePath: string; eventType: string; filename: string }) => void) => () => void
+      }
+      analytics: {
+        getHistory: () => Promise<Array<{
+          executionId: string
+          timestamp: number
+          query: string
+          duration: number
+          iterationCount: number
+          toolCallCount: number
+          success: boolean
+          overallScore: number
+        }> | null>
+        saveHistory: (history: Array<{
+          executionId: string
+          timestamp: number
+          query: string
+          duration: number
+          iterationCount: number
+          toolCallCount: number
+          success: boolean
+          overallScore: number
+        }>) => Promise<boolean>
+        clearHistory: () => Promise<boolean>
       }
       simplexng: {
         getEndpoint: () => Promise<string>

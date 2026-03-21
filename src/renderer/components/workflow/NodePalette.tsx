@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 
 const categories = [
   { id: 'Input', label: '输入', color: 'bg-cyan-600' },
-  { id: 'AI', label: 'AI', color: 'bg-purple-600' },
+  { id: 'AI', label: 'AI', color: 'bg-blue-600' },
   { id: 'Logic', label: '逻辑', color: 'bg-blue-600' },
   { id: 'Data', label: '数据', color: 'bg-yellow-600' },
   { id: 'File', label: '文件', color: 'bg-orange-600' },

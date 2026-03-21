@@ -20,24 +20,17 @@ export function NewWorkspaceCard({ onClick, isLoading = false }: NewWorkspaceCar
         'border border-[var(--color-border-subtle)]',
         'bg-[var(--color-bg-card)]/50',
         'backdrop-blur-sm',
-        'hover:border-purple-500/30',
-        'hover:bg-purple-500/5',
+        'hover:border-[var(--color-border)]',
+        'hover:bg-[var(--color-bg-hover)]/50',
         'transition-all duration-300',
         'group',
         isLoading && 'opacity-50 pointer-events-none'
       )}
     >
-      {/* Animated gradient border on hover */}
-      <div className={cn(
-        'absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300',
-        'bg-gradient-to-r from-violet-500/20 via-purple-500/20 to-fuchsia-500/20',
-        'blur-xl -z-10'
-      )} />
-
-      {/* Top accent line */}
+      {/* Top accent line - subtle */}
       <div className={cn(
         'h-0.5 w-full',
-        'bg-gradient-to-r from-transparent via-purple-500/40 to-transparent',
+        'bg-gradient-to-r from-transparent via-[var(--color-border-subtle)] to-transparent',
         'opacity-0 group-hover:opacity-100 transition-opacity duration-300'
       )} />
 
@@ -45,23 +38,23 @@ export function NewWorkspaceCard({ onClick, isLoading = false }: NewWorkspaceCar
         {/* Icon with liquid glass effect */}
         <div className={cn(
           'relative w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0',
-          'bg-gradient-to-br from-purple-500/10 to-violet-500/10',
-          'group-hover:from-purple-500/20 group-hover:to-violet-500/20',
+          'bg-[var(--color-bg-input)]',
+          'group-hover:bg-[var(--color-bg-hover)]',
           'transition-all duration-300',
-          'shadow-sm group-hover:shadow-purple-500/10'
+          'border border-[var(--color-border-subtle)]'
         )}>
-          {/* Inner glow */}
-          <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          {/* Inner highlight */}
+          <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           <Plus className={cn(
             'w-7 h-7 relative z-10',
             'text-[var(--color-text-muted)]',
-            'group-hover:text-purple-400',
+            'group-hover:text-[var(--color-accent)]',
             'transition-colors duration-300'
           )} />
 
           {/* Animated ring */}
           <motion.div
-            className="absolute inset-0 rounded-xl border border-purple-500/20"
+            className="absolute inset-0 rounded-xl border border-[var(--color-border-subtle)]"
             initial={{ scale: 1, opacity: 0 }}
             whileHover={{ scale: 1.1, opacity: 1 }}
             transition={{ duration: 0.3 }}
@@ -81,7 +74,7 @@ export function NewWorkspaceCard({ onClick, isLoading = false }: NewWorkspaceCar
               'w-4 h-4 opacity-0 -translate-x-2',
               'group-hover:opacity-100 group-hover:translate-x-0',
               'transition-all duration-300',
-              'text-purple-400'
+              'text-[var(--color-accent)]'
             )} />
           </span>
           <span className={cn(
@@ -89,7 +82,7 @@ export function NewWorkspaceCard({ onClick, isLoading = false }: NewWorkspaceCar
             'text-[var(--color-text-muted)]',
             'flex items-center gap-1.5'
           )}>
-            <Sparkles className="w-3 h-3 text-purple-400" />
+            <Sparkles className="w-3 h-3 text-[var(--color-text-subtle)]" />
             创建一个新的工作流
           </span>
         </div>

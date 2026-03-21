@@ -90,12 +90,11 @@ export function AppHeader({
               whileTap={{ scale: 0.97 }}
               onClick={onClose}
               className={cn(
-                'flex items-center gap-1.5 px-2.5 py-1.5 rounded-full',
+                'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg',
                 'text-[var(--color-text-muted)] text-xs font-medium',
-                'bg-gradient-to-r from-violet-500/10 to-purple-500/10',
-                'border border-violet-500/20',
-                'hover:from-violet-500/20 hover:to-purple-500/20',
-                'hover:border-violet-500/30 hover:text-purple-400',
+                'bg-[var(--color-bg-elevated)]',
+                'border border-[var(--color-border)]',
+                'hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]',
                 'transition-all duration-200 cursor-pointer'
               )}
               title="关闭智能助手"
@@ -104,10 +103,10 @@ export function AppHeader({
               <span>返回</span>
             </motion.button>
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-purple-400" />
+              <Sparkles className="w-4 h-4 text-[var(--color-accent)]" />
               <span className="text-sm font-medium">智能助手</span>
               {isRunning && (
-                <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 text-[var(--color-text-muted)] animate-spin" />
               )}
             </div>
           </div>
@@ -272,12 +271,11 @@ export function AppHeader({
                 whileTap={{ scale: 0.97 }}
                 onClick={onClose}
                 className={cn(
-                  'flex items-center gap-1.5 px-2.5 py-1.5 rounded-full',
+                  'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg',
                   'text-[var(--color-text-muted)] text-xs font-medium',
-                  'bg-gradient-to-r from-violet-500/10 to-purple-500/10',
-                  'border border-violet-500/20',
-                  'hover:from-violet-500/20 hover:to-purple-500/20',
-                  'hover:border-violet-500/30 hover:text-purple-400',
+                  'bg-[var(--color-bg-elevated)]',
+                  'border border-[var(--color-border)]',
+                  'hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]',
                   'transition-all duration-200 cursor-pointer'
                 )}
                 title="关闭智能助手"
@@ -286,10 +284,10 @@ export function AppHeader({
                 <span>返回</span>
               </motion.button>
               <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-purple-400" />
+                <Sparkles className="w-4 h-4 text-[var(--color-accent)]" />
                 <span className="text-sm font-medium">智能助手</span>
                 {isRunning && (
-                  <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 text-[var(--color-text-muted)] animate-spin" />
                 )}
               </div>
             </div>

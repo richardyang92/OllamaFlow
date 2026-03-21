@@ -9,7 +9,7 @@ const methodColors: Record<string, string> = {
   POST: 'text-blue-500',
   PUT: 'text-yellow-500',
   DELETE: 'text-red-500',
-  PATCH: 'text-purple-500',
+  PATCH: 'text-blue-500',
 }
 
 function HttpRequestNode(props: NodeProps<HttpRequestNodeData>) {

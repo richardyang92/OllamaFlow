@@ -133,12 +133,15 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   const heightMapRef = useRef(new Map<string, number>())
   const [listHeight, setListHeight] = useState(600)
   const prevLengthRef = useRef(messages.length)
+  const [autoScroll, setAutoScroll] = useState(true)
+  const lastScrollTopRef = useRef<number>(0)
 
   // 单一 ResizeObserver 实例 - 监听所有消息项
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const observedElementsRef = useRef(new Map<Element, string>())
 
   // 创建并管理单一 ResizeObserver
+  // 统一监听所有消息项高度变化，触发重新滚动以保持底部对齐
   useEffect(() => {
     resizeObserverRef.current = new ResizeObserver((entries) => {
       let needsUpdate = false
@@ -224,19 +227,31 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     }
   }, [streamingMessageId, messages.length])
 
-  // 当消息数量增加时，滚动到新消息
+  // 当消息数量增加时，滚动到新消息（如果处于自动滚动状态）
   useEffect(() => {
     if (messages.length > prevLengthRef.current && listRef.current) {
-      // 新消息添加，滚动到底部
+      // 新消息添加，决定是否自动滚动到底部
       requestAnimationFrame(() => {
-        listRef.current?.scrollToRow({
-          index: messages.length - 1,
-          align: 'end'
-        })
+        if (autoScroll) {
+          listRef.current?.scrollToRow({ index: messages.length - 1, align: 'end' })
+        } else {
+          // 不自动滚动，等待用户手动返回到底部
+        }
       })
     }
     prevLengthRef.current = messages.length
   }, [messages.length])
+
+  // 监听滚动以实现近底部/离底部的区分
+  const onListScroll = useCallback(() => {
+    const el = listRef.current?.element
+    if (!el) return
+    const isAtBottomNow = el.scrollTop + el.clientHeight >= el.scrollHeight - 20
+    setAutoScroll(isAtBottomNow)
+    // 用户向上滚动时，不再自动滚动到底部（智能指示器将交由其他 UI 处理）
+    // 这里仅更新滚动状态，不直接显示额外 UI，以减少复杂性
+    lastScrollTopRef.current = el.scrollTop
+  }, [])
 
   // 监听容器高度变化
   useEffect(() => {
@@ -266,6 +281,13 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     return null
   }
 
+  const scrollToBottom = useCallback(() => {
+    if (listRef.current) {
+      listRef.current.scrollToRow({ index: messages.length - 1, align: 'end' })
+      setAutoScroll(true)
+    }
+  }, [messages.length])
+
   return (
     <div ref={containerRef} className="w-full h-full overflow-x-hidden">
       <List<RowProps>
@@ -276,8 +298,17 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         rowProps={rowProps}
         rowComponent={RowComponent}
         overscanCount={3}
+        onScroll={onListScroll}
         className="scrollbar-thin"
       />
+      {messages.length > 0 && !autoScroll && (
+        <button
+          onClick={scrollToBottom}
+          className="fixed right-4 bottom-8 z-20 rounded-full bg-blue-600 text-white px-3 py-2 text-sm shadow"
+        >
+          回到底部
+        </button>
+      )}
     </div>
   )
 })

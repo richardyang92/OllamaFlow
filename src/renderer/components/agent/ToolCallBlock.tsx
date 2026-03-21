@@ -35,7 +35,7 @@ interface ToolCallBlockProps {
 // 工具图标映射
 function getToolIcon(toolName: string) {
   if (toolName.startsWith('workflow_')) {
-    return <Workflow className="w-4 h-4 text-purple-400" />
+    return <Workflow className="w-4 h-4 text-[var(--color-text-muted)]" />
   }
 
   switch (toolName) {
@@ -91,15 +91,15 @@ const subAgentStatusLabels: Record<SubAgentProgress['status'], string> = {
 function getReActStepConfig(status: ReActStepSummary['status']) {
   switch (status) {
     case 'thinking':
-      return { icon: Brain, color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: '思考' }
+      return { icon: Brain, color: 'text-yellow-600', bg: 'bg-yellow-500/10', label: '思考' }
     case 'acting':
-      return { icon: Zap, color: 'text-blue-400', bg: 'bg-blue-500/10', label: '执行' }
+      return { icon: Zap, color: 'text-blue-600', bg: 'bg-blue-500/10', label: '执行' }
     case 'observing':
-      return { icon: Eye, color: 'text-purple-400', bg: 'bg-purple-500/10', label: '观察' }
+      return { icon: Eye, color: 'text-[var(--color-text-muted)]', bg: 'bg-[var(--color-bg-hover)]', label: '观察' }
     case 'completed':
-      return { icon: CheckCircle, color: 'text-green-400', bg: 'bg-green-500/10', label: '完成' }
+      return { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-500/10', label: '完成' }
     case 'error':
-      return { icon: XCircle, color: 'text-red-400', bg: 'bg-red-500/10', label: '错误' }
+      return { icon: XCircle, color: 'text-red-600', bg: 'bg-red-500/10', label: '错误' }
   }
 }
 
@@ -133,7 +133,7 @@ function ReActStepSummaryItem({ step, isLast }: { step: ReActStepSummary; isLast
         )}
         {/* 执行的工具 */}
         {step.action && (
-          <div className="text-xs text-blue-400 mt-0.5">
+          <div className="text-xs text-blue-600 mt-0.5">
             ⚡ {step.action}
           </div>
         )}
@@ -155,25 +155,25 @@ function SubAgentProgressPanel({ progress }: { progress: SubAgentProgress }) {
   return (
     <div className="border-t border-[var(--color-border-subtle)]">
       {/* 紧凑的单行进度栏：工作流名 + 状态 + 进度 + 当前节点 */}
-      <div className="px-3 py-2 bg-purple-500/5 flex items-center gap-2">
-        <Workflow className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-        <span className="text-xs text-purple-400 font-medium truncate">
+      <div className="px-3 py-2 bg-[var(--color-bg-hover)] flex items-center gap-2">
+        <Workflow className="w-3.5 h-3.5 text-[var(--color-text-muted)] flex-shrink-0" />
+        <span className="text-xs text-[var(--color-text-muted)] font-medium truncate">
           {progress.workflowName}
         </span>
         <span className={cn(
           'text-xs px-1.5 py-0.5 rounded flex-shrink-0',
-          progress.status === 'loading' && 'bg-yellow-500/10 text-yellow-400',
-          progress.status === 'running' && 'bg-blue-500/10 text-blue-400',
-          progress.status === 'completed' && 'bg-green-500/10 text-green-400',
-          progress.status === 'error' && 'bg-red-500/10 text-red-400',
+          progress.status === 'loading' && 'bg-yellow-500/10 text-yellow-600',
+          progress.status === 'running' && 'bg-blue-500/10 text-blue-600',
+          progress.status === 'completed' && 'bg-green-500/10 text-green-600',
+          progress.status === 'error' && 'bg-red-500/10 text-red-600',
         )}>
           {subAgentStatusLabels[progress.status]}
         </span>
         {/* 节点进度 */}
         {totalNodes > 0 && (
-          <span className="text-xs text-purple-400 flex-shrink-0">
+          <span className="text-xs text-[var(--color-text-muted)] flex-shrink-0">
             {completedNodes}/{totalNodes}
-            {progressPercent > 0 && <span className="text-[var(--color-text-muted)]">({progressPercent}%)</span>}
+            {progressPercent > 0 && <span className="text-[var(--color-text-subtle)]">({progressPercent}%)</span>}
           </span>
         )}
         {/* 当前进度条 - 紧凑版 */}
@@ -189,7 +189,7 @@ function SubAgentProgressPanel({ progress }: { progress: SubAgentProgress }) {
                   ? 'bg-red-500'
                   : progress.status === 'completed'
                     ? 'bg-green-500'
-                    : 'bg-gradient-to-r from-purple-500 to-blue-500'
+                    : 'bg-[var(--color-accent)]'
               )}
             />
           </div>
@@ -210,11 +210,11 @@ function SubAgentProgressPanel({ progress }: { progress: SubAgentProgress }) {
 
       {/* ReAct Agent 嵌套步骤展示 */}
       {hasReActSteps && (
-        <div className="px-3 py-2 bg-blue-500/5 border-t border-[var(--color-border-subtle)]">
+        <div className="px-3 py-2 bg-[var(--color-bg-input)] border-t border-[var(--color-border-subtle)]">
           {/* ReAgent 标题 */}
           <div className="flex items-center gap-2 mb-2">
-            <Brain className="w-3.5 h-3.5 text-blue-400" />
-            <span className="text-xs text-blue-400 font-medium">ReAct Agent 步骤</span>
+            <Brain className="w-3.5 h-3.5 text-blue-600" />
+            <span className="text-xs text-blue-600 font-medium">ReAct Agent 步骤</span>
             {progress.reactAgentIteration !== undefined && progress.reactAgentMaxIterations !== undefined && (
               <span className="text-[10px] text-[var(--color-text-muted)]">
                 ({progress.reactAgentIteration}/{progress.reactAgentMaxIterations})
@@ -281,7 +281,7 @@ export const ToolCallBlock = memo(function ToolCallBlock({
         {getToolIcon(toolName)}
         {/* 并行标识 */}
         {showParallelBadge && parallelIndex !== undefined && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium">
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 font-medium">
             #{parallelIndex}
           </span>
         )}
@@ -292,10 +292,10 @@ export const ToolCallBlock = memo(function ToolCallBlock({
         {subAgentProgress && !expanded && (
           <span className={cn(
             'text-xs px-1.5 py-0.5 rounded ml-1 flex items-center gap-1.5',
-            subAgentProgress.status === 'loading' && 'bg-yellow-500/10 text-yellow-400',
-            subAgentProgress.status === 'running' && 'bg-blue-500/10 text-blue-400',
-            subAgentProgress.status === 'completed' && 'bg-green-500/10 text-green-400',
-            subAgentProgress.status === 'error' && 'bg-red-500/10 text-red-400',
+            subAgentProgress.status === 'loading' && 'bg-yellow-500/10 text-yellow-600',
+            subAgentProgress.status === 'running' && 'bg-blue-500/10 text-blue-600',
+            subAgentProgress.status === 'completed' && 'bg-green-500/10 text-green-600',
+            subAgentProgress.status === 'error' && 'bg-red-500/10 text-red-600',
           )}>
             <Workflow className="w-3 h-3 flex-shrink-0" />
             {/* 工作流名称 + 进度 */}
@@ -317,7 +317,7 @@ export const ToolCallBlock = memo(function ToolCallBlock({
                 {subAgentProgress.currentNodeType === 'reactAgent' &&
                  subAgentProgress.reactAgentIteration !== undefined &&
                  subAgentProgress.reactAgentMaxIterations !== undefined && (
-                  <span className="text-[10px] text-blue-300 flex-shrink-0" title={`ReAct Agent 迭代 ${subAgentProgress.reactAgentIteration}/${subAgentProgress.reactAgentMaxIterations}`}>
+                  <span className="text-[10px] text-blue-600 flex-shrink-0" title={`ReAct Agent 迭代 ${subAgentProgress.reactAgentIteration}/${subAgentProgress.reactAgentMaxIterations}`}>
                     🧠{subAgentProgress.reactAgentIteration}/{subAgentProgress.reactAgentMaxIterations}
                   </span>
                 )}
@@ -360,8 +360,8 @@ export const ToolCallBlock = memo(function ToolCallBlock({
             {/* 错误信息 */}
             {toolCall.error && status === 'error' && (
               <div className="px-3 py-2 border-t border-red-500/20 bg-red-500/5">
-                <div className="text-xs text-red-400 mb-1">错误信息</div>
-                <pre className="text-xs font-mono text-red-300 whitespace-pre-wrap">
+                <div className="text-xs text-red-500 mb-1">错误信息</div>
+                <pre className="text-xs font-mono text-red-400 whitespace-pre-wrap">
                   {toolCall.error}
                 </pre>
               </div>

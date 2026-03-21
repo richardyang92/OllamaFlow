@@ -1,5 +1,6 @@
 import { memo, useState } from 'react'
 import { NodeProps } from '@xyflow/react'
+import { BarChart3 } from 'lucide-react'
 import BaseNode from './BaseNode'
 import { ReactAgentNodeData, NodeStatus, AVAILABLE_TOOLS } from '@/types/node'
 import { useReActState } from '@/hooks/useReActState'
@@ -8,9 +9,11 @@ import { useNodeStatus } from '@/hooks/useNodeStatus'
 import { useExecutionStore } from '@/store/execution-store'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { useSettingsStore } from '@/store/settings-store'
-import { motion } from 'framer-motion'
+import { useAgentAnalytics } from '@/hooks/useAgentAnalytics'
+import { motion, AnimatePresence } from 'framer-motion'
 import ReActStepsPanel from './react-agent/ReActStepsPanel'
 import StreamingFlashText from './shared/StreamingFlashText'
+import { AgentAnalyticsPanel } from '@/components/agent/AgentAnalyticsPanel'
 
 function ReactAgentNode(props: NodeProps) {
   const data = props.data as ReactAgentNodeData
@@ -18,7 +21,16 @@ function ReactAgentNode(props: NodeProps) {
   const reactState = useReActState(id)
   const reasoningOutput = useReasoningStream(id)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false)
   const nodeResult = useNodeStatus(id)
+
+  // Initialize agent analytics
+  useAgentAnalytics({
+    nodeId: id,
+    reactState,
+    query: data.userMessage,
+    maxIterations: data.maxIterations || 10,
+  })
 
   // Get pending question from current workspace
   const workspacePath = useWorkspaceStore((state) => state.currentWorkspace?.path)
@@ -49,9 +61,9 @@ function ReactAgentNode(props: NodeProps) {
     switch (nodeStatus) {
       case 'running':
         return {
-          color: 'text-purple-400',
-          bg: 'bg-purple-500/10',
-          border: 'border-purple-500/20',
+          color: 'text-blue-400',
+          bg: 'bg-blue-500/10',
+          border: 'border-blue-500/20',
           icon: '🧠',
           label: '推理中',
         }
@@ -295,7 +307,33 @@ function ReactAgentNode(props: NodeProps) {
             )}
           </div>
         )}
+
+        {/* 查看分析按钮 */}
+        {(reactState?.steps?.length ?? 0) > 0 && (
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setIsAnalyticsOpen(true)}
+            className="w-full mt-3 px-3 py-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 text-xs font-medium flex items-center justify-center gap-2 transition-colors"
+          >
+            <BarChart3 className="w-4 h-4" />
+            查看执行分析
+          </motion.button>
+        )}
       </div>
+
+      {/* 分析面板 */}
+      <AnimatePresence>
+        {isAnalyticsOpen && (
+          <AgentAnalyticsPanel
+            nodeId={id}
+            isOpen={isAnalyticsOpen}
+            onClose={() => setIsAnalyticsOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </BaseNode>
   )
 }

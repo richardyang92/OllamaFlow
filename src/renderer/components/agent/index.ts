@@ -15,3 +15,6 @@ export { default as AgentInlineGeneratedFiles } from './AgentInlineGeneratedFile
 export { AgentSidePanel } from './AgentSidePanel'
 export { default as ExecutionLogPanel } from './ExecutionLogPanel'
 export { AgentIterationLimitPrompt } from './AgentIterationLimitPrompt'
+export { AgentExecutionHistoryPanel } from './AgentExecutionHistoryPanel'
+export { AgentAnalyticsPanel } from './AgentAnalyticsPanel'
+export { WorkerSettingsPanel } from './WorkerSettingsPanel'

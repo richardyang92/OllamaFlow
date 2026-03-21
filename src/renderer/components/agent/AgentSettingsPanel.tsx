@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Loader2, RefreshCw, Globe } from 'lucide-react'
+import { X, Loader2, RefreshCw, Globe, Cpu } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { useAgentStore } from '@/store/agent-store'
@@ -37,6 +37,12 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
   const [localApiKey, setLocalApiKey] = useState(apiKey || '')
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
   const [isLoadingOllamaModels, setIsLoadingOllamaModels] = useState(false)
+  const [useWorkerMode, setUseWorkerMode] = useState(false)
+
+  // Worker 模式开关处理
+  const handleToggleWorkerMode = () => {
+    setUseWorkerMode(!useWorkerMode)
+  }
 
   // ESC 键关闭
   useEffect(() => {
@@ -156,10 +162,10 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                 {/* 全局配置提示 */}
                 {isGlobalAIEnabled && useGlobalConfig ? (
                   <>
-                    <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg mb-4">
+                    <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg mb-4">
                       <div className="flex items-center gap-2 mb-1">
-                        <Globe className="w-4 h-4 text-purple-400" />
-                        <span className="font-medium text-purple-400">
+                        <Globe className="w-4 h-4 text-blue-400" />
+                        <span className="font-medium text-blue-400">
                           使用全局配置
                         </span>
                       </div>
@@ -175,7 +181,7 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                         <button
                           onClick={() => fetchModels()}
                           disabled={isLoadingModels}
-                          className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                          className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
                         >
                           <RefreshCw className={cn('w-3 h-3', isLoadingModels && 'animate-spin')} />
                           刷新
@@ -185,7 +191,7 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                         <select
                           value={localModel}
                           onChange={(e) => setLocalModel(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                         >
                           <option value="">使用全局默认 ({globalAIConfig?.defaultModel})</option>
                           {availableModels.map((m) => (
@@ -198,7 +204,7 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                           value={localModel}
                           onChange={(e) => setLocalModel(e.target.value)}
                           placeholder={globalAIConfig?.defaultModel || '输入模型名称'}
-                          className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                         />
                       )}
                     </div>
@@ -214,15 +220,15 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                   <>
                     {/* 如果有全局配置可用，显示切换提示 */}
                     {isGlobalAIEnabled && (
-                      <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg mb-4">
+                      <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg mb-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <Globe className="w-4 h-4 text-purple-400" />
-                            <span className="text-sm text-purple-400">全局配置可用</span>
+                            <Globe className="w-4 h-4 text-blue-400" />
+                            <span className="text-sm text-blue-400">全局配置可用</span>
                           </div>
                           <button
                             onClick={() => setUseGlobalConfig(true)}
-                            className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                            className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
                           >
                             使用全局配置
                           </button>
@@ -239,7 +245,7 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                           className={cn(
                             'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors',
                             localProvider === 'ollama'
-                              ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                               : 'bg-[var(--color-bg-input)] text-[var(--color-text-muted)] hover:bg-[var(--color-bg-hover)]'
                           )}
                         >
@@ -264,13 +270,13 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                       <label className="block text-sm font-medium mb-2">
                         API 端点
                       </label>
-                      <input
-                        type="text"
-                        value={localApiEndpoint}
-                        onChange={(e) => setLocalApiEndpoint(e.target.value)}
-                        placeholder={localProvider === 'ollama' ? 'http://127.0.0.1:11434' : 'https://api.openai.com/v1'}
-                        className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
-                      />
+                    <input
+                      type="text"
+                      value={localApiEndpoint}
+                      onChange={(e) => setLocalApiEndpoint(e.target.value)}
+                      placeholder={localProvider === 'ollama' ? 'http://127.0.0.1:11434' : 'https://api.openai.com/v1'}
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    />
                     </div>
 
                     {/* Model Selection */}
@@ -281,7 +287,7 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                           <select
                             value={localModel}
                             onChange={(e) => setLocalModel(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 appearance-none"
+                            className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 appearance-none"
                           >
                             <option value="">选择模型...</option>
                             {ollamaModels.map((m) => (
@@ -289,7 +295,7 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                             ))}
                           </select>
                           {isLoadingOllamaModels && (
-                            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-purple-400" />
+                            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-blue-400" />
                           )}
                         </div>
                       </div>
@@ -301,7 +307,7 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                           value={localModel}
                           onChange={(e) => setLocalModel(e.target.value)}
                           placeholder="例如: gpt-4o, deepseek-chat"
-                          className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                         />
                       </div>
                     )}
@@ -315,7 +321,7 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                           value={localApiKey}
                           onChange={(e) => setLocalApiKey(e.target.value)}
                           placeholder="sk-..."
-                          className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                         />
                       </div>
                     )}
@@ -328,7 +334,7 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                     <label className="text-sm font-medium">可用工作流</label>
                     <button
                       onClick={handleRefreshWorkflows}
-                      className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                      className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
                     >
                       <RefreshCw className="w-3 h-3" />
                       刷新
@@ -356,6 +362,33 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                     )}
                   </div>
                 </div>
+
+                {/* Worker Mode Toggle */}
+                <div className="mb-4 p-3 rounded-lg bg-[var(--color-bg-canvas)] border border-[var(--color-border-subtle)]">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm font-medium flex items-center gap-2">
+                        <Cpu className="w-4 h-4" />
+                        Worker 模式
+                      </label>
+                      <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                        在独立线程中执行 Agent，避免阻塞 UI
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleToggleWorkerMode}
+                      className={cn(
+                        'relative w-12 h-6 rounded-full transition-colors',
+                        useWorkerMode ? 'bg-blue-500' : 'bg-gray-600'
+                      )}
+                    >
+                      <motion.div
+                        animate={{ x: useWorkerMode ? 24 : 2 }}
+                        className="absolute top-1 w-4 h-4 bg-white rounded-full"
+                      />
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Footer */}
@@ -371,7 +404,7 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                   disabled={useGlobalConfig && isGlobalAIEnabled ? false : !localModel}
                   className={cn(
                     'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                    'bg-purple-500 text-white hover:bg-purple-600',
+                    'bg-blue-500 text-white hover:bg-blue-600',
                     (useGlobalConfig && isGlobalAIEnabled ? false : !localModel) && 'opacity-50 cursor-not-allowed'
                   )}
                 >

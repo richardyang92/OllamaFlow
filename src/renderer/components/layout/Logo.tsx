@@ -23,10 +23,10 @@ export function Logo({ compact = false, onBack }: LogoProps) {
           className={cn(
             'flex items-center gap-1.5 px-2.5 py-1.5 rounded-full',
             'text-[var(--color-text-muted)] text-xs font-medium',
-            'bg-gradient-to-r from-violet-500/10 to-purple-500/10',
-            'border border-violet-500/20',
-            'hover:from-violet-500/20 hover:to-purple-500/20',
-            'hover:border-violet-500/30 hover:text-purple-400',
+            'bg-[var(--color-bg-input)]',
+            'border border-[var(--color-border-subtle)]',
+            'hover:bg-[var(--color-bg-hover)] hover:border-[var(--color-border)]',
+            'hover:text-[var(--color-accent)]',
             'transition-all duration-200 cursor-pointer'
           )}
         >
@@ -37,15 +37,15 @@ export function Logo({ compact = false, onBack }: LogoProps) {
       <div
         className={cn(
           'rounded-lg flex items-center justify-center',
-          'bg-gradient-to-br from-violet-500/20 to-purple-500/20',
-          compact ? 'w-8 h-8' : 'w-9 h-9 rounded-xl shadow-sm'
+          'bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)]',
+          compact ? 'w-8 h-8' : 'w-9 h-9 rounded-xl'
         )}
       >
-        <Bot className={cn('text-purple-400', compact ? 'w-4 h-4' : 'w-5 h-5')} />
+        <Bot className={cn('text-[var(--color-text-muted)]', compact ? 'w-4 h-4' : 'w-5 h-5')} />
       </div>
       <h1
         className={cn(
-          'font-semibold bg-gradient-to-r from-violet-400 via-purple-400 to-fuchsia-400 bg-clip-text text-transparent',
+          'font-semibold text-[var(--color-text)]',
           compact ? 'text-base' : 'text-lg font-bold'
         )}
       >

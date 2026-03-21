@@ -34,8 +34,8 @@ export default function PlanProperties({ node, updateNodeData }: Props) {
     <div className="space-y-4">
       {/* 全局配置提示 */}
       {isGlobalAIEnabled && (
-        <div className="px-3 py-2 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-          <p className="text-xs text-purple-400">
+        <div className="px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+          <p className="text-xs text-blue-400">
             使用全局配置: {globalAIConfig?.name || '未命名'}
           </p>
         </div>

@@ -1,4 +1,10 @@
-import { Parser } from 'safe-expr-eval'
+import { create, all } from 'mathjs'
+
+// Create mathjs instance with BigNumber for high precision
+const math = create(all, {
+  number: 'BigNumber',
+  precision: 64,
+})
 
 // Types for math tool operations
 export type MathOutputFormat = 'auto' | 'decimal' | 'fraction' | 'percent'
@@ -45,39 +51,6 @@ export interface MathStatisticsResult {
 // ============================================================================
 
 /**
- * Combination: C(n,k) = n! / (k!(n-k)!)
- * Uses multiplicative formula for better numerical stability
- */
-function combination(n: number, k: number): number {
-  if (k < 0 || k > n || !Number.isInteger(n) || !Number.isInteger(k)) {
-    return NaN
-  }
-  if (k === 0 || k === n) return 1
-  // Use the smaller k for efficiency
-  k = Math.min(k, n - k)
-  let result = 1
-  for (let i = 0; i < k; i++) {
-    result *= (n - i) / (i + 1)
-  }
-  return result
-}
-
-/**
- * Permutation: P(n,k) = n! / (n-k)!
- */
-function permutation(n: number, k: number): number {
-  if (k < 0 || k > n || !Number.isInteger(n) || !Number.isInteger(k)) {
-    return NaN
-  }
-  if (k === 0) return 1
-  let result = 1
-  for (let i = 0; i < k; i++) {
-    result *= (n - i)
-  }
-  return result
-}
-
-/**
  * Greatest Common Divisor using Euclidean algorithm
  */
 function gcd(a: number, b: number): number {
@@ -93,104 +66,9 @@ function gcd(a: number, b: number): number {
   return a
 }
 
-/**
- * Least Common Multiple: lcm(a,b) = |a*b| / gcd(a,b)
- */
-function lcm(a: number, b: number): number {
-  if (a === 0 || b === 0) return 0
-  return Math.abs(a * b) / gcd(a, b)
-}
-
-// ============================================================================
-// Parser Configuration
-// ============================================================================
-
-/**
- * Create a secure parser with custom math functions
- * Note: safe-expr-eval has a simplified API without operator configuration options
- * We need to add all standard Math functions manually
- */
-function createMathParser(): Parser {
-  const parser = new Parser()
-
-  // Basic Math functions
-  parser.functions.sqrt = Math.sqrt
-  parser.functions.cbrt = Math.cbrt
-  parser.functions.abs = Math.abs
-  parser.functions.ceil = Math.ceil
-  parser.functions.floor = Math.floor
-  parser.functions.round = Math.round
-  parser.functions.trunc = Math.trunc
-  parser.functions.sign = Math.sign
-  parser.functions.exp = Math.exp
-  parser.functions.expm1 = Math.expm1
-  parser.functions.log = Math.log
-  parser.functions.log10 = Math.log10
-  parser.functions.log2 = Math.log2
-  parser.functions.log1p = Math.log1p
-  parser.functions.pow = Math.pow
-  parser.functions.max = Math.max
-  parser.functions.min = Math.min
-  parser.functions.clz32 = Math.clz32
-  parser.functions.imul = Math.imul
-  parser.functions.fround = Math.fround
-  parser.functions.hypot = Math.hypot
-
-  // Trigonometric functions
-  parser.functions.sin = Math.sin
-  parser.functions.cos = Math.cos
-  parser.functions.tan = Math.tan
-  parser.functions.asin = Math.asin
-  parser.functions.acos = Math.acos
-  parser.functions.atan = Math.atan
-  parser.functions.atan2 = Math.atan2
-  parser.functions.sinh = Math.sinh
-  parser.functions.cosh = Math.cosh
-  parser.functions.tanh = Math.tanh
-  parser.functions.asinh = Math.asinh
-  parser.functions.acosh = Math.acosh
-  parser.functions.atanh = Math.atanh
-
-  // Custom combinatorics functions
-  parser.functions.comb = combination
-  parser.functions.perm = permutation
-  parser.functions.lcm = lcm
-  parser.functions.gcd = gcd
-  parser.functions.factorial = factorial
-
-  // Aliases for common notation
-  parser.functions.ln = Math.log
-
-  // Ensure constants are set
-  parser.consts.PI = Math.PI
-  parser.consts.E = Math.E
-  parser.consts.pi = Math.PI
-  parser.consts.e = Math.E
-
-  return parser
-}
-
 // ============================================================================
 // Expression Preprocessing
 // ============================================================================
-
-/**
- * Factorial function for non-negative integers
- */
-function factorial(n: number): number {
-  if (!Number.isInteger(n) || n < 0) return NaN
-  if (n <= 1) return 1
-  if (n > 170) {
-    // For very large n, return approximation using scientific notation
-    // Using Stirling's approximation: n! ≈ sqrt(2πn) * (n/e)^n
-    return Number.POSITIVE_INFINITY
-  }
-  let result = 1
-  for (let i = 2; i <= n; i++) {
-    result *= i
-  }
-  return result
-}
 
 /**
  * Preprocess expression to convert custom notations to standard format
@@ -348,6 +226,7 @@ function formatResult(
 
 /**
  * Evaluate a mathematical expression and return the result
+ * Uses mathjs with BigNumber for high precision calculations
  */
 export function mathCalculate(input: MathCalculateInput): MathCalculateResult {
   try {
@@ -364,47 +243,63 @@ export function mathCalculate(input: MathCalculateInput): MathCalculateResult {
     // Preprocess the expression
     const processedExpr = preprocessExpression(expression)
 
-    // Create parser and evaluate
-    const parser = createMathParser()
-    const result = parser.evaluate(processedExpr)
+    // Use mathjs with BigNumber for high precision calculation
+    const result = math.evaluate(processedExpr)
 
-    // Handle different result types
-    if (typeof result === 'number') {
-      // Check for special values
-      if (!Number.isFinite(result)) {
-        return {
-          success: true,
-          result: result > 0 ? 'Infinity' : '-Infinity',
-          rawValue: result,
-          isExact: true,
-        }
-      }
+    // Convert BigNumber to string for consistent formatting
+    let resultValue: string
+    let rawValue: number
 
-      if (Number.isNaN(result)) {
-        return {
-          success: false,
-          result: '',
-          error: '计算结果无效 (NaN)',
-        }
-      }
-
-      // Format the result
-      const formatted = formatResult(result, outputFormat, precision)
-
+    if (typeof result === 'object' && result !== null && 'toString' in result) {
+      // BigNumber result
+      resultValue = result.toString()
+      rawValue = parseFloat(resultValue)
+    } else if (typeof result === 'number') {
+      resultValue = String(result)
+      rawValue = result
+    } else {
+      // Non-numeric results (arrays, objects, etc.)
       return {
         success: true,
-        result: formatted,
-        rawValue: result,
-        isExact: Number.isInteger(result),
+        result: JSON.stringify(result),
+        rawValue: NaN,
+        isExact: true,
       }
     }
 
-    // Non-numeric results (arrays, objects, etc.)
+    // Check for special values
+    if (!Number.isFinite(rawValue)) {
+      return {
+        success: true,
+        result: rawValue > 0 ? 'Infinity' : '-Infinity',
+        rawValue,
+        isExact: true,
+      }
+    }
+
+    if (Number.isNaN(rawValue)) {
+      return {
+        success: false,
+        result: '',
+        error: '计算结果无效 (NaN)',
+      }
+    }
+
+    // Format the result - use the high precision string directly for integers
+    let formatted: string
+    if (/^-?\d+$/.test(resultValue)) {
+      // Integer result - use exact string representation
+      formatted = resultValue
+    } else {
+      // Decimal result - use formatResult
+      formatted = formatResult(rawValue, outputFormat, precision)
+    }
+
     return {
       success: true,
-      result: JSON.stringify(result),
-      rawValue: result as number,
-      isExact: true,
+      result: formatted,
+      rawValue,
+      isExact: /^-?\d+$/.test(resultValue),
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

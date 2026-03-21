@@ -1,6 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Blocks, Settings, Variable, FolderOpen, FileText } from 'lucide-react'
-import { useTheme } from '@/contexts/ThemeContext'
 import NodePalette from './NodePalette'
 import PropertiesPanel from './PropertiesPanel'
 import VariableBrowser from './VariableBrowser'
@@ -45,7 +44,7 @@ function TabButton({
         'flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-medium',
         'transition-all duration-200',
         active
-          ? 'bg-gradient-to-r from-purple-500/60 to-blue-500/60 text-white shadow-sm'
+          ? 'bg-[var(--color-accent)] text-white'
           : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]'
       )}
       title={tab.label}
@@ -62,13 +61,6 @@ export function EditorSidePanel({
   onClose,
   onFileClick,
 }: EditorSidePanelProps) {
-  const { resolvedTheme } = useTheme()
-
-  // Dynamic glow shadow based on theme
-  const isDark = resolvedTheme === 'dark'
-  const glowColor = isDark ? '255,255,255' : '0,0,0'
-  const shadowValue = `0 0 30px rgba(${glowColor},0.08), 0 0 60px rgba(${glowColor},0.04)`
-
   return (
     <AnimatePresence>
       {visible && (
@@ -77,23 +69,13 @@ export function EditorSidePanel({
           animate={{ width: 320, opacity: 1 }}
           exit={{ width: 0, opacity: 0 }}
           transition={{ duration: 0.2, ease: 'easeInOut' }}
-          style={{ boxShadow: shadowValue }}
           className={cn(
             'absolute right-0 top-0 bottom-0 z-30 flex flex-col',
-            'bg-[var(--color-bg-elevated)]/95 backdrop-blur-xl',
+            'bg-[var(--color-bg-elevated)]',
             'border-l border-[var(--color-border)]',
             'overflow-hidden'
           )}
         >
-          {/* Gradient accent bar at top */}
-          <div
-            className={cn(
-              'h-1 w-full flex-shrink-0',
-              'bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500',
-              'opacity-70'
-            )}
-          />
-
           {/* Tab bar */}
           <div className="flex items-center gap-1 px-3 py-2.5 border-b border-[var(--color-border-subtle)]">
             {tabs.map((tab) => (

@@ -33,12 +33,14 @@ function getFileIcon(filename: string) {
     csv: '📊', xml: '📄',
     // 图片
     png: '🖼️', jpg: '🖼️', jpeg: '🖼️', gif: '🖼️', svg: '🖼️', webp: '🖼️', ico: '🖼️', bmp: '🖼️',
+    // PDF
+    pdf: '📄',
   }
   return iconMap[ext || ''] || '📄'
 }
 
 // 判断文件类型
-type FileType = 'markdown' | 'html' | 'image' | 'code' | 'unknown'
+type FileType = 'markdown' | 'html' | 'image' | 'pdf' | 'code' | 'unknown'
 
 function getFileType(filename: string): FileType {
   const ext = filename.split('.').pop()?.toLowerCase() || ''
@@ -46,10 +48,12 @@ function getFileType(filename: string): FileType {
   const markdownExts = ['md', 'markdown', 'mdown', 'mkd']
   const htmlExts = ['html', 'htm', 'xhtml']
   const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico']
+  const pdfExts = ['pdf']
 
   if (markdownExts.includes(ext)) return 'markdown'
   if (htmlExts.includes(ext)) return 'html'
   if (imageExts.includes(ext)) return 'image'
+  if (pdfExts.includes(ext)) return 'pdf'
   if (ext) return 'code' // 有扩展名的文件都视为代码
   return 'unknown'
 }
@@ -72,6 +76,7 @@ function FilePreviewModal({
 }) {
   const [content, setContent] = useState<string | null>(null)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -111,6 +116,21 @@ function FilePreviewModal({
           } else {
             console.error('[🏖️ FILE_PREVIEW] ❌ 图片读取失败', result.error)
             setError(result.error || '无法读取图片')
+          }
+        } else if (fileType === 'pdf') {
+          // PDF 文件使用 readPdf 方法
+          const result = await window.electronAPI.file.readPdf(file.workspacePath, file.path)
+          console.log('[🏖️ FILE_PREVIEW] PDF读取结果', {
+            success: result.success,
+            hasDataUrl: !!result.dataUrl,
+            error: result.error,
+          })
+
+          if (result.success && result.dataUrl) {
+            setPdfUrl(result.dataUrl)
+          } else {
+            console.error('[🏖️ FILE_PREVIEW] ❌ PDF读取失败', result.error)
+            setError(result.error || '无法读取PDF')
           }
         } else {
           // 普通文件使用 read 方法
@@ -196,6 +216,19 @@ function FilePreviewModal({
       )
     }
 
+    // PDF预览
+    if (fileType === 'pdf' && pdfUrl) {
+      return (
+        <div className="p-4">
+          <iframe
+            src={pdfUrl}
+            className="w-full h-[60vh] rounded-lg border border-[var(--color-border-subtle)]"
+            title={filename}
+          />
+        </div>
+      )
+    }
+
     // 源码视图
     if (viewMode === 'source' && content) {
       return (
@@ -225,13 +258,15 @@ function FilePreviewModal({
   const getFileTypeColor = (type: FileType) => {
     switch (type) {
       case 'markdown':
-        return 'bg-purple-500/20 text-purple-400'
+        return 'bg-blue-500/20 text-blue-400'
       case 'html':
         return 'bg-orange-500/20 text-orange-400'
       case 'code':
         return 'bg-blue-500/20 text-blue-400'
       case 'image':
         return 'bg-green-500/20 text-green-400'
+      case 'pdf':
+        return 'bg-red-500/20 text-red-400'
       default:
         return 'bg-gray-500/20 text-gray-400'
     }
@@ -269,6 +304,7 @@ function FilePreviewModal({
               {fileType === 'markdown' ? 'Markdown' :
                fileType === 'html' ? 'HTML' :
                fileType === 'image' ? 'Image' :
+               fileType === 'pdf' ? 'PDF' :
                fileType === 'code' ? 'Code' : 'File'}
             </span>
           </div>
@@ -311,56 +347,63 @@ function FilePreviewModal({
 }
 
 // 单个文件项
-function FileItem({ file, onPreview }: { file: GeneratedFileInfo; onPreview: () => void }) {
-  const filename = file.path.split('/').pop() || file.path
-  const dir = file.path.substring(0, file.path.lastIndexOf('/'))
+import { forwardRef } from 'react'
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      className={cn(
-        'flex items-center gap-2 px-3 py-2 rounded-lg',
-        'bg-[var(--color-bg-input)] hover:bg-[var(--color-bg-hover)]',
-        'border border-[var(--color-border-subtle)]',
-        'cursor-pointer transition-all duration-200',
-        'group'
-      )}
-      onClick={onPreview}
-    >
-      <span className="text-lg">{getFileIcon(filename)}</span>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-[var(--color-text)] truncate">
-          {filename}
-        </div>
-        {dir && (
-          <div className="text-xs text-[var(--color-text-muted)] truncate">
-            {dir}
-          </div>
-        )}
-      </div>
-      {file.size && (
-        <span className="text-xs text-[var(--color-text-muted)]">
-          {formatFileSize(file.size)}
-        </span>
-      )}
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          onPreview()
-        }}
+const FileItem = forwardRef<HTMLDivElement, { file: GeneratedFileInfo; onPreview: () => void }>(
+  ({ file, onPreview }, ref) => {
+    const filename = file.path.split('/').pop() || file.path
+    const dir = file.path.substring(0, file.path.lastIndexOf('/'))
+
+    return (
+      <motion.div
+        ref={ref}
+        layout
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, scale: 0.95 }}
         className={cn(
-          'p-1 rounded transition-all',
-          'opacity-0 group-hover:opacity-100',
-          'hover:bg-[var(--color-bg-elevated)]'
+          'flex items-center gap-2 px-3 py-2 rounded-lg',
+          'bg-[var(--color-bg-input)] hover:bg-[var(--color-bg-hover)]',
+          'border border-[var(--color-border-subtle)]',
+          'cursor-pointer transition-all duration-200',
+          'group'
         )}
-        title="预览"
+        onClick={onPreview}
       >
-        <Eye className="w-4 h-4 text-[var(--color-text-muted)]" />
-      </button>
-    </motion.div>
-  )
-}
+        <span className="text-lg">{getFileIcon(filename)}</span>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium text-[var(--color-text)] truncate">
+            {filename}
+          </div>
+          {dir && (
+            <div className="text-xs text-[var(--color-text-muted)] truncate">
+              {dir}
+            </div>
+          )}
+        </div>
+        {file.size && (
+          <span className="text-xs text-[var(--color-text-muted)]">
+            {formatFileSize(file.size)}
+          </span>
+        )}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onPreview()
+          }}
+          className={cn(
+            'p-1 rounded transition-all',
+            'opacity-0 group-hover:opacity-100',
+            'hover:bg-[var(--color-bg-elevated)]'
+          )}
+          title="预览"
+        >
+          <Eye className="w-4 h-4 text-[var(--color-text-muted)]" />
+        </button>
+      </motion.div>
+    )
+  }
+)
 
 export default function AgentInlineGeneratedFiles({ messages }: AgentInlineGeneratedFilesProps) {
   const [isExpanded, setIsExpanded] = useState(true)

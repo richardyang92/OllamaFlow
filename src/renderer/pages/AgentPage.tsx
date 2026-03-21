@@ -14,11 +14,14 @@ import {
   Square,
   Check,
   Sparkles,
+  BarChart3,
 } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { useAgentStore } from '@/store/agent-store'
-import type { AgentStep, ToolCallRecord, AgentMessage } from '@/store/agent-store'
-import { IntelligentAgentExecutor } from '@/engine/agent-executor'
+import { useAgentAnalyticsStore } from '@/store/agent-analytics-store'
+import type { AgentStep, ToolCallRecord, AgentMessage, GeneratedFileInfo } from '@/store/agent-store'
+import type { OpenAIMessage } from '@/engine/openai-client'
+import { IntelligentAgentExecutor, type HistoryMessage } from '@/engine/agent-executor'
 import { resolveAIConfig } from '@/engine/config-resolver'
 import { cn } from '@/lib/utils'
 import {
@@ -29,6 +32,7 @@ import {
   AgentInlineGeneratedFiles,
   AgentSidePanel,
   AgentIterationLimitPrompt,
+  AgentExecutionHistoryPanel,
 } from '@/components/agent'
 import AgentSidebar from '@/components/agent/AgentSidebar'
 import { AppHeader } from '@/components/layout'
@@ -57,6 +61,7 @@ function ChatInput({
   onStop,
   isRunning,
   disabled,
+  autoFocus = false,
 }: {
   input: string
   setInput: (v: string) => void
@@ -64,8 +69,11 @@ function ChatInput({
   onStop: () => void
   isRunning: boolean
   disabled: boolean
+  autoFocus?: boolean
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const charCount = input.length
+  const maxChars = 4000
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -82,24 +90,48 @@ function ChatInput({
     }
   }, [input])
 
+  useEffect(() => {
+    if (autoFocus && textareaRef.current && !isRunning) {
+      textareaRef.current.focus()
+    }
+  }, [autoFocus, isRunning])
+
   return (
     <div className="glass-panel rounded-2xl p-3">
       <div className="flex items-end gap-3">
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="输入您的问题..."
-          disabled={disabled}
-          rows={1}
-          className={cn(
-            'flex-1 resize-none bg-transparent',
-            'text-sm text-[var(--color-text)] placeholder-[var(--color-text-muted)]',
-            'focus:outline-none',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
-        />
+        <div className="flex-1 relative">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="输入您的问题... (Enter 发送，Shift+Enter 换行)"
+            disabled={disabled}
+            rows={1}
+            className={cn(
+              'w-full resize-none bg-transparent',
+              'text-sm text-[var(--color-text)] placeholder-[var(--color-text-muted)]',
+              'focus:outline-none',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+              'pr-20'
+            )}
+          />
+          
+          <div className="absolute right-2 bottom-1 flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
+            {charCount > 0 && (
+              <span className={cn(
+                'transition-colors',
+                charCount > maxChars * 0.9 ? 'text-orange-400' : '',
+                charCount > maxChars ? 'text-red-400' : ''
+              )}>
+                {charCount}
+              </span>
+            )}
+            <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-[var(--color-bg-hover)] border border-[var(--color-border-subtle)]">
+              ⏎
+            </kbd>
+          </div>
+        </div>
 
         {isRunning ? (
           <motion.button
@@ -123,9 +155,9 @@ function ChatInput({
             disabled={disabled || !input.trim()}
             className={cn(
               'p-2.5 rounded-xl',
-              'bg-gradient-to-r from-purple-500/60 to-blue-500/60 text-white',
-              'hover:from-purple-500/80 hover:to-blue-500/80',
-              'hover:shadow-lg hover:shadow-purple-500/25',
+              'bg-gradient-to-r from-blue-500/60 to-cyan-500/60 text-white',
+              'hover:from-blue-500/80 hover:to-cyan-500/80',
+              'hover:shadow-lg hover:shadow-blue-500/25',
               'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none',
               'transition-all duration-200'
             )}
@@ -196,12 +228,19 @@ export default function AgentPage() {
 
   const [input, setInput] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
+  const [showExecutionHistory, setShowExecutionHistory] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const currentStepIdRef = useRef<string | null>(null)
+  const currentExecutionIdRef = useRef<string | null>(null)
+  const currentIterationRef = useRef<number>(0)
+  const thinkingStartTimeRef = useRef<number | null>(null)
   const lastSaveTimeRef = useRef(0) // 用于控制保存频率
   const SAVE_MIN_INTERVAL = 10000 // 最小保存间隔10秒
+
+  // 获取 analytics store 方法
+  const { initExecution, updateMetrics, completeExecution } = useAgentAnalyticsStore()
 
   // 加载配置、工作流列表和对话历史
   useEffect(() => {
@@ -262,7 +301,18 @@ export default function AgentPage() {
   }, [isRunning, setCurrentPage])
 
   // 核心执行函数
-  const executeAgent = useCallback(async (userInput: string, historyMessages: AgentMessage[]) => {
+  // continueParams 用于继续执行时传递参数
+  const executeAgent = useCallback(async (
+    userInput: string,
+    historyMessages: AgentMessage[],
+    continueParams?: {
+      startIteration: number
+      maxIterations: number
+      assistantMsgId: string
+      existingMessages: OpenAIMessage[]
+      generatedFiles?: GeneratedFileInfo[]
+    }
+  ) => {
     if (!model) {
       setFeedback('请先在设置中选择模型')
       setTimeout(() => setFeedback(null), 2000)
@@ -270,24 +320,53 @@ export default function AgentPage() {
       return
     }
 
-    // 添加用户消息
-    addMessage({ role: 'user', content: userInput })
+    let assistantMsgId: string
 
-    // 创建助手消息占位
-    const assistantMsgId = addMessage({
-      role: 'assistant',
-      content: '',
-      isStreaming: true,
-    })
+    if (continueParams) {
+      // 继续执行：使用现有的助手消息
+      assistantMsgId = continueParams.assistantMsgId
+      updateMessage(assistantMsgId, { isStreaming: true })
+    } else {
+      // 新执行：添加用户消息和创建助手消息
+      addMessage({ role: 'user', content: userInput })
+      assistantMsgId = addMessage({
+        role: 'assistant',
+        content: '',
+        isStreaming: true,
+      })
+    }
 
     setRunning(true)
     abortControllerRef.current = new AbortController()
 
-    // 构建历史消息上下文
-    const history = historyMessages.map(m => ({
-      role: m.role,
-      content: m.content,
-    }))
+    // 初始化分析
+    const executionId = `exec-${assistantMsgId}-${Date.now()}`
+    currentExecutionIdRef.current = executionId
+    currentIterationRef.current = 0
+    thinkingStartTimeRef.current = null
+
+    let history: HistoryMessage[] | undefined
+    let messages: OpenAIMessage[] | undefined
+
+    // 根据是否继续执行设置不同的参数
+    if (continueParams) {
+      // 继续执行
+      currentIterationRef.current = continueParams.startIteration
+      initExecution(assistantMsgId, executionId, userInput, continueParams.maxIterations)
+
+      history = undefined
+      messages = continueParams.existingMessages
+    } else {
+      // 新执行
+      initExecution(assistantMsgId, executionId, userInput, 10)
+
+      // 构建历史消息上下文
+      history = historyMessages.map(m => ({
+        role: m.role,
+        content: m.content,
+      }))
+      messages = undefined
+    }
 
     try {
       // 获取流式追加方法
@@ -362,6 +441,7 @@ export default function AgentPage() {
           workflows: availableWorkflows,
           history,  // 传递对话历史
           sandboxPath,  // 传递沙箱路径
+          messages,  // 传递完整消息上下文（继续执行时使用）
         },
         {
           // 流式思考内容
@@ -379,7 +459,19 @@ export default function AgentPage() {
           // 步骤开始
           onStepStart: (step: AgentStep) => {
             currentStepIdRef.current = step.id
+            currentIterationRef.current = step.iteration
             appendStep(assistantMsgId, step)
+            
+            // 追踪思考开始
+            thinkingStartTimeRef.current = Date.now()
+            updateMetrics({
+              nodeId: assistantMsgId,
+              executionId,
+              type: 'thinking_start',
+              timestamp: Date.now(),
+              data: { iteration: step.iteration }
+            })
+            
             addExecutionLog({
               level: 'info',
               message: `开始迭代 ${step.iteration}`,
@@ -396,6 +488,34 @@ export default function AgentPage() {
             updateStep(assistantMsgId, stepId, {
               thoughtStreaming: false,
             })
+            
+            // 追踪思考结束和迭代完成
+            if (thinkingStartTimeRef.current) {
+              const currentMessage = useAgentStore.getState().messages.find(m => m.id === assistantMsgId)
+              const currentStep = currentMessage?.steps?.find(s => s.id === stepId)
+              const thought = currentStep?.thought || ''
+              
+              updateMetrics({
+                nodeId: assistantMsgId,
+                executionId,
+                type: 'thinking_end',
+                timestamp: Date.now(),
+                data: { 
+                  startTime: thinkingStartTimeRef.current,
+                  thought,
+                  iteration: currentIterationRef.current
+                }
+              })
+            }
+            
+            updateMetrics({
+              nodeId: assistantMsgId,
+              executionId,
+              type: 'iteration_complete',
+              timestamp: Date.now(),
+              data: { iteration: currentIterationRef.current }
+            })
+            
             // 【关键】步骤完成后立即增量保存
             saveCurrentConversationIncremental()
           },
@@ -413,6 +533,18 @@ export default function AgentPage() {
               message: `调用工具: ${toolCall.toolName}`,
               details: toolCall.input,
             })
+            
+            // 追踪工具调用开始
+            updateMetrics({
+              nodeId: assistantMsgId,
+              executionId,
+              type: 'tool_start',
+              timestamp: Date.now(),
+              data: { 
+                toolId: toolCall.id,
+                toolName: toolCall.toolName
+              }
+            })
           },
 
           // 工具调用开始（多个并行）
@@ -428,6 +560,18 @@ export default function AgentPage() {
                   level: 'info',
                   message: `调用工具: ${tc.toolName}`,
                   details: tc.input,
+                })
+                
+                // 追踪工具调用开始
+                updateMetrics({
+                  nodeId: assistantMsgId,
+                  executionId,
+                  type: 'tool_start',
+                  timestamp: Date.now(),
+                  data: { 
+                    toolId: tc.id,
+                    toolName: tc.toolName
+                  }
                 })
               })
             }
@@ -462,12 +606,37 @@ export default function AgentPage() {
                 level: 'info',
                 message: `工具执行完成`,
               })
+              
+              // 追踪工具调用完成
+              updateMetrics({
+                nodeId: assistantMsgId,
+                executionId,
+                type: 'tool_end',
+                timestamp: Date.now(),
+                data: { 
+                  toolId: toolCallId,
+                  success: true
+                }
+              })
+              
               // 【关键】工具执行完成后立即增量保存
               saveCurrentConversationIncremental()
             } else if (update.status === 'error') {
               addExecutionLog({
                 level: 'error',
                 message: `工具执行失败: ${update.error}`,
+              })
+              
+              // 追踪工具调用失败
+              updateMetrics({
+                nodeId: assistantMsgId,
+                executionId,
+                type: 'tool_end',
+                timestamp: Date.now(),
+                data: { 
+                  toolId: toolCallId,
+                  success: false
+                }
               })
             }
           },
@@ -506,6 +675,16 @@ export default function AgentPage() {
               message: `任务完成${generatedFiles?.length ? `，生成了 ${generatedFiles.length} 个文件` : ''}`,
             })
 
+            // 标记执行完成
+            updateMetrics({
+              nodeId: assistantMsgId,
+              executionId,
+              type: 'execution_complete',
+              timestamp: Date.now(),
+              data: {}
+            })
+            completeExecution(assistantMsgId, true)
+
             // 【关键】禁用增量保存模式，恢复正常的保存逻辑
             setIncrementalSaveEnabled(false)
 
@@ -529,6 +708,17 @@ export default function AgentPage() {
               level: 'error',
               message: error,
             })
+            
+            // 标记执行失败
+            updateMetrics({
+              nodeId: assistantMsgId,
+              executionId,
+              type: 'execution_complete',
+              timestamp: Date.now(),
+              data: {}
+            })
+            completeExecution(assistantMsgId, false)
+            
             // 【关键】错误时也要禁用增量保存模式
             setIncrementalSaveEnabled(false)
           },
@@ -548,6 +738,15 @@ export default function AgentPage() {
           },
         }
       )
+
+      // 如果是继续执行，设置继续参数
+      if (continueParams) {
+        agentExecutor.setContinueParams(
+          continueParams.startIteration,
+          continueParams.maxIterations,
+          continueParams.generatedFiles
+        )
+      }
 
       // 执行
       await agentExecutor.execute(userInput, abortControllerRef.current.signal)
@@ -588,15 +787,152 @@ export default function AgentPage() {
     setIncrementalSaveEnabled,
     currentWorkspace,
     conversationHistory.currentConversationId,
+    initExecution,
+    updateMetrics,
+    completeExecution,
   ])
 
-  // 发送消息（从输入框）
+  const isContinueExecutionIntent = useCallback((text: string): boolean => {
+    const continueKeywords = [
+      '继续执行',
+      '继续',
+      'continue',
+      'go on',
+      'keep going',
+      'proceed',
+    ]
+    const lowerText = text.toLowerCase().trim()
+    return continueKeywords.some(keyword => 
+      lowerText.includes(keyword.toLowerCase())
+    )
+  }, [])
+
+  const hasInterruptedExecution = useCallback((): {
+    assistantMsg: AgentMessage | undefined
+    lastUserMsg: AgentMessage | undefined
+    lastIteration: number
+  } => {
+    const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant')
+    if (!lastAssistantMsg) return { assistantMsg: undefined, lastUserMsg: undefined, lastIteration: 0 }
+    
+    const steps = lastAssistantMsg.steps
+    if (!steps || steps.length === 0) {
+      return { assistantMsg: undefined, lastUserMsg: undefined, lastIteration: 0 }
+    }
+    
+    const lastStep = steps[steps.length - 1]
+    const isIncomplete = 
+      lastAssistantMsg.isStreaming ||
+      lastStep.status !== 'completed' ||
+      (lastStep.toolCalls && lastStep.toolCalls.some(tc => tc.status !== 'completed' && tc.status !== 'error'))
+    
+    if (!isIncomplete) {
+      return { assistantMsg: undefined, lastUserMsg: undefined, lastIteration: 0 }
+    }
+    
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
+    const lastIteration = steps.length
+    
+    return { 
+      assistantMsg: lastAssistantMsg, 
+      lastUserMsg, 
+      lastIteration 
+    }
+  }, [messages])
+
+  const handleSmartContinue = useCallback(() => {
+    const { assistantMsg, lastUserMsg, lastIteration } = hasInterruptedExecution()
+    if (!assistantMsg || !lastUserMsg) return false
+    
+    continueExecution()
+    
+    const newMaxIterations = useAgentStore.getState().maxIterations
+    
+    const existingMessages: OpenAIMessage[] = [
+      { role: 'system', content: '' }
+    ]
+    
+    if (assistantMsg.steps) {
+      for (const step of assistantMsg.steps) {
+        if (step.thought) {
+          existingMessages.push({
+            role: 'assistant',
+            content: step.thought,
+            tool_calls: undefined
+          })
+        }
+        
+        if (step.toolCalls && step.toolCalls.length > 0) {
+          const toolCalls: Array<{
+            id: string
+            type: 'function'
+            function: { name: string; arguments: string }
+          }> = []
+
+          for (const toolCall of step.toolCalls) {
+            toolCalls.push({
+              id: toolCall.id,
+              type: 'function',
+              function: {
+                name: toolCall.toolName,
+                arguments: JSON.stringify(toolCall.input)
+              }
+            })
+          }
+
+          // 【关键】先添加助手消息携带 tool_calls，再添加 tool 消息
+          // 如果没有上一个助手消息，则创建一个空的（处理只有工具调用没有思考内容的情况）
+          const lastAssistantMsg = existingMessages[existingMessages.length - 1]
+          if (lastAssistantMsg && lastAssistantMsg.role === 'assistant') {
+            lastAssistantMsg.tool_calls = toolCalls
+          } else {
+            existingMessages.push({
+              role: 'assistant',
+              content: '',
+              tool_calls: toolCalls
+            })
+          }
+
+          // 然后再添加工具响应
+          for (const toolCall of step.toolCalls) {
+            existingMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: String(toolCall.output || toolCall.error || '')
+            })
+          }
+        }
+      }
+    }
+
+    const msgIndex = messages.indexOf(lastUserMsg)
+    executeAgent(
+      lastUserMsg.content,
+      messages.slice(0, msgIndex),
+      {
+        startIteration: lastIteration,
+        maxIterations: newMaxIterations,
+        assistantMsgId: assistantMsg.id,
+        existingMessages,
+        generatedFiles: assistantMsg.generatedFiles
+      }
+    )
+    
+    return true
+  }, [messages, executeAgent, continueExecution, hasInterruptedExecution])
+
   const handleSend = useCallback(() => {
     if (!input.trim() || isRunning) return
     const userInput = input.trim()
     setInput('')
+    
+    if (isContinueExecutionIntent(userInput)) {
+      const continued = handleSmartContinue()
+      if (continued) return
+    }
+    
     executeAgent(userInput, messages)
-  }, [input, isRunning, messages, executeAgent])
+  }, [input, isRunning, messages, executeAgent, isContinueExecutionIntent, handleSmartContinue])
 
   // 重试（重新生成）
   const handleRetry = useCallback((assistantMsgId: string) => {
@@ -627,13 +963,95 @@ export default function AgentPage() {
   // 处理继续执行
   const handleContinueExecution = useCallback(() => {
     continueExecution()
-    // 重新执行最后一个用户消息
+
+    // 找到最后一个助手消息（当前执行暂停的消息）
+    const lastAssistantMessage = messages.filter(m => m.role === 'assistant').pop()
+    if (!lastAssistantMessage) return
+
+    // 获取新的最大迭代次数
+    const newMaxIterations = useAgentStore.getState().maxIterations
+
+    // 构建之前的执行上下文（包括工具调用结果）
+    const existingMessages: OpenAIMessage[] = [
+      { role: 'system', content: '' }  // 占位，会被执行器覆盖
+    ]
+
+    // 遍历助手消息的步骤，构建完整的上下文
+    if (lastAssistantMessage.steps) {
+      let lastThought = ''
+      for (const step of lastAssistantMessage.steps) {
+        // 添加助手思考消息
+        if (step.thought) {
+          lastThought = step.thought
+          existingMessages.push({
+            role: 'assistant',
+            content: lastThought,
+            tool_calls: undefined
+          })
+        }
+
+        // 添加工具调用及其结果
+        if (step.toolCalls) {
+          const toolCalls: Array<{
+            id: string
+            type: 'function'
+            function: { name: string; arguments: string }
+          }> = []
+
+          for (const toolCall of step.toolCalls) {
+            toolCalls.push({
+              id: toolCall.id,
+              type: 'function',
+              function: {
+                name: toolCall.toolName,
+                arguments: JSON.stringify(toolCall.input)
+              }
+            })
+          }
+
+          // 【关键】先添加助手消息携带 tool_calls，再添加 tool 消息
+          // 如果没有上一个助手消息，则创建一个空的（处理只有工具调用没有思考内容的情况）
+          // 否则 OpenAI API 会报错：tool 消息必须紧跟在有 tool_calls 的 assistant 消息之后
+          const lastAssistantMsg = existingMessages[existingMessages.length - 1]
+          if (lastAssistantMsg && lastAssistantMsg.role === 'assistant') {
+            lastAssistantMsg.tool_calls = toolCalls
+          } else {
+            existingMessages.push({
+              role: 'assistant',
+              content: '',
+              tool_calls: toolCalls
+            })
+          }
+
+          // 然后再添加工具响应
+          for (const toolCall of step.toolCalls) {
+            existingMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: String(toolCall.output || toolCall.error || '')
+            })
+          }
+        }
+      }
+    }
+
+    // 重新执行最后一个用户消息，带上继续执行的参数
     const lastUserMessage = messages.filter(m => m.role === 'user').pop()
     if (lastUserMessage) {
       const msgIndex = messages.indexOf(lastUserMessage)
-      executeAgent(lastUserMessage.content, messages.slice(0, msgIndex))
+      executeAgent(
+        lastUserMessage.content,
+        messages.slice(0, msgIndex),
+        {
+          startIteration: currentIteration,
+          maxIterations: newMaxIterations,
+          assistantMsgId: lastAssistantMessage.id,
+          existingMessages,
+          generatedFiles: lastAssistantMessage.generatedFiles
+        }
+      )
     }
-  }, [messages, executeAgent, continueExecution])
+  }, [messages, executeAgent, continueExecution, currentIteration])
 
   // 处理停止执行（在迭代限制提示中）
   const handleStopExecution = useCallback(() => {
@@ -652,8 +1070,8 @@ export default function AgentPage() {
       {/* macOS style drag region */}
       {isMac && (
         <div
-          className="fixed top-0 left-0 w-[72px] h-14 z-30"
-          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+          className="fixed top-0 left-0 w-[72px] h-14 pointer-events-none"
+          style={{ WebkitAppRegion: 'drag', zIndex: 9999 } as React.CSSProperties}
         />
       )}
 
@@ -669,7 +1087,7 @@ export default function AgentPage() {
       />
 
       {/* Main content */}
-      <div className="fixed inset-0 top-14 flex overflow-hidden">
+      <div className="fixed inset-0 top-14 flex overflow-hidden" style={{ zIndex: 1 }}>
         {/* 左侧：聊天历史侧边栏 */}
         <motion.div
           initial={{ width: 240, opacity: 1 }}
@@ -708,7 +1126,7 @@ export default function AgentPage() {
                       whileHover={{ scale: 1.05 }}
                       transition={{ duration: 0.2 }}
                     >
-                      <Sparkles className="w-6 h-6 text-purple-400" />
+                      <Sparkles className="w-6 h-6 text-blue-400" />
                     </motion.div>
                     <h2 className="text-xl font-semibold">欢迎使用智能助手</h2>
                   </div>
@@ -783,7 +1201,7 @@ export default function AgentPage() {
           </main>
 
           {/* 输入区域 - 固定在底部 */}
-          <div className="flex-shrink-0 p-4 bg-gradient-to-t from-[var(--color-bg)] via-[var(--color-bg)]/95 to-transparent">
+          <div className="flex-shrink-0 p-4 bg-gradient-to-t from-[var(--color-bg)] via-[var(--color-bg)]/95 to-transparent relative z-10">
             <div className="max-w-3xl mx-auto">
               {/* 内联任务列表 */}
               <AgentInlineTodos todos={todos.items} isRunning={isRunning} />
@@ -806,7 +1224,14 @@ export default function AgentPage() {
                     <span className="text-yellow-400">未选择模型</span>
                   )}
                 </span>
-                <span>
+                <span className="flex items-center gap-3">
+                  <button
+                    onClick={() => setShowExecutionHistory(true)}
+                    className="flex items-center gap-1 hover:text-[var(--color-text)] transition-colors"
+                  >
+                    <BarChart3 className="w-3.5 h-3.5" />
+                    执行分析
+                  </button>
                   {availableWorkflows.length > 0 && (
                     <span>{availableWorkflows.length} 个工作流可用</span>
                   )}
@@ -821,6 +1246,7 @@ export default function AgentPage() {
                 onStop={handleStop}
                 isRunning={isRunning}
                 disabled={!model}
+                autoFocus
               />
             </div>
           </div>
@@ -837,6 +1263,12 @@ export default function AgentPage() {
       <AgentSettingsPanel
         isOpen={isSettingsOpen}
         onClose={() => setSettingsOpen(false)}
+      />
+
+      {/* 执行历史面板 */}
+      <AgentExecutionHistoryPanel
+        isOpen={showExecutionHistory}
+        onClose={() => setShowExecutionHistory(false)}
       />
 
       {/* 子工作流用户输入管理 */}

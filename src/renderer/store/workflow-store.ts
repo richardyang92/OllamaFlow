@@ -14,55 +14,55 @@ import {
 import type { WorkflowNodeData, WorkflowNode, NodeType } from '@/types/node'
 import type { Workflow } from '@/types/workflow'
 
-// Edge color mapping by node type
+// Edge color mapping by node type - macOS system colors
 export function getEdgeColorByNodeType(nodeType: NodeType): string {
   const colorMap: Record<NodeType, string> = {
-    input: 'rgba(34, 211, 238, 0.6)', // cyan
-    ollamaChat: 'rgba(167, 139, 250, 0.6)', // purple
-    set: 'rgba(250, 204, 21, 0.6)', // yellow
-    if: 'rgba(96, 165, 250, 0.6)', // blue
-    loop: 'rgba(96, 165, 250, 0.6)', // blue
-    smartRouter: 'rgba(96, 165, 250, 0.6)', // blue
-    output: 'rgba(45, 212, 191, 0.6)', // teal
-    image: 'rgba(244, 114, 182, 0.6)', // pink
-    readFile: 'rgba(251, 146, 60, 0.6)', // orange
-    writeFile: 'rgba(251, 146, 60, 0.6)', // orange
-    executeCommand: 'rgba(248, 113, 113, 0.6)', // red
-    reactAgent: 'rgba(167, 139, 250, 0.6)', // purple - same as ollamaChat
-    plan: 'rgba(167, 139, 250, 0.6)', // purple - same as reactAgent
-    queue: 'rgba(52, 211, 153, 0.6)', // emerald
-    splitter: 'rgba(251, 191, 36, 0.6)', // amber
-    join: 'rgba(52, 211, 153, 0.6)', // emerald - same as queue
-    httpRequest: 'rgba(99, 102, 241, 0.6)', // indigo
-    delay: 'rgba(161, 161, 170, 0.6)', // zinc
-    json: 'rgba(249, 115, 22, 0.6)', // orange
+    input: 'rgba(10, 132, 255, 0.5)', // macOS blue
+    ollamaChat: 'rgba(10, 132, 255, 0.5)', // macOS blue
+    set: 'rgba(255, 159, 10, 0.5)', // macOS orange
+    if: 'rgba(10, 132, 255, 0.5)', // macOS blue
+    loop: 'rgba(10, 132, 255, 0.5)', // macOS blue
+    smartRouter: 'rgba(10, 132, 255, 0.5)', // macOS blue
+    output: 'rgba(50, 215, 75, 0.5)', // macOS green
+    image: 'rgba(10, 132, 255, 0.5)', // macOS blue
+    readFile: 'rgba(255, 159, 10, 0.5)', // macOS orange
+    writeFile: 'rgba(255, 159, 10, 0.5)', // macOS orange
+    executeCommand: 'rgba(255, 69, 58, 0.5)', // macOS red
+    reactAgent: 'rgba(10, 132, 255, 0.5)', // macOS blue
+    plan: 'rgba(10, 132, 255, 0.5)', // macOS blue
+    queue: 'rgba(50, 215, 75, 0.5)', // macOS green
+    splitter: 'rgba(255, 214, 10, 0.5)', // macOS yellow
+    join: 'rgba(50, 215, 75, 0.5)', // macOS green
+    httpRequest: 'rgba(10, 132, 255, 0.5)', // macOS blue
+    delay: 'rgba(120, 120, 128, 0.5)', // macOS gray
+    json: 'rgba(255, 159, 10, 0.5)', // macOS orange
   }
-  return colorMap[nodeType] || 'rgba(148, 163, 184, 0.5)' // slate
+  return colorMap[nodeType] || 'rgba(120, 120, 128, 0.4)' // macOS gray
 }
 
 export function getEdgeHoverColorByNodeType(nodeType: NodeType): string {
   const colorMap: Record<NodeType, string> = {
-    input: 'rgba(34, 211, 238, 0.9)', // cyan
-    ollamaChat: 'rgba(167, 139, 250, 0.9)', // purple
-    set: 'rgba(250, 204, 21, 0.9)', // yellow
-    if: 'rgba(96, 165, 250, 0.9)', // blue
-    loop: 'rgba(96, 165, 250, 0.9)', // blue
-    smartRouter: 'rgba(96, 165, 250, 0.9)', // blue
-    output: 'rgba(45, 212, 191, 0.9)', // teal
-    image: 'rgba(244, 114, 182, 0.9)', // pink
-    readFile: 'rgba(251, 146, 60, 0.9)', // orange
-    writeFile: 'rgba(251, 146, 60, 0.9)', // orange
-    executeCommand: 'rgba(248, 113, 113, 0.9)', // red
-    reactAgent: 'rgba(167, 139, 250, 0.9)', // purple - same as ollamaChat
-    plan: 'rgba(167, 139, 250, 0.9)', // purple - same as reactAgent
-    queue: 'rgba(52, 211, 153, 0.9)', // emerald
-    splitter: 'rgba(251, 191, 36, 0.9)', // amber
-    join: 'rgba(52, 211, 153, 0.9)', // emerald - same as queue
-    httpRequest: 'rgba(99, 102, 241, 0.9)', // indigo
-    delay: 'rgba(161, 161, 170, 0.9)', // zinc
-    json: 'rgba(249, 115, 22, 0.9)', // orange
+    input: 'rgba(10, 132, 255, 0.85)', // macOS blue
+    ollamaChat: 'rgba(10, 132, 255, 0.85)', // macOS blue
+    set: 'rgba(255, 159, 10, 0.85)', // macOS orange
+    if: 'rgba(10, 132, 255, 0.85)', // macOS blue
+    loop: 'rgba(10, 132, 255, 0.85)', // macOS blue
+    smartRouter: 'rgba(10, 132, 255, 0.85)', // macOS blue
+    output: 'rgba(50, 215, 75, 0.85)', // macOS green
+    image: 'rgba(10, 132, 255, 0.85)', // macOS blue
+    readFile: 'rgba(255, 159, 10, 0.85)', // macOS orange
+    writeFile: 'rgba(255, 159, 10, 0.85)', // macOS orange
+    executeCommand: 'rgba(255, 69, 58, 0.85)', // macOS red
+    reactAgent: 'rgba(10, 132, 255, 0.85)', // macOS blue
+    plan: 'rgba(10, 132, 255, 0.85)', // macOS blue
+    queue: 'rgba(50, 215, 75, 0.85)', // macOS green
+    splitter: 'rgba(255, 214, 10, 0.85)', // macOS yellow
+    join: 'rgba(50, 215, 75, 0.85)', // macOS green
+    httpRequest: 'rgba(10, 132, 255, 0.85)', // macOS blue
+    delay: 'rgba(120, 120, 128, 0.85)', // macOS gray
+    json: 'rgba(255, 159, 10, 0.85)', // macOS orange
   }
-  return colorMap[nodeType] || 'rgba(148, 163, 184, 0.8)' // slate
+  return colorMap[nodeType] || 'rgba(120, 120, 128, 0.7)' // macOS gray
 }
 
 interface WorkflowState {

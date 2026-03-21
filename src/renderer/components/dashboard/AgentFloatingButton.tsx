@@ -44,7 +44,7 @@ export function AgentFloatingButton({ onClick }: AgentFloatingButtonProps) {
               'max-w-[240px] p-4 rounded-2xl',
               'glass-floating',
               'border border-[var(--color-border)]',
-              'shadow-xl shadow-purple-500/10'
+              'shadow-xl shadow-blue-500/10'
             )}
           >
             {/* Close button */}
@@ -66,9 +66,10 @@ export function AgentFloatingButton({ onClick }: AgentFloatingButtonProps) {
             <div className="flex items-start gap-3">
               <div className={cn(
                 'flex-shrink-0 p-2 rounded-xl',
-                'bg-gradient-to-br from-violet-500/20 to-purple-500/20'
+                'bg-[var(--color-bg-input)]',
+                'border border-[var(--color-border-subtle)]'
               )}>
-                <Sparkles className="w-5 h-5 text-purple-500" />
+                <Sparkles className="w-5 h-5 text-[var(--color-text-muted)]" />
               </div>
               <div>
                 <p className="text-sm font-medium text-[var(--color-text)] mb-1">
@@ -121,11 +122,10 @@ export function AgentFloatingButton({ onClick }: AgentFloatingButtonProps) {
                 'glass-floating',
                 'border border-[var(--color-border)]',
                 'whitespace-nowrap',
-                'text-sm font-medium text-[var(--color-text)]',
-                'shadow-lg shadow-purple-500/10'
+                'text-sm font-medium text-[var(--color-text)]'
               )}>
                 <span className="flex items-center gap-2">
-                  <MessageCircle className="w-4 h-4 text-purple-500" />
+                  <MessageCircle className="w-4 h-4 text-[var(--color-text-muted)]" />
                   AI 助手
                 </span>
               </div>
@@ -133,12 +133,12 @@ export function AgentFloatingButton({ onClick }: AgentFloatingButtonProps) {
           )}
         </AnimatePresence>
 
-        {/* Outer glow ring */}
+        {/* Outer glow ring - subtle */}
         <div className={cn(
           'absolute inset-0 rounded-full',
-          'bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500',
-          'opacity-30 blur-lg',
-          'group-hover:opacity-50 group-hover:blur-xl',
+          'bg-[var(--color-accent)]',
+          'opacity-10 blur-lg',
+          'group-hover:opacity-20 group-hover:blur-xl',
           'transition-all duration-300',
           'scale-150'
         )} />
@@ -149,17 +149,16 @@ export function AgentFloatingButton({ onClick }: AgentFloatingButtonProps) {
           whileTap={{ scale: 0.95 }}
           className={cn(
             'relative p-4 rounded-full',
-            'bg-gradient-to-br from-violet-500 via-purple-500 to-fuchsia-500',
-            'shadow-lg shadow-purple-500/30',
-            'group-hover:shadow-xl group-hover:shadow-purple-500/40',
+            'bg-[var(--color-accent)]',
+            'shadow-lg',
+            'group-hover:shadow-xl',
             'transition-all duration-300'
           )}
         >
           {/* Inner shine */}
           <div className={cn(
             'absolute inset-0 rounded-full',
-            'bg-gradient-to-br from-white/30 via-transparent to-transparent',
-            'opacity-60'
+            'bg-gradient-to-br from-white/20 via-transparent to-transparent'
           )} />
 
           {/* Icon - changed to MessageCircle for clarity */}
@@ -170,18 +169,18 @@ export function AgentFloatingButton({ onClick }: AgentFloatingButtonProps) {
             'transition-transform duration-300'
           )} />
 
-          {/* Pulse animation */}
+          {/* Subtle ring animation */}
           <motion.div
             className={cn(
               'absolute inset-0 rounded-full',
-              'border-2 border-purple-400/50'
+              'border border-[var(--color-accent)]/30'
             )}
             animate={{
-              scale: [1, 1.3, 1],
-              opacity: [0.5, 0, 0.5]
+              scale: [1, 1.15, 1],
+              opacity: [0.3, 0, 0.3]
             }}
             transition={{
-              duration: 2,
+              duration: 2.5,
               repeat: Infinity,
               ease: 'easeInOut'
             }}
@@ -190,9 +189,8 @@ export function AgentFloatingButton({ onClick }: AgentFloatingButtonProps) {
           {/* Notification dot - subtle indicator */}
           <div className={cn(
             'absolute -top-1 -right-1 w-3 h-3 rounded-full',
-            'bg-green-500',
-            'border-2 border-[var(--color-bg)]',
-            'animate-pulse'
+            'bg-[var(--color-node-output)]',
+            'border-2 border-[var(--color-bg)]'
           )} />
         </motion.div>
       </motion.div>

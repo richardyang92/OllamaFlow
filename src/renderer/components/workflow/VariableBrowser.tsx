@@ -31,9 +31,9 @@ const nodeTypeNames: Partial<Record<NodeType, string>> = {
 const nodeTypeColors: Partial<Record<NodeType, string>> = {
   input: 'text-cyan-400',
   output: 'text-teal-400',
-  ollamaChat: 'text-purple-400',
-  reactAgent: 'text-purple-400',
-  plan: 'text-purple-400',
+  ollamaChat: 'text-blue-400',
+  reactAgent: 'text-blue-400',
+  plan: 'text-blue-400',
   if: 'text-blue-400',
   loop: 'text-blue-400',
   smartRouter: 'text-blue-400',

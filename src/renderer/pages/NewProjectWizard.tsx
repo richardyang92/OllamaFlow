@@ -157,9 +157,9 @@ export default function NewProjectWizard() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg-canvas)] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center p-4">
       <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-blue-500/5" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[var(--color-accent)]/3 via-transparent to-transparent" />
       </div>
 
       <motion.button
@@ -182,7 +182,7 @@ export default function NewProjectWizard() {
 
       <div className="w-full max-w-2xl relative z-10">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-[var(--color-text)] mb-2 bg-gradient-to-r from-purple-500 to-blue-500 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold text-[var(--color-text)] mb-2">
             新建项目
           </h1>
           <p className="text-[var(--color-text-muted)]">创建一个新的工作区</p>
@@ -277,8 +277,8 @@ export default function NewProjectWizard() {
                 disabled={!canGoNext() || isCreating}
                 className={cn(
                   'px-6 py-2 rounded-lg transition-all font-medium',
-                  'bg-gradient-to-r from-purple-500/80 to-blue-500/80',
-                  'hover:from-purple-500 hover:to-blue-500',
+                  'bg-[var(--color-accent)]',
+                  'hover:bg-[var(--color-accent)]/90',
                   'text-white',
                   'disabled:opacity-50 disabled:cursor-not-allowed'
                 )}
@@ -298,8 +298,8 @@ export default function NewProjectWizard() {
                 disabled={!canGoNext()}
                 className={cn(
                   'px-6 py-2 rounded-lg transition-all font-medium',
-                  'bg-gradient-to-r from-purple-500/80 to-blue-500/80',
-                  'hover:from-purple-500 hover:to-blue-500',
+                  'bg-[var(--color-accent)]',
+                  'hover:bg-[var(--color-accent)]/90',
                   'text-white',
                   'disabled:opacity-50 disabled:cursor-not-allowed'
                 )}

@@ -91,28 +91,28 @@ function EmptyCanvasState() {
       className="absolute inset-0 flex items-center justify-center pointer-events-none"
     >
       <div className="relative max-w-md text-center p-8 rounded-2xl glass-panel overflow-hidden group">
-        {/* Gradient accent bar at top - macOS 26 style */}
+        {/* Subtle top accent line */}
         <div className={cn(
-          'absolute top-0 left-0 right-0 h-1',
-          'bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500',
-          'opacity-70 group-hover:opacity-100 transition-opacity duration-300'
+          'absolute top-0 left-0 right-0 h-0.5',
+          'bg-gradient-to-r from-transparent via-[var(--color-border-subtle)] to-transparent',
+          'opacity-50 group-hover:opacity-100 transition-opacity duration-300'
         )} />
 
-        {/* Inner glow effect on hover */}
+        {/* Subtle inner highlight on hover */}
         <div className={cn(
           'absolute inset-0 rounded-2xl pointer-events-none',
-          'bg-gradient-to-br from-purple-500/5 via-transparent to-blue-500/5',
+          'bg-gradient-to-br from-[var(--color-accent)]/3 via-transparent to-transparent',
           'opacity-0 group-hover:opacity-100 transition-opacity duration-300'
         )} />
 
         <div className="relative">
-          {/* Icon with gradient background */}
+          {/* Icon with subtle background */}
           <div className={cn(
             'w-16 h-16 mx-auto mb-5 rounded-xl flex items-center justify-center',
-            'bg-gradient-to-br from-violet-500/15 to-purple-500/15',
-            'shadow-lg shadow-purple-500/10'
+            'bg-[var(--color-bg-input)]',
+            'border border-[var(--color-border-subtle)]'
           )}>
-            <Target className="w-8 h-8 text-purple-400" />
+            <Target className="w-8 h-8 text-[var(--color-text-muted)]" />
           </div>
 
           <h2 className="text-xl font-bold text-[var(--color-text)] mb-3">开始构建工作流</h2>
@@ -130,9 +130,9 @@ function EmptyCanvasState() {
             )}>
               <div className={cn(
                 'w-8 h-8 mb-2 rounded-lg flex items-center justify-center',
-                'bg-cyan-500/15'
+                'bg-[var(--color-accent)]/10'
               )}>
-                <ArrowDownToLine className="w-4 h-4 text-cyan-400" />
+                <ArrowDownToLine className="w-4 h-4 text-[var(--color-accent)]" />
               </div>
               <div className="text-sm font-semibold text-[var(--color-text)] mb-0.5">添加输入</div>
               <div className="text-xs text-[var(--color-text-muted)]">开始工作流的数据</div>
@@ -144,9 +144,9 @@ function EmptyCanvasState() {
             )}>
               <div className={cn(
                 'w-8 h-8 mb-2 rounded-lg flex items-center justify-center',
-                'bg-purple-500/15'
+                'bg-[var(--color-node-ai-bg)]'
               )}>
-                <Bot className="w-4 h-4 text-purple-400" />
+                <Bot className="w-4 h-4 text-[var(--color-node-ai)]" />
               </div>
               <div className="text-sm font-semibold text-[var(--color-text)] mb-0.5">AI 处理</div>
               <div className="text-xs text-[var(--color-text-muted)]">使用 Ollama 模型</div>
@@ -158,9 +158,9 @@ function EmptyCanvasState() {
             )}>
               <div className={cn(
                 'w-8 h-8 mb-2 rounded-lg flex items-center justify-center',
-                'bg-blue-500/15'
+                'bg-[var(--color-node-logic-bg)]'
               )}>
-                <GitBranch className="w-4 h-4 text-blue-400" />
+                <GitBranch className="w-4 h-4 text-[var(--color-node-logic)]" />
               </div>
               <div className="text-sm font-semibold text-[var(--color-text)] mb-0.5">条件逻辑</div>
               <div className="text-xs text-[var(--color-text-muted)]">分支和控制流</div>
@@ -172,9 +172,9 @@ function EmptyCanvasState() {
             )}>
               <div className={cn(
                 'w-8 h-8 mb-2 rounded-lg flex items-center justify-center',
-                'bg-teal-500/15'
+                'bg-[var(--color-node-output-bg)]'
               )}>
-                <ArrowUpFromLine className="w-4 h-4 text-teal-400" />
+                <ArrowUpFromLine className="w-4 h-4 text-[var(--color-node-output)]" />
               </div>
               <div className="text-sm font-semibold text-[var(--color-text)] mb-0.5">输出结果</div>
               <div className="text-xs text-[var(--color-text-muted)]">显示或保存数据</div>
@@ -193,8 +193,8 @@ function EmptyCanvasState() {
                 <span key={step.num} className="flex items-center gap-1.5">
                   <span className={cn(
                     'w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-medium',
-                    'bg-gradient-to-br from-violet-500/20 to-purple-500/20',
-                    'text-purple-400'
+                    'bg-[var(--color-bg-hover)]',
+                    'text-[var(--color-text-muted)]'
                   )}>
                     {step.num}
                   </span>

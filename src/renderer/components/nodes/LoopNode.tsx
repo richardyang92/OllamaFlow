@@ -14,17 +14,17 @@ const statusStyles = {
   },
   running: {
     border: 'border-yellow-500/40',
-    shadow: 'shadow-[0_0_8px_rgba(234,179,8,0.25)]',
-    dot: 'bg-yellow-500 animate-pulse-glow',
+    shadow: '',
+    dot: 'bg-yellow-500',
   },
   success: {
     border: 'border-green-500/40',
-    shadow: 'shadow-[0_0_8px_rgba(34,197,94,0.25)]',
+    shadow: '',
     dot: 'bg-green-500',
   },
   error: {
     border: 'border-red-500/40',
-    shadow: 'shadow-[0_0_8px_rgba(239,68,68,0.25)]',
+    shadow: '',
     dot: 'bg-red-500',
   },
 }

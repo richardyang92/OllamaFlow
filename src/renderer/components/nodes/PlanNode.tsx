@@ -23,7 +23,7 @@ function PlanNode(props: NodeProps) {
       case 'questions':
         return <HelpCircle className="w-4 h-4 text-blue-400" />
       case 'generating':
-        return <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+        return <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
       case 'complete':
         return <CheckCircle className="w-4 h-4 text-green-400" />
       case 'error':
@@ -52,7 +52,7 @@ function PlanNode(props: NodeProps) {
     switch (planState.phase) {
       case 'analyzing': return 'text-yellow-400'
       case 'questions': return 'text-blue-400'
-      case 'generating': return 'text-purple-400'
+      case 'generating': return 'text-blue-400'
       case 'complete': return 'text-green-400'
       case 'error': return 'text-red-400'
       default: return 'text-[var(--color-text-muted)]'

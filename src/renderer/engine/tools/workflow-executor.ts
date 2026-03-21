@@ -2,9 +2,11 @@
  * 工作流执行器 - 用于智能Agent调用工作流作为SubAgent
  */
 
+import * as path from 'path'
 import type { Node, Edge } from '@xyflow/react'
-import type { WorkflowNodeData } from '@/types/node'
+import type { WorkflowNodeData, ReActStep } from '@/types/node'
 import type { GeneratedFileInfo, ReActStepSummary } from '@/store/agent-store'
+import type { NodeExecutionResult } from '@/types/execution'
 import { useExecutionStore } from '@/store/execution-store'
 import { takeFileSnapshot, compareSnapshots } from './file-snapshot'
 
@@ -44,6 +46,8 @@ export async function executeWorkflowAsSubAgent(
     onLog?: (message: string) => void
     // 进度回调
     onProgress?: SubAgentProgressCallback
+    // 主Agent的沙箱路径（用于复制生成的文件）
+    sandboxPath?: string
   }
 ): Promise<WorkflowExecutionResult> {
   const logs: string[] = []
@@ -53,6 +57,9 @@ export async function executeWorkflowAsSubAgent(
     options?.onProgress?.onLog(msg)
     log(msg)
   }
+
+  // 主Agent的沙箱路径
+  const sandboxPath = options?.sandboxPath
 
   try {
     addLog(`加载工作流: ${workspacePath}`)
@@ -148,140 +155,125 @@ export async function executeWorkflowAsSubAgent(
       addLog(`跳过输入映射: inputNodes=${inputNodes.length}, inputValues.keys=${Object.keys(inputValues).length}`)
     }
 
-    addLog(`nodeInputValues 映射: ${JSON.stringify(nodeInputValues)}`)
-
-    // 通知开始加载
-    options?.onProgress?.onStatusChange('loading')
-
     // 获取执行前的文件快照
     addLog('获取执行前文件快照...')
     const beforeSnapshot = await takeFileSnapshot(workspacePath)
     addLog(`执行前快照: ${beforeSnapshot.files.size} 个文件`)
 
-    // 创建执行上下文
+    // 创建执行器实例 - 使用 createExecution 返回的 executionId
     const executionStore = useExecutionStore.getState()
-    const executionId = executionStore.createExecution(workspacePath, 'subagent')
 
-    // 获取节点名称映射
-    const nodeNameMap = new Map<string, string>()
-    nodes.forEach((node) => {
-      nodeNameMap.set(node.id, (node.data.label as string) || node.type || node.id)
-    })
+    // 创建执行状态，并获取真正的 executionId
+    const executionId = executionStore.createExecution(workspacePath, 'subagent-workflow')
 
-    // 计算需要执行的节点总数（排除 trigger 类型的节点，因为它们是自动触发的）
-    const executableNodes = nodes.filter((n) => n.type !== 'trigger')
-    const totalNodesCount = executableNodes.length
-
-    // 通知开始执行，传递总节点数
-    options?.onProgress?.onStatusChange('running')
-    options?.onProgress?.onProgress(0, totalNodesCount)
-
-    // 创建执行器，传递以节点 ID 为键的输入值映射
+    // 创建执行器（使用隔离模式）
     const executor = new WorkflowExecutor(
       nodes,
       edges,
       workspacePath,
       executionId,
-      options?.apiEndpoint || config.apiEndpoint || 'http://127.0.0.1:11434',
-      nodeInputValues, // 键是节点 ID，值是输入值
-      true, // isolatedMode
+      options?.apiEndpoint || 'http://127.0.0.1:11434',
+      nodeInputValues,
+      true, // isolatedMode = true
       options?.apiKey
     )
 
-    addLog('开始执行工作流...')
+    // 如果有进度回调，注册生命周期监听器
+    let totalNodesCount = 0
+    let unsubscribeCallbacks: (() => void) | null = null
+    
+    if (options?.onProgress) {
+      const { 
+        onStatusChange, 
+        onNodeStart, 
+        onNodeComplete, 
+        onProgress: onProgressCallback, 
+        onReActStepsUpdate 
+      } = options.onProgress
 
-    // 【事件驱动】注册生命周期回调，替代轮询
-    // 设置节点列表（用于回调时获取节点信息）
-    executionStore.setNodes(executionId, nodes)
+      // 设置节点列表以便回调解析节点名称
+      executionStore.setNodes(executionId, nodes)
 
-    const unregisterCallback = executionStore.registerLifecycleCallback(executionId, {
-      onNodeStart: (nodeId, nodeName, nodeType) => {
-        options?.onProgress?.onNodeStart(nodeName, nodeId, nodeType)
-      },
-
-      onNodeComplete: (nodeId, nodeName, success) => {
-        options?.onProgress?.onNodeComplete(nodeName, nodeId, success)
-      },
-
-      onNodeProgress: (completedNodes, totalNodes) => {
-        options?.onProgress?.onProgress(completedNodes, totalNodes)
-      },
-
-      onReActStepUpdate: (nodeId, steps) => {
-        // 只在节点类型为 ReAct Agent 时处理
-        const node = nodes.find(n => n.id === nodeId)
-        if (node?.type === 'reactAgent') {
-          const nodeName = nodeNameMap.get(nodeId) || nodeId
-          const reactState = executionStore.getExecution(executionId)?.reactAgentStates?.get(nodeId)
-          if (reactState) {
-            // 转换 ReAct 步骤为摘要格式
-            const stepSummaries: ReActStepSummary[] = steps.map(step => ({
-              iteration: step.iteration,
-              status: step.status,
-              thought: step.thought ? step.thought.slice(0, 100) + (step.thought.length > 100 ? '...' : '') : undefined,
-              action: step.action || undefined,
-              observation: step.observation ? step.observation.slice(0, 100) + (step.observation.length > 100 ? '...' : '') : undefined,
-            }))
-            options?.onProgress?.onReActStepsUpdate?.(
-              nodeName,
-              nodeId,
-              stepSummaries,
-              reactState.currentIteration,
-              reactState.maxIterations
-            )
-          }
+      // 注册生命周期回调
+      const callbacks = {
+        onNodeStart: (nodeId: string, nodeName: string, nodeType: string) => {
+          addLog(`节点开始: ${nodeName} (${nodeType})`)
+          onNodeStart(nodeName, nodeId, nodeType)
+        },
+        onNodeComplete: (nodeId: string, nodeName: string, success: boolean) => {
+          addLog(`节点完成: ${nodeName} (success=${success})`)
+          onNodeComplete(nodeName, nodeId, success)
+        },
+        onNodeProgress: (completed: number, total: number) => {
+          totalNodesCount = total
+          addLog(`进度: ${completed}/${total}`)
+          onProgressCallback(completed, total)
+        },
+        onReActStepUpdate: (nodeId: string, steps: ReActStep[]) => {
+          const node = nodes.find((n) => n.id === nodeId)
+          const nodeName = node?.data?.label || nodeId
+          addLog(`ReAct 步骤更新: ${nodeName}`)
+          // 将 ReActStep 转换为 ReActStepSummary（处理 null -> undefined 的类型转换）
+          const stepSummaries: ReActStepSummary[] = steps.map(s => ({
+            id: s.id,
+            iteration: s.iteration,
+            thought: s.thought,
+            action: s.action ?? undefined,
+            actionInput: s.actionInput ?? undefined,
+            observation: s.observation ?? undefined,
+            status: s.status,
+          }))
+          // 从 steps 中提取迭代信息
+          const maxIterations = steps.length > 0 ? steps[steps.length - 1].iteration : undefined
+          onReActStepsUpdate?.(nodeName, nodeId, stepSummaries, steps.length, maxIterations)
         }
       }
-    })
 
-    // 执行工作流
-    let success = false
-    try {
-      success = await executor.execute()
-    } finally {
-      // 清理：注销回调
-      unregisterCallback()
+      unsubscribeCallbacks = executionStore.registerLifecycleCallback(executionId, callbacks)
+
+      // 标记为运行中
+      onStatusChange('running')
     }
 
-    addLog(`工作流执行${success ? '成功' : '失败'}`)
+    // 执行工作流
+    addLog('开始执行工作流...')
+    const executeSuccess = await executor.execute()
 
-    // 执行完成后，确保进度更新到 100%
-    options?.onProgress?.onProgress(totalNodesCount, totalNodesCount)
+    // 清理生命周期回调
+    if (unsubscribeCallbacks) {
+      unsubscribeCallbacks()
+    }
 
-    // 从执行上下文获取执行结果
-    const finalExecution = executionStore.getExecution(executionId)
-    const nodeResults = finalExecution?.context?.nodeResults || new Map()
+    // 收集节点结果
+    const execution = executionStore.getExecution(executionId)
+    const nodeResults = execution?.context?.nodeResults
 
-    // 收集输出节点的结果
-    const outputNodes = nodes.filter((n) => n.type === 'output')
+    // 判断执行是否成功
+    const success = executeSuccess
+    addLog(`执行完成，成功: ${success}`)
+
     let output: unknown = null
 
-    if (outputNodes.length > 0) {
-      const outputs: Record<string, unknown> = {}
-      for (const outputNode of outputNodes) {
-        const result = nodeResults.get(outputNode.id)
-        if (result?.output !== undefined) {
-          const outputKey = (outputNode.data.label as string) || outputNode.id
-          outputs[outputKey] = result.output
+    if (nodeResults) {
+      const executedNodes: Array<{ nodeId: string; result: NodeExecutionResult }> = []
+
+      for (const [nodeId, result] of nodeResults) {
+        const node = nodes.find((n) => n.id === nodeId)
+        if (node && result.status === 'success' && node.type !== 'input') {
+          executedNodes.push({ nodeId, result })
         }
       }
-      output = Object.keys(outputs).length === 1 ? Object.values(outputs)[0] : outputs
-      addLog(`输出结果: ${JSON.stringify(output).slice(0, 500)}...`)
-    } else {
-      // 如果没有输出节点，返回所有节点结果
-      const allOutputs: Record<string, unknown> = {}
-      nodeResults.forEach((result, nodeId) => {
-        const node = nodes.find((n) => n.id === nodeId)
-        if (node && result.output !== undefined) {
-          allOutputs[(node.data.label as string) || nodeId] = result.output
-        }
-      })
-      output = allOutputs
+
+      if (executedNodes.length > 0) {
+        const lastNode = executedNodes[executedNodes.length - 1]
+        output = lastNode.result.output || null
+        addLog(`最后一个执行节点结果: ${JSON.stringify(output).slice(0, 200)}`)
+      }
     }
 
     // 如果执行失败，从节点结果中查找错误信息
     let error: string | undefined
-    if (!success) {
+    if (!success && nodeResults) {
       // 查找失败的节点
       for (const [nodeId, result] of nodeResults) {
         if (result?.status === 'error') {
@@ -300,20 +292,22 @@ export async function executeWorkflowAsSubAgent(
 
     // 收集生成的文件（通过 writeFile 节点）
     const generatedFiles: GeneratedFileInfo[] = []
-    nodeResults.forEach((result, nodeId) => {
-      const node = nodes.find((n) => n.id === nodeId)
-      if (node?.type === 'writeFile' && result.output) {
-        const output = result.output as { path?: string; success?: boolean; bytesWritten?: number }
-        if (output.path && output.success) {
-          generatedFiles.push({
-            path: output.path,
-            workspacePath,
-            type: 'created',
-            size: output.bytesWritten,
-          })
+    if (nodeResults) {
+      nodeResults.forEach((result, nodeId) => {
+        const node = nodes.find((n) => n.id === nodeId)
+        if (node?.type === 'writeFile' && result?.output) {
+          const output = result.output as { path?: string; success?: boolean; bytesWritten?: number }
+          if (output.path && output.success) {
+            generatedFiles.push({
+              path: output.path,
+              workspacePath,
+              type: 'created',
+              size: output.bytesWritten,
+            })
+          }
         }
-      }
-    })
+      })
+    }
 
     // 获取执行后的文件快照并比较变更
     addLog('获取执行后文件快照...')
@@ -352,14 +346,55 @@ export async function executeWorkflowAsSubAgent(
       addLog(`总共生成/修改 ${allGeneratedFiles.length} 个文件: ${allGeneratedFiles.map(f => `${f.path}(${f.type})`).join(', ')}`)
     }
 
+    // 【关键】将生成的文件复制到主Agent的沙箱目录（如果提供了sandboxPath）
+    let finalGeneratedFiles: GeneratedFileInfo[] = allGeneratedFiles
+    if (sandboxPath && allGeneratedFiles.length > 0) {
+      addLog(`将 ${allGeneratedFiles.length} 个文件复制到主Agent沙箱: ${sandboxPath}`)
+      
+      const filesToCopy: Array<{ sourcePath: string; destPath: string }> = []
+      
+      for (const file of allGeneratedFiles) {
+        const sourcePath = path.join(file.workspacePath, file.path)
+        const destPath = path.join(sandboxPath, file.path)
+        filesToCopy.push({ sourcePath, destPath })
+      }
+      
+      try {
+        const copyResult = await window.electronAPI.file.copyFiles(filesToCopy)
+        
+        if (copyResult.success) {
+          addLog(`文件复制成功: ${copyResult.results?.filter(r => r.success).length || 0}/${filesToCopy.length}`)
+          
+          // 更新生成的文件信息，将workspacePath改为sandboxPath
+          finalGeneratedFiles = allGeneratedFiles.map(file => ({
+            ...file,
+            workspacePath: sandboxPath, // 【关键】更新为沙箱路径
+          }))
+          
+          // 记录失败的复制
+          const failedCopies = copyResult.results?.filter(r => !r.success)
+          if (failedCopies && failedCopies.length > 0) {
+            addLog(`警告: ${failedCopies.length} 个文件复制失败`)
+            for (const fail of failedCopies) {
+              addLog(`  - 失败: ${fail.sourcePath} -> ${fail.destPath}: ${fail.error}`)
+            }
+          }
+        } else {
+          addLog(`警告: 文件复制操作失败: ${copyResult.error}`)
+        }
+      } catch (copyError) {
+        addLog(`错误: 复制文件时发生异常: ${copyError instanceof Error ? copyError.message : String(copyError)}`)
+      }
+    }
+
     // 如果执行失败但有新生成的文件，尝试读取文件内容作为输出
     // 这样即使 Agent 返回"失败"，只要有数据文件生成，也能返回有意义的结果
-    if (!success && allGeneratedFiles.length > 0) {
+    if (!success && finalGeneratedFiles.length > 0) {
       addLog('执行虽然标记为失败，但检测到新生成的文件，尝试读取文件内容...')
 
       // 筛选出可能是数据文件的文件（JSON、TXT、MD、CSV 等）
       const dataFileExtensions = ['json', 'txt', 'md', 'csv', 'xml', 'yaml', 'yml']
-      const dataFiles = allGeneratedFiles.filter(f => {
+      const dataFiles = finalGeneratedFiles.filter(f => {
         const ext = f.path.split('.').pop()?.toLowerCase()
         return ext && dataFileExtensions.includes(ext)
       })
@@ -372,7 +407,8 @@ export async function executeWorkflowAsSubAgent(
 
         for (const file of dataFiles) {
           try {
-            const readResult = await window.electronAPI.file.read(workspacePath, file.path)
+            // 【关键】使用更新后的 workspacePath（可能是沙箱路径）来读取文件
+            const readResult = await window.electronAPI.file.read(file.workspacePath, file.path)
             if (readResult.success && readResult.content) {
               // 尝试解析 JSON
               if (file.path.endsWith('.json')) {
@@ -385,7 +421,7 @@ export async function executeWorkflowAsSubAgent(
                 fileContents[file.path] = readResult.content
               }
               hasValidContent = true
-              addLog(`成功读取文件: ${file.path}`)
+              addLog(`成功读取文件: ${file.path} (from ${file.workspacePath})`)
             }
           } catch (e) {
             addLog(`读取文件失败: ${file.path}, 错误: ${e}`)
@@ -409,7 +445,7 @@ export async function executeWorkflowAsSubAgent(
             output: fileOutput,
             logs,
             totalNodes: totalNodesCount,
-            generatedFiles: allGeneratedFiles,
+            generatedFiles: finalGeneratedFiles, // 【关键】使用更新后的文件信息
           }
         }
       }
@@ -424,7 +460,7 @@ export async function executeWorkflowAsSubAgent(
       error,
       logs,
       totalNodes: totalNodesCount,
-      generatedFiles: allGeneratedFiles,
+      generatedFiles: finalGeneratedFiles, // 【关键】使用更新后的文件信息
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)

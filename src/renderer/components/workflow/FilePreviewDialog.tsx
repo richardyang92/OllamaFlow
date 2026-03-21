@@ -59,7 +59,7 @@ const getFileIcon = (fileType: FileType) => {
 const getFileTypeColor = (fileType: FileType) => {
   switch (fileType) {
     case 'markdown':
-      return 'bg-purple-500/20 text-purple-400'
+      return 'bg-blue-500/20 text-blue-400'
     case 'html':
       return 'bg-orange-500/20 text-orange-400'
     case 'code':

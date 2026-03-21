@@ -57,12 +57,12 @@ function ActionButton({
         : 'hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]'
     ),
     primary: cn(
-      'bg-gradient-to-r from-blue-500/60 to-purple-500/60 text-white',
-      'hover:from-blue-500/80 hover:to-purple-500/80'
+      'bg-[var(--color-accent)] text-white',
+      'hover:bg-[var(--color-accent-hover)]'
     ),
     danger: cn(
-      'bg-red-500/60 text-white',
-      'hover:bg-red-500/80'
+      'bg-red-500/80 text-white',
+      'hover:bg-red-500'
     ),
   }
 

@@ -499,6 +499,10 @@ ipcMain.handle('file:readImage', async (_, workspacePath: string, relativePath: 
       mimeType = 'image/webp'
     } else if (ext === '.bmp') {
       mimeType = 'image/bmp'
+    } else if (ext === '.svg') {
+      mimeType = 'image/svg+xml'
+    } else if (ext === '.ico') {
+      mimeType = 'image/x-icon'
     }
     
     return {
@@ -529,6 +533,53 @@ ipcMain.handle('file:readPdf', async (_, workspacePath: string, relativePath: st
       error: (error as Error).message
     }
   }
+})
+
+// File: Copy file from source to destination
+ipcMain.handle('file:copy', async (_, sourcePath: string, destPath: string) => {
+  try {
+    // Ensure destination directory exists
+    const destDir = path.dirname(destPath)
+    await fs.mkdir(destDir, { recursive: true })
+    
+    // Copy file
+    await fs.copyFile(sourcePath, destPath)
+    
+    return { success: true }
+  } catch (error) {
+    console.error('[FILE_COPY] 文件复制失败', {
+      source: sourcePath,
+      dest: destPath,
+      error: (error as Error).message,
+    })
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// File: Copy multiple files
+ipcMain.handle('file:copyFiles', async (_, files: Array<{ sourcePath: string; destPath: string }>) => {
+  const results: Array<{ sourcePath: string; destPath: string; success: boolean; error?: string }> = []
+  
+  for (const { sourcePath, destPath } of files) {
+    try {
+      // Ensure destination directory exists
+      const destDir = path.dirname(destPath)
+      await fs.mkdir(destDir, { recursive: true })
+      
+      // Copy file
+      await fs.copyFile(sourcePath, destPath)
+      results.push({ sourcePath, destPath, success: true })
+    } catch (error) {
+      console.error('[FILE_COPY] 文件复制失败', {
+        source: sourcePath,
+        dest: destPath,
+        error: (error as Error).message,
+      })
+      results.push({ sourcePath, destPath, success: false, error: (error as Error).message })
+    }
+  }
+  
+  return { success: results.every(r => r.success), results }
 })
 
 // Command: Execute shell command
@@ -1045,7 +1096,7 @@ ipcMain.handle('browser:goForward', async (_, workspacePath: string): Promise<Ac
 })
 
 // File Watcher: Start watching workspace directory
-ipcMain.handle('fileWatcher:start', (event, workspacePath: string) => {
+ipcMain.handle('fileWatcher:start', (_event, workspacePath: string) => {
   if (fileWatchers.has(workspacePath)) {
     return { success: true, message: 'Already watching' }
   }
@@ -1348,4 +1399,37 @@ ipcMain.handle('webParser:fetchAndParse', async (_, url: string, options?: WebPa
 // Web Parser: Check if content is HTML
 ipcMain.handle('webParser:isHtml', async (_, content: string) => {
   return isHtmlContent(content)
+})
+
+// ==================== Agent Execution Analytics ====================
+
+interface AnalyticsHistoryItem {
+  executionId: string
+  timestamp: number
+  query: string
+  duration: number
+  iterationCount: number
+  toolCallCount: number
+  success: boolean
+  overallScore: number
+}
+
+// Analytics: Get execution history
+ipcMain.handle('analytics:getHistory', async () => {
+  const s = await getStore()
+  return s.get('agent-analytics-history', null) as AnalyticsHistoryItem[] | null
+})
+
+// Analytics: Save execution history
+ipcMain.handle('analytics:saveHistory', async (_, history: AnalyticsHistoryItem[]) => {
+  const s = await getStore()
+  s.set('agent-analytics-history', history)
+  return true
+})
+
+// Analytics: Clear execution history
+ipcMain.handle('analytics:clearHistory', async () => {
+  const s = await getStore()
+  s.set('agent-analytics-history', [])
+  return true
 })

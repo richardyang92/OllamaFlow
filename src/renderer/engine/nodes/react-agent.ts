@@ -5,6 +5,7 @@ import type { GeneratedFileInfo } from '@/store/agent-store'
 import { interpolateVariables } from '../executor'
 import { executeTool, TodosManager, getEnabledTools } from '../tools'
 import { useExecutionStore } from '@/store/execution-store'
+import { useAgentAnalyticsStore } from '@/store/agent-analytics-store'
 import { OpenAIClient, OpenAIMessage, OpenAIChatResponse, parseToolCallArgs } from '../openai-client'
 import {
   compressOpenAIContext,
@@ -21,7 +22,8 @@ import {
   getToolSchema
 } from '../react-agent/tool-validator'
 import {
-  executeToolWithRetry
+  executeToolWithRetry,
+  type ToolExecutionResult
 } from '../react-agent/retry-handler'
 
 // Tool parameter property type
@@ -249,12 +251,13 @@ interface StructuredToolCall {
 // Enhanced loop detection result
 interface EnhancedLoopDetection {
   isLoop: boolean
-  loopType: 'overPlanning' | 'repeatedAction' | 'semanticDrift' | 'noProgress' | 'taskLikelyComplete' | 'repeatedWriteFile' | null
+  loopType: 'overPlanning' | 'repeatedAction' | 'semanticDrift' | 'noProgress' | 'taskLikelyComplete' | 'repeatedWriteFile' | 'consecutiveError' | 'repeatedFailedAction' | null
   confidence: number
   suggestion: string | null
   blockedActions: string[]
   similarCalls: Array<{ toolName: string; similarity: number; count: number }>
   progressScore: number
+  recentErrors?: Array<{ toolName: string; error: string; iteration: number }>
 }
 
 // Default loop detection config
@@ -265,6 +268,8 @@ const DEFAULT_LOOP_CONFIG = {
   maxWriteFileCalls: 4,
   enableSemanticDrift: true,
   progressCheckInterval: 3,
+  maxConsecutiveErrors: 3, // 最多允许连续错误次数
+  maxSameFailedToolCalls: 3, // 同一工具失败的最大次数
 }
 
 function hashArgs(args: Record<string, unknown>): string {
@@ -331,11 +336,72 @@ function detectLoop(
   let confidence = 0
   const similarCalls: EnhancedLoopDetection['similarCalls'] = []
 
+  // 收集最近的错误用于分析
+  const recentErrors: Array<{ toolName: string; error: string; iteration: number }> = []
+  
+  // 检测连续相同错误
+  const recentHistory = history.slice(-config.maxConsecutiveErrors * 2)
+  let consecutiveErrorCount = 0
+  let lastErrorHash = ''
+  
+  for (let i = recentHistory.length - 1; i >= 0; i--) {
+    const call = recentHistory[i]
+    if (!call.success) {
+      // 提取错误的关键部分（忽略时间戳、路径等变化）
+      const errorKey = `${call.name}:${extractErrorSignature(call.result)}`
+      
+      if (errorKey === lastErrorHash || lastErrorHash === '') {
+        consecutiveErrorCount++
+        lastErrorHash = errorKey
+        recentErrors.push({
+          toolName: call.name,
+          error: call.result.slice(0, 200),
+          iteration: i
+        })
+      } else {
+        break
+      }
+    } else {
+      break
+    }
+  }
+
+  // 如果检测到连续相同错误，标记为循环
+  if (consecutiveErrorCount >= config.maxConsecutiveErrors) {
+    const lastCall = history[history.length - 1]
+    loopType = 'consecutiveError'
+    suggestion = `检测到连续 ${consecutiveErrorCount} 次相同的错误。${lastCall.name} 工具调用持续失败，错误信息：${lastCall.result.slice(0, 100)}。请尝试不同的方法或直接给出最终答案。`
+    blockedActions.push(lastCall.name)
+    confidence = 0.9
+  }
+
+  // 检测同一工具多次失败
+  if (!loopType) {
+    const failedToolCalls = new Map<string, { count: number; errors: Set<string> }>()
+    
+    for (const call of history.filter(h => !h.success)) {
+      const existing = failedToolCalls.get(call.name) || { count: 0, errors: new Set() }
+      existing.count++
+      existing.errors.add(extractErrorSignature(call.result))
+      failedToolCalls.set(call.name, existing)
+    }
+
+    for (const [toolName, info] of failedToolCalls) {
+      if (info.count >= config.maxSameFailedToolCalls) {
+        loopType = 'repeatedFailedAction'
+        suggestion = `工具 ${toolName} 已经连续失败 ${info.count} 次。请检查工具参数是否正确，或尝试使用其他工具/方法。`
+        blockedActions.push(toolName)
+        confidence = 0.85
+        break
+      }
+    }
+  }
+
   const todosAddCount = history.filter(
     (h) => h.name === 'todos' && h.result.includes('已添加任务')
   ).length
 
-  if (todosAddCount > config.maxTodosAddCalls) {
+  if (!loopType && todosAddCount > config.maxTodosAddCalls) {
     loopType = 'overPlanning'
     suggestion = '你已经规划了足够的任务，现在必须立即执行实际操作！'
     blockedActions.push('todos')
@@ -380,10 +446,10 @@ function detectLoop(
   }
 
   if (!loopType && config.enableSemanticDrift) {
-    const recentHistory = history.slice(-10)
+    const recentHistory10 = history.slice(-10)
     const toolCounts = new Map<string, { count: number; argsHashes: Set<string> }>()
 
-    for (const call of recentHistory) {
+    for (const call of recentHistory10) {
       const existing = toolCounts.get(call.name) || { count: 0, argsHashes: new Set() }
       existing.count++
       existing.argsHashes.add(call.argsHash)
@@ -441,7 +507,22 @@ function detectLoop(
     blockedActions,
     similarCalls,
     progressScore,
+    recentErrors: recentErrors.slice(0, 3),
   }
+}
+
+// 提取错误签名用于比较（忽略变化的部分如时间戳、临时ID等）
+function extractErrorSignature(errorMessage: string): string {
+  // 移除数字、UUID、路径等变化的内容
+  return errorMessage
+    .toLowerCase()
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/g, 'UUID')
+    .replace(/\b\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?\b/g, 'TIMESTAMP')
+    .replace(/[0-9a-f]{32,}/gi, 'HASH')
+    .replace(/\/[^\s:]+\/[\w\/\.-]+/g, '/PATH')
+    .replace(/\\[^\s:]+\\[\w\\\.]+/g, '\\PATH')
+    .replace(/\d+/g, 'N')
+    .slice(0, 200)
 }
 
 /**
@@ -667,6 +748,32 @@ function buildFullSystemPrompt(systemPrompt: string, enableUserInput: boolean): 
 - Python: Mac/Linux 用 python3，Windows 用 python
 - 代码必须包含所有 import 语句
 
+## 🛡️ 错误处理指南（重要）
+
+### 工具调用失败时的应对策略：
+
+1. **参数错误**（文件不存在、路径错误等）：
+   - 检查参数是否正确
+   - 尝试使用其他路径或方法
+   - 不要重复相同的错误调用超过2次
+
+2. **连续相同错误检测**：
+   - 系统会自动检测连续相同的错误
+   - 如果同一工具连续失败3次，会被临时阻止
+   - 被阻止后应尝试：
+     - 使用替代工具或方法
+     - 检查当前任务状态是否已完成
+     - 根据已有信息给出最佳答案
+
+3. **循环行为预防**：
+   - 避免过度规划（不要反复添加任务而不执行）
+   - 避免重复写入相同内容的文件
+   - 任务明确完成后，直接给出答案，不要反复验证
+
+4. **明智的终止**：
+   - 如果尝试了多种方法仍失败，根据已有信息给出最佳答案
+   - 不要陷入无限重试相同失败的工具
+
 ## 💬 用户交互
 
 ${enableUserInput ? `
@@ -813,6 +920,12 @@ async function executeReAct(
   const executionStore = useExecutionStore.getState()
   executionStore.initReActState(context.executionId, node.id, maxIterations)
 
+  // Initialize analytics
+  const executionId = `exec-${node.id}-${Date.now()}`
+  const analyticsStore = useAgentAnalyticsStore.getState()
+  analyticsStore.initExecution(node.id, executionId, userMessage, maxIterations)
+  const thinkingStartTimeRef: Record<string, number> = {}
+
   context.onLog?.({
     nodeId: node.id,
     nodeName: data.label,
@@ -949,6 +1062,16 @@ async function executeReAct(
       startedAt: Date.now(),
     }
     executionStore.updateReActStep(context.executionId, node.id, newStep)
+    
+    // Track thinking start
+    thinkingStartTimeRef[stepId] = Date.now()
+    analyticsStore.updateMetrics({
+      nodeId: node.id,
+      executionId,
+      type: 'thinking_start',
+      timestamp: Date.now(),
+      data: { startTime: Date.now(), iteration }
+    })
 
     try {
       // Use streaming if enabled, otherwise fall back to non-streaming
@@ -1222,6 +1345,18 @@ async function executeReAct(
             level: 'info',
             message: `调用工具: ${toolName}`,
           })
+          
+          // Track tool call start
+          analyticsStore.updateMetrics({
+            nodeId: node.id,
+            executionId,
+            type: 'tool_start',
+            timestamp: Date.now(),
+            data: {
+              toolId: toolCall.id,
+              toolName
+            }
+          })
 
           const tool = allTools.find(t => t.name === toolName)
 
@@ -1235,7 +1370,34 @@ async function executeReAct(
               observation: `错误: 未知工具 "${toolName}"`,
             }
           } else if (loopInfo.blockedActions.includes(toolName.toLowerCase())) {
-            const blockedObservation = `🚫 操作被阻止: ${loopInfo.suggestion || '此操作已被阻止'}`
+            // 增强被阻止操作的反馈信息
+            const blockedReason = loopInfo.loopType === 'consecutiveError' 
+              ? '检测到连续相同错误'
+              : loopInfo.loopType === 'repeatedFailedAction'
+              ? '工具多次失败'
+              : loopInfo.loopType === 'overPlanning'
+              ? '过度规划'
+              : loopInfo.loopType === 'repeatedAction'
+              ? '重复操作'
+              : '循环行为'
+            
+            const blockedObservation = `🚫 操作被阻止 [${blockedReason}]: ${loopInfo.suggestion || '此操作已被阻止'}
+
+⚠️ 检测到潜在的循环行为，系统已阻止继续执行 ${toolName}。
+建议:
+1. 尝试使用不同的工具或方法
+2. 检查任务状态，可能已经完成
+3. 如有必要，直接给出当前已知的最佳答案
+4. 如果是配置问题，请检查工具参数是否正确`
+            
+            // 记录到日志
+            context.onLog?.({
+              nodeId: node.id,
+              nodeName: data.label,
+              level: 'warn',
+              message: `循环检测: ${toolName} 被阻止 (${blockedReason}) - ${loopInfo.suggestion}`,
+            })
+            
             result = {
               toolCallId: toolCall.id,
               toolName,
@@ -1323,20 +1485,44 @@ async function executeReAct(
                 }
               }
 
-              result = {
-                toolCallId: toolCall.id,
-                toolName,
-                success: toolResult.success,
-                observation,
-              }
-            } catch (error) {
-              result = {
-                toolCallId: toolCall.id,
-                toolName,
-                success: false,
-                observation: `工具执行错误: ${(error as Error).message}`,
-              }
-            }
+               result = {
+                 toolCallId: toolCall.id,
+                 toolName,
+                 success: toolResult.success,
+                 observation,
+               }
+               
+               // Track tool call end
+               analyticsStore.updateMetrics({
+                 nodeId: node.id,
+                 executionId,
+                 type: 'tool_end',
+                 timestamp: Date.now(),
+                 data: {
+                   toolId: toolCall.id,
+                   success: toolResult.success
+                 }
+               })
+             } catch (error) {
+               result = {
+                 toolCallId: toolCall.id,
+                 toolName,
+                 success: false,
+                 observation: `工具执行错误: ${(error as Error).message}`,
+               }
+               
+               // Track tool call error
+               analyticsStore.updateMetrics({
+                 nodeId: node.id,
+                 executionId,
+                 type: 'tool_end',
+                 timestamp: Date.now(),
+                 data: {
+                   toolId: toolCall.id,
+                   success: false
+                 }
+               })
+             }
           }
 
           // CRITICAL: Update UI immediately when each tool completes
@@ -1420,6 +1606,30 @@ async function executeReAct(
         observationStreaming: false,
       })
       executionStore.completeReActStep(context.executionId, node.id, stepId)
+      
+      // Track thinking end and iteration complete
+      const thinkingStartTime = thinkingStartTimeRef[stepId]
+      if (thinkingStartTime) {
+        analyticsStore.updateMetrics({
+          nodeId: node.id,
+          executionId,
+          type: 'thinking_end',
+          timestamp: Date.now(),
+          data: {
+            startTime: thinkingStartTime,
+            thought: content || reasoningContent || '',
+            iteration
+          }
+        })
+      }
+      
+      analyticsStore.updateMetrics({
+        nodeId: node.id,
+        executionId,
+        type: 'iteration_complete',
+        timestamp: Date.now(),
+        data: { iteration }
+      })
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       context.onLog?.({
@@ -1428,6 +1638,10 @@ async function executeReAct(
         level: 'error',
         message: `API 请求失败: ${errorMessage}`,
       })
+      
+      // Mark execution as failed
+      analyticsStore.completeExecution(node.id, false)
+      
       throw error
     }
   }
@@ -1452,6 +1666,16 @@ async function executeReAct(
     level: 'info',
     message: `ReAct 智能体执行完成，迭代次数: ${iteration}`,
   })
+  
+  // Mark execution as complete
+  analyticsStore.updateMetrics({
+    nodeId: node.id,
+    executionId,
+    type: 'execution_complete',
+    timestamp: Date.now(),
+    data: {}
+  })
+  analyticsStore.completeExecution(node.id, true)
 
   return {
     response: finalAnswer,
@@ -1528,6 +1752,24 @@ export async function continueReactAgentWithUserInput(
       break
     }
 
+    // 添加循环检测
+    const loopInfo = detectLoop(messages)
+    if (loopInfo.isLoop) {
+      context.onLog?.({
+        nodeId,
+        nodeName: nodeData.label,
+        level: 'warn',
+        message: `用户输入处理中检测到循环: ${loopInfo.loopType} - ${loopInfo.suggestion}`,
+      })
+
+      // 如果检测到严重循环，直接返回最终答案
+      if (loopInfo.confidence >= 0.8) {
+        finalAnswer = `任务执行过程中遇到问题: ${loopInfo.suggestion}。基于已执行的操作，当前任务状态: ${todosManager.getStatus().completed}/${todosManager.getStatus().total} 任务已完成。`
+        executionStore.setReActFinalAnswer(context.executionId, nodeId, finalAnswer)
+        break
+      }
+    }
+
     iteration++
     const stepId = `step-${iteration}-${Date.now()}`
     const newStep: ReActStep = {
@@ -1595,12 +1837,42 @@ export async function continueReactAgentWithUserInput(
       break
     }
 
+    // 在每次工具调用前重新检测循环
+    const currentLoopInfo = detectLoop(messages)
+    
     for (const toolCall of response.tool_calls) {
       const toolName = toolCall.function.name
       const toolArgs = parseToolCallArgs(toolCall.function.arguments)
       const tool = allTools.find(t => t.name === toolName)
 
       if (!tool) continue
+
+      // 检查是否被循环检测阻止
+      if (currentLoopInfo.blockedActions.includes(toolName.toLowerCase())) {
+        const blockedObservation = `🚫 操作被阻止: ${currentLoopInfo.suggestion || '此操作已被阻止'}
+
+建议:
+1. 尝试使用不同的工具或方法
+2. 检查任务状态，可能已经完成
+3. 根据已有信息给出最佳答案`
+        
+        context.onLog?.({
+          nodeId,
+          nodeName: nodeData.label,
+          level: 'warn',
+          message: `循环检测: ${toolName} 被阻止 - ${currentLoopInfo.suggestion}`,
+        })
+        
+        messages.push({ role: 'tool', tool_call_id: toolCall.id, content: blockedObservation })
+        
+        executionStore.updateReActStep(context.executionId, nodeId, {
+          id: stepId,
+          status: 'observing',
+          observation: blockedObservation,
+          observationError: true,
+        })
+        continue
+      }
 
       executionStore.updateReActStep(context.executionId, nodeId, {
         id: stepId,
@@ -1609,8 +1881,36 @@ export async function continueReactAgentWithUserInput(
         actionInput: JSON.stringify(toolArgs),
       })
 
-      const result = await executeTool(tool, toolArgs, context, todosManager)
-      const observation = result.success ? result.output : `错误: ${result.error}`
+      // 使用重试机制执行工具
+      let toolExecutionResult: ToolExecutionResult
+      try {
+        toolExecutionResult = await executeToolWithRetry(
+          async () => {
+            const res = await executeTool(tool, toolArgs, context, todosManager)
+            return {
+              success: res.success,
+              result: res.success ? res.output : res.error || '未知错误',
+              error: res.success ? undefined : res.error
+            }
+          },
+          toolName,
+          { maxRetries: 2 },
+          (attempt, error, delay) => {
+            context.onLog?.({
+              nodeId,
+              nodeName: nodeData.label,
+              level: 'warn',
+              message: `工具 ${toolName} 执行${error ? '失败' : '未成功'}，${delay}ms 后重试 (第 ${attempt} 次)...`,
+            })
+          }
+        )
+      } catch {
+        toolExecutionResult = { success: false, result: '', error: `工具 ${toolName} 执行失败` }
+      }
+      
+      const observation = toolExecutionResult.success 
+        ? toolExecutionResult.result 
+        : `错误: ${toolExecutionResult.error || toolExecutionResult.result}`
 
       messages.push({ role: 'tool', tool_call_id: toolCall.id, content: observation })
 
@@ -1618,10 +1918,11 @@ export async function continueReactAgentWithUserInput(
         id: stepId,
         status: 'observing',
         observation,
-        observationError: !result.success,
+        observationError: !toolExecutionResult.success,
       })
-      executionStore.completeReActStep(context.executionId, nodeId, stepId)
     }
+    
+    executionStore.completeReActStep(context.executionId, nodeId, stepId)
   }
 
   if (!finalAnswer) {

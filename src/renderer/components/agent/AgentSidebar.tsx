@@ -77,11 +77,11 @@ function ConversationItem({
   }
 
   return (
-    <div
+      <div
       className={cn(
         'group relative flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors',
         isActive
-          ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300'
+          ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300'
           : 'hover:bg-[var(--color-bg-hover)] text-[var(--color-text)]',
         'hover:bg-[var(--color-bg-hover)]'
       )}
@@ -214,7 +214,7 @@ export default function AgentSidebar() {
       <div className="p-3">
         <button
           onClick={handleNewChat}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-purple-500/20 text-purple-700 dark:text-purple-400 hover:bg-purple-500/30 transition-colors cursor-pointer"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 text-blue-700 dark:text-blue-400 hover:bg-blue-500/30 transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span className="text-sm font-medium">新对话</span>
@@ -230,7 +230,7 @@ export default function AgentSidebar() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="搜索对话..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-purple-500/30 transition-colors"
+            className="w-full pl-9 pr-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-colors"
           />
         </div>
       </div>

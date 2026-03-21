@@ -63,6 +63,7 @@ export interface AgentConfig {
   workflows: WorkflowInfo[]
   history?: HistoryMessage[]  // 对话历史
   sandboxPath?: string        // 沙箱目录路径
+  messages?: OpenAIMessage[]  // 完整消息上下文（用于继续执行）
 }
 
 // Agent回调（增强版，支持流式）
@@ -129,6 +130,8 @@ export class IntelligentAgentExecutor {
   private currentIteration = 0
   private currentStepId: string | null = null
   private generatedFiles: GeneratedFileInfo[] = []  // 收集生成的文件
+  private startIteration = 0  // 起始迭代次数（用于继续执行）
+  private maxIterations = MAX_ITERATIONS  // 最大迭代次数
 
   constructor(config: AgentConfig, callbacks: AgentCallbacks) {
     this.config = config
@@ -143,12 +146,26 @@ export class IntelligentAgentExecutor {
   }
 
   /**
+   * 设置继续执行的参数
+   */
+  setContinueParams(startIteration: number, maxIterations: number, existingFiles?: GeneratedFileInfo[]) {
+    this.startIteration = startIteration
+    this.maxIterations = maxIterations
+    if (existingFiles) {
+      this.generatedFiles = [...existingFiles]
+    }
+  }
+
+  /**
    * 执行Agent
    */
   async execute(userInput: string, signal?: AbortSignal): Promise<string> {
     this.signal = signal
-    this.currentIteration = 0
-    this.generatedFiles = []  // 重置生成的文件列表
+    // 只有首次执行才重置，继续执行时保留 startIteration
+    if (this.startIteration === 0) {
+      this.currentIteration = 0
+      this.generatedFiles = []  // 重置生成的文件列表
+    }
 
     console.log('[🏖️ AGENT_EXECUTOR] execute 开始', {
       sandboxPath: this.config.sandboxPath,
@@ -163,37 +180,60 @@ export class IntelligentAgentExecutor {
       const systemPrompt = this.buildSystemPrompt()
 
       // 构建消息数组（包含历史上下文）
-      const messages: OpenAIMessage[] = [
-        { role: 'system', content: systemPrompt },
-      ]
+      let messages: OpenAIMessage[]
 
-      // 添加历史消息
-      if (this.config.history && this.config.history.length > 0) {
-        for (const msg of this.config.history) {
-          messages.push({
-            role: msg.role,
-            content: msg.content,
-          })
+      if (this.config.messages && this.config.messages.length > 0) {
+        // 继续执行：使用已提供的完整消息上下文
+        messages = this.config.messages.map(msg => {
+          // 如果第一条消息是 system，更新它的内容
+          if (msg.role === 'system') {
+            return { ...msg, content: systemPrompt }
+          }
+          return msg
+        })
+
+        // 添加当前用户输入（如果最后一条不是 user 消息）
+        const lastMsg = messages[messages.length - 1]
+        if (!lastMsg || lastMsg.role !== 'user') {
+          messages.push({ role: 'user', content: userInput })
+        } else {
+          // 更新最后一条用户消息
+          lastMsg.content = userInput
         }
+      } else {
+        // 新执行：从历史消息构建
+        messages = [
+          { role: 'system', content: systemPrompt },
+        ]
+
+        // 添加历史消息
+        if (this.config.history && this.config.history.length > 0) {
+          for (const msg of this.config.history) {
+            messages.push({
+              role: msg.role,
+              content: msg.content,
+            })
+          }
+        }
+
+        // 添加当前用户输入
+        messages.push({ role: 'user', content: userInput })
       }
 
-      // 添加当前用户输入
-      messages.push({ role: 'user', content: userInput })
-
-      for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+      for (let iteration = this.startIteration; iteration < this.maxIterations; iteration++) {
         if (this.signal?.aborted) {
           throw new Error('执行已取消')
         }
 
         this.currentIteration = iteration + 1
-        log(`迭代 ${this.currentIteration}/${MAX_ITERATIONS}`)
+        log(`迭代 ${this.currentIteration}/${this.maxIterations}`)
 
         // 创建新的思考步骤
         this.currentStepId = generateStepId()
         const thinkingStep: AgentStep = {
           id: this.currentStepId,
           iteration: this.currentIteration,
-          maxIterations: MAX_ITERATIONS,
+          maxIterations: this.maxIterations,
           status: 'thinking',
           thought: '',
           thoughtStreaming: true,
@@ -316,12 +356,12 @@ export class IntelligentAgentExecutor {
       // 达到最大迭代次数
       console.log('[🏖️ AGENT_EXECUTOR] 达到最大迭代', {
         currentIteration: this.currentIteration,
-        maxIterations: MAX_ITERATIONS,
+        maxIterations: this.maxIterations,
         generatedFilesCount: this.generatedFiles.length,
       })
 
       // 触发迭代限制回调
-      this.callbacks.onIterationLimitReached?.(this.currentIteration, MAX_ITERATIONS)
+      this.callbacks.onIterationLimitReached?.(this.currentIteration, this.maxIterations)
 
       // 不再直接调用 onComplete，让 AgentPage 处理
       return ''  // 返回空字符串，表示需要用户确认
@@ -787,25 +827,41 @@ tool_calls: [{ name: "workflow_weather", arguments: '{"input": "广州"}' }]
     this.callbacks.onAction?.(name, args)
 
     try {
-      let result: string
+      const completedAt = Date.now()
 
       if (name.startsWith('workflow_')) {
-        result = await this.executeWorkflow(name, args, record.id)
+        const workflowResult = await this.executeWorkflow(name, args, record.id)
+
+        const outputForStorage = typeof workflowResult === 'object' && workflowResult !== null
+          ? (workflowResult as { output?: unknown }).output ?? workflowResult
+          : workflowResult
+
+        const outputForLLM = typeof workflowResult === 'object' && workflowResult !== null
+          ? `工作流 "${(workflowResult as { workflowName?: string }).workflowName || name}" 执行成功`
+          : String(workflowResult)
+
+        this.callbacks.onToolCallUpdate?.(record.id, {
+          status: 'completed',
+          output: outputForStorage,
+          completedAt,
+          duration: completedAt - record.startedAt,
+        }, index)
+        this.callbacks.onToolCallComplete?.(record.id, { output: outputForStorage }, index)
+
+        return outputForLLM
       } else {
-        result = await this.executeBuiltinTool(name, args, record.id)
+        const result = await this.executeBuiltinTool(name, args, record.id)
+
+        this.callbacks.onToolCallUpdate?.(record.id, {
+          status: 'completed',
+          output: result,
+          completedAt,
+          duration: completedAt - record.startedAt,
+        }, index)
+        this.callbacks.onToolCallComplete?.(record.id, { output: result }, index)
+
+        return result
       }
-
-      // 更新工具调用状态为完成
-      const completedAt = Date.now()
-      this.callbacks.onToolCallUpdate?.(record.id, {
-        status: 'completed',
-        output: result,
-        completedAt,
-        duration: completedAt - record.startedAt,
-      }, index)
-      this.callbacks.onToolCallComplete?.(record.id, { output: result }, index)
-
-      return result
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
@@ -1262,7 +1318,7 @@ ${truncatedSource}
   /**
    * 执行工作流
    */
-  private async executeWorkflow(toolName: string, args: Record<string, unknown>, toolCallId: string): Promise<string> {
+  private async executeWorkflow(toolName: string, args: Record<string, unknown>, toolCallId: string): Promise<string | object> {
     // 从工具名提取工作流 ID
     const workflowId = toolName.replace('workflow_', '')
 
@@ -1272,7 +1328,11 @@ ${truncatedSource}
     if (!workflow) {
       const error = `找不到工作流: ${workflowId}`
       this.callbacks.onObservation?.(error)
-      return error
+      return {
+        workflowName: toolName,
+        success: false,
+        error,
+      }
     }
 
     // 记录工作流调用（兼容旧API）
@@ -1373,6 +1433,7 @@ ${truncatedSource}
         {
           apiEndpoint: this.config.apiEndpoint,
           apiKey: this.config.apiKey,
+          sandboxPath: this.config.sandboxPath, // 【关键】传递主Agent的沙箱路径
           onLog: (msg) => {
             log(`[${workflow.name}] ${msg}`)
           },
@@ -1460,7 +1521,12 @@ ${truncatedSource}
           : String(result.output)
 
         this.callbacks.onObservation?.(`工作流执行成功:\n${outputStr.slice(0, 1000)}`)
-        return `工作流 "${workflow.name}" 执行成功。结果:\n${outputStr}`
+
+        return {
+          workflowName: workflow.name,
+          success: true,
+          output: result.output,
+        }
       } else {
         // 更新 SubAgent 状态为错误
         this.callbacks.onToolCallUpdate?.(toolCallId, {
@@ -1481,7 +1547,11 @@ ${truncatedSource}
 
         const errorMsg = result.error || '未知错误'
         this.callbacks.onObservation?.(`工作流执行失败: ${errorMsg}`)
-        return `工作流 "${workflow.name}" 执行失败: ${errorMsg}`
+        return {
+          workflowName: workflow.name,
+          success: false,
+          error: errorMsg,
+        }
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
@@ -1504,7 +1574,11 @@ ${truncatedSource}
       })
 
       this.callbacks.onObservation?.(`工作流执行异常: ${errorMsg}`)
-      return `工作流 "${workflow.name}" 执行异常: ${errorMsg}`
+      return {
+        workflowName: workflow.name,
+        success: false,
+        error: errorMsg,
+      }
     }
   }
 

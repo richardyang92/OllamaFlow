@@ -18,7 +18,7 @@ export function GlobalAIConfigButton() {
           'text-[var(--color-text-muted)]',
           'hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]',
           'transition-all duration-200',
-          isGlobalAIEnabled && 'text-purple-400 bg-purple-500/10'
+          isGlobalAIEnabled && 'text-blue-400 bg-blue-500/10'
         )}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}

@@ -225,9 +225,9 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
               {/* 标题栏 */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border-subtle)]">
                 <div className="flex items-center gap-2">
-                  <Globe className="w-5 h-5 text-purple-400" />
+                  <Globe className="w-5 h-5 text-blue-400" />
                   <h2 className="text-lg font-semibold">全局 AI 配置</h2>
-                  <span className="text-xs text-[var(--color-text-muted)] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded">
+                  <span className="text-xs text-[var(--color-text-muted)] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">
                     最高优先级
                   </span>
                 </div>
@@ -253,7 +253,7 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
                     onClick={() => setEnabled(!enabled)}
                     className={cn(
                       'relative w-12 h-6 rounded-full transition-colors',
-                      enabled ? 'bg-purple-500' : 'bg-[var(--color-bg-input)]'
+                      enabled ? 'bg-blue-500' : 'bg-[var(--color-bg-input)]'
                     )}
                   >
                     <div
@@ -278,7 +278,7 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
                             className={cn(
                               'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
                               provider === p
-                                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                                 : 'bg-[var(--color-bg-input)] hover:bg-[var(--color-bg-hover)]'
                             )}
                           >
@@ -300,7 +300,7 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
                             setTestResult(null)
                           }}
                           placeholder="https://api.openai.com/v1"
-                          className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                          className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                         />
                         <button
                           onClick={handleTest}
@@ -329,7 +329,7 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
                         value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
                         placeholder="sk-..."
-                        className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                        className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                       />
                     </div>
 
@@ -365,7 +365,7 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
                         <button
                           onClick={handleRefreshModels}
                           disabled={isLoadingModels}
-                          className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                          className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
                         >
                           <RefreshCw className={cn('w-3 h-3', isLoadingModels && 'animate-spin')} />
                           刷新
@@ -376,7 +376,7 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
                         <select
                           value={defaultModel}
                           onChange={(e) => setDefaultModel(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                         >
                           <option value="">选择模型...</option>
                           {availableModels.map((m) => (
@@ -391,15 +391,15 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
                           value={defaultModel}
                           onChange={(e) => setDefaultModel(e.target.value)}
                           placeholder="例如: gpt-4o, deepseek-chat"
-                          className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                         />
                       )}
                     </div>
 
                     {/* 当前状态提示 */}
                     {isGlobalAIEnabled && (
-                      <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                        <p className="text-xs text-purple-400">
+                      <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                        <p className="text-xs text-blue-400">
                           全局配置已启用。所有工作区和节点将使用此配置。
                         </p>
                       </div>
@@ -496,7 +496,7 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
                   <button
                     onClick={handleSave}
                     disabled={isSaving}
-                    className="px-4 py-2 rounded-lg text-sm font-medium bg-purple-500 text-white hover:bg-purple-600 disabled:opacity-50 transition-colors"
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 transition-colors"
                   >
                     {isSaving ? '保存中...' : '保存'}
                   </button>

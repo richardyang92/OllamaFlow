@@ -1,6 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
-import { useTheme } from '@/contexts/ThemeContext'
 import { cn } from '@/lib/utils'
 import ExecutionLogPanel from './ExecutionLogPanel'
 
@@ -13,13 +12,6 @@ export function AgentSidePanel({
   visible,
   onClose,
 }: AgentSidePanelProps) {
-  const { resolvedTheme } = useTheme()
-
-  // Dynamic glow shadow based on theme
-  const isDark = resolvedTheme === 'dark'
-  const glowColor = isDark ? '255,255,255' : '0,0,0'
-  const shadowValue = `0 0 30px rgba(${glowColor},0.08), 0 0 60px rgba(${glowColor},0.04)`
-
   return (
     <AnimatePresence>
       {visible && (
@@ -31,23 +23,13 @@ export function AgentSidePanel({
             duration: 0.25,
             ease: [0.4, 0, 0.2, 1] // Material Design 标准缓动
           }}
-          style={{ boxShadow: shadowValue }}
           className={cn(
             'absolute right-0 top-0 bottom-0 z-30 flex flex-col',
-            'bg-[var(--color-bg-elevated)]/95 backdrop-blur-xl',
+            'bg-[var(--color-bg-elevated)]',
             'border-l border-[var(--color-border)]',
             'overflow-hidden'
           )}
         >
-          {/* Gradient accent bar at top */}
-          <div
-            className={cn(
-              'h-1 w-full flex-shrink-0',
-              'bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500',
-              'opacity-70'
-            )}
-          />
-
           {/* Header bar */}
           <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--color-border-subtle)]">
             <span className="text-sm font-medium text-[var(--color-text)]">执行日志</span>

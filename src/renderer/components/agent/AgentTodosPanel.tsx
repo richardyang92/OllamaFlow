@@ -27,7 +27,7 @@ function TodoItem({ item }: { item: { id: string; content: string; completed: bo
       )}
     >
       {item.completed ? (
-        <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+        <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
       ) : (
         <Circle className="w-4 h-4 text-gray-400 flex-shrink-0" />
       )}
@@ -90,7 +90,7 @@ export const AgentTodosPanel = memo(function AgentTodosPanel({
         {/* 进度条 */}
         <div className="h-1.5 bg-[var(--color-bg-input)] rounded-full overflow-hidden">
           <motion.div
-            className="h-full bg-gradient-to-r from-green-500 to-emerald-400"
+            className="h-full bg-[var(--color-accent)]"
             initial={{ width: 0 }}
             animate={{ width: `${progress.percentage}%` }}
             transition={{ duration: 0.3, ease: 'easeOut' }}
@@ -119,7 +119,7 @@ export const AgentTodosPanel = memo(function AgentTodosPanel({
         {completedItems.length > 0 && (
           <div>
             <div className="px-4 py-1 text-xs text-[var(--color-text-muted)] font-medium flex items-center gap-1">
-              <CheckCircle className="w-3 h-3 text-green-400" />
+              <CheckCircle className="w-3 h-3 text-green-500" />
               <span>已完成 ({completedItems.length})</span>
             </div>
             <AnimatePresence mode="popLayout">

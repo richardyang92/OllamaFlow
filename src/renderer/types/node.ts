@@ -605,7 +605,7 @@ export interface NodeTemplate {
   category: string
   description: string
   defaultData: Partial<WorkflowNodeData>
-  colorScheme?: 'purple' | 'blue' | 'green' | 'orange' | 'red' | 'cyan' | 'teal' | 'yellow'
+  colorScheme?: 'blue' | 'green' | 'orange' | 'red' | 'cyan' | 'teal' | 'yellow'
 }
 
 export const nodeTemplates: NodeTemplate[] = [
@@ -632,7 +632,7 @@ export const nodeTemplates: NodeTemplate[] = [
     label: 'Ollama 对话',
     icon: 'ollamaChat',
     category: 'AI',
-    colorScheme: 'purple',
+    colorScheme: 'blue',
     description: '与 Ollama 模型对话',
     defaultData: {
       nodeType: 'ollamaChat',
@@ -864,7 +864,7 @@ export const nodeTemplates: NodeTemplate[] = [
     label: 'ReAct 智能体',
     icon: 'reactAgent',
     category: 'AI',
-    colorScheme: 'purple',
+    colorScheme: 'blue',
     description: '推理与行动的 AI 智能体，支持多工具协作',
     defaultData: {
       nodeType: 'reactAgent',
@@ -887,7 +887,7 @@ export const nodeTemplates: NodeTemplate[] = [
     label: '智能规划',
     icon: 'plan',
     category: 'AI',
-    colorScheme: 'purple',
+    colorScheme: 'blue',
     description: '智能分析任务并生成执行计划，如有需要会向用户提问',
     defaultData: {
       nodeType: 'plan',

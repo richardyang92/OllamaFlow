@@ -115,18 +115,18 @@ export function WorkspaceCard({
         isRunning && 'ring-2 ring-green-500/30'
       )}
     >
-      {/* macOS 26 style top accent bar with gradient */}
+      {/* Subtle top accent line - macOS style */}
       <div className={cn(
-        'h-1 w-full',
-        'bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500',
-        'opacity-70 group-hover:opacity-100 transition-opacity duration-300',
+        'h-0.5 w-full',
+        'bg-gradient-to-r from-transparent via-[var(--color-border-subtle)] to-transparent',
+        'opacity-50 group-hover:opacity-100 transition-opacity duration-300',
         isRunning && 'opacity-100'
       )} />
 
-      {/* Subtle inner glow on hover */}
+      {/* Subtle inner highlight on hover */}
       <div className={cn(
         'absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none',
-        'bg-gradient-to-br from-purple-500/5 via-transparent to-blue-500/5'
+        'bg-gradient-to-br from-[var(--color-accent)]/3 via-transparent to-transparent'
       )} />
 
       <div className="p-5 relative">
@@ -135,14 +135,14 @@ export function WorkspaceCard({
           {/* Left icon with liquid glass effect */}
           <div className={cn(
             'relative w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0',
-            'bg-gradient-to-br from-purple-500/15 to-blue-500/15',
-            'group-hover:from-purple-500/25 group-hover:to-blue-500/25',
+            'bg-[var(--color-bg-input)]',
+            'group-hover:bg-[var(--color-bg-hover)]',
             'transition-all duration-300',
-            'shadow-lg shadow-purple-500/5'
+            'border border-[var(--color-border-subtle)]'
           )}>
-            {/* Inner glow */}
-            <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            <Folder className="w-7 h-7 text-purple-400 relative z-10" />
+            {/* Inner highlight */}
+            <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <Folder className="w-7 h-7 text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)] transition-colors duration-300 relative z-10" />
 
             {/* Running indicator */}
             {isRunning && (
@@ -224,7 +224,7 @@ export function WorkspaceCard({
                 'flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0',
                 'bg-[var(--color-bg-hover)]',
                 'text-[var(--color-text-muted)]',
-                'group-hover:bg-purple-500/15 group-hover:text-purple-400',
+                'group-hover:bg-[var(--color-accent-bg)] group-hover:text-[var(--color-accent)]',
                 'transition-all duration-200'
               )}>
                 <Sparkles className="w-3 h-3 opacity-50 group-hover:opacity-100 transition-opacity duration-200" />
@@ -238,7 +238,7 @@ export function WorkspaceCard({
         <div className="mt-3 h-1 bg-[var(--color-bg-hover)] rounded-full overflow-hidden">
           {isRunning ? (
             <motion.div
-              className="h-full bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400"
+              className="h-full bg-[var(--color-accent)]"
               initial={{ width: 0 }}
               animate={{ width: `${executionStatus?.progress || 0}%` }}
               transition={{ duration: 0.3 }}

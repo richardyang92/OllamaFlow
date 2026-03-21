@@ -34,24 +34,17 @@ export function AddWorkspaceCard({
         'border border-[var(--color-border-subtle)]',
         'bg-[var(--color-bg-card)]/50',
         'backdrop-blur-sm',
-        'hover:border-blue-500/30',
-        'hover:bg-blue-500/5',
+        'hover:border-[var(--color-border)]',
+        'hover:bg-[var(--color-bg-hover)]/50',
         'transition-all duration-300',
         'group',
         disabled && 'opacity-50'
       )}
     >
-      {/* Animated gradient glow on hover */}
-      <div className={cn(
-        'absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300',
-        'bg-gradient-to-r from-blue-500/20 via-cyan-500/20 to-teal-500/20',
-        'blur-xl -z-10'
-      )} />
-
-      {/* Top accent line */}
+      {/* Top accent line - subtle */}
       <div className={cn(
         'h-0.5 w-full',
-        'bg-gradient-to-r from-transparent via-blue-500/40 to-transparent',
+        'bg-gradient-to-r from-transparent via-[var(--color-border-subtle)] to-transparent',
         'opacity-0 group-hover:opacity-100 transition-opacity duration-300'
       )} />
 
@@ -59,28 +52,28 @@ export function AddWorkspaceCard({
         {/* Icon with liquid glass effect */}
         <div className={cn(
           'relative w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0',
-          'bg-gradient-to-br from-blue-500/10 to-cyan-500/10',
-          'group-hover:from-blue-500/20 group-hover:to-cyan-500/20',
+          'bg-[var(--color-bg-input)]',
+          'group-hover:bg-[var(--color-bg-hover)]',
           'transition-all duration-300',
-          'shadow-sm group-hover:shadow-blue-500/10'
+          'border border-[var(--color-border-subtle)]'
         )}>
-          {/* Inner glow */}
-          <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          {/* Inner highlight */}
+          <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
           {isLoading || isImporting ? (
-            <Loader2 className="w-7 h-7 text-blue-400 animate-spin relative z-10" />
+            <Loader2 className="w-7 h-7 text-[var(--color-accent)] animate-spin relative z-10" />
           ) : (
             <FolderOpen className={cn(
               'w-7 h-7 relative z-10',
               'text-[var(--color-text-muted)]',
-              'group-hover:text-blue-400',
+              'group-hover:text-[var(--color-accent)]',
               'transition-colors duration-300'
             )} />
           )}
 
           {/* Animated ring */}
           <motion.div
-            className="absolute inset-0 rounded-xl border border-blue-500/20"
+            className="absolute inset-0 rounded-xl border border-[var(--color-border-subtle)]"
             initial={{ scale: 1, opacity: 0 }}
             whileHover={{ scale: 1.1, opacity: 1 }}
             transition={{ duration: 0.3 }}
@@ -100,7 +93,7 @@ export function AddWorkspaceCard({
               'w-4 h-4 opacity-0 -translate-x-2',
               'group-hover:opacity-100 group-hover:translate-x-0',
               'transition-all duration-300',
-              'text-blue-400'
+              'text-[var(--color-accent)]'
             )} />
           </span>
 
@@ -112,7 +105,7 @@ export function AddWorkspaceCard({
               className={cn(
                 'flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium',
                 'text-[var(--color-text-muted)]',
-                'hover:text-blue-400 hover:bg-blue-500/10',
+                'hover:text-[var(--color-accent)] hover:bg-[var(--color-accent-bg)]',
                 'transition-all duration-200',
                 'disabled:cursor-not-allowed'
               )}
@@ -131,7 +124,7 @@ export function AddWorkspaceCard({
               className={cn(
                 'flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium',
                 'text-[var(--color-text-muted)]',
-                'hover:text-blue-400 hover:bg-blue-500/10',
+                'hover:text-[var(--color-accent)] hover:bg-[var(--color-accent-bg)]',
                 'transition-all duration-200',
                 'disabled:cursor-not-allowed'
               )}

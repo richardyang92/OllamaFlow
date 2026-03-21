@@ -59,20 +59,20 @@ function AnimatedBackground() {
 
     const orbs: GradientOrb[] = []
 
-    // Dark mode colors - more vibrant, translucent
+    // Dark mode colors - subtle, cool tones
     const darkOrbColors = [
-      { c1: 'rgba(99, 102, 241, 0.15)', c2: 'rgba(139, 92, 246, 0.08)' },  // Indigo -> Purple
-      { c1: 'rgba(59, 130, 246, 0.12)', c2: 'rgba(6, 182, 212, 0.06)' },   // Blue -> Cyan
-      { c1: 'rgba(236, 72, 153, 0.10)', c2: 'rgba(244, 114, 182, 0.05)' }, // Pink
-      { c1: 'rgba(34, 197, 94, 0.08)', c2: 'rgba(20, 184, 166, 0.04)' },   // Green -> Teal
+      { c1: 'rgba(80, 85, 100, 0.06)', c2: 'rgba(70, 75, 90, 0.03)' },  // Cool gray -> subtle blue
+      { c1: 'rgba(60, 65, 80, 0.05)', c2: 'rgba(70, 75, 90, 0.025)' },  // Blue-gray
+      { c1: 'rgba(90, 85, 95, 0.04)', c2: 'rgba(80, 75, 85, 0.02)' },  // Purple-gray
+      { c1: 'rgba(75, 80, 85, 0.03)', c2: 'rgba(65, 70, 75, 0.015)' },  // Neutral
     ]
 
     // Light mode colors - subtle, airy
     const lightOrbColors = [
-      { c1: 'rgba(99, 102, 241, 0.08)', c2: 'rgba(139, 92, 246, 0.04)' },
-      { c1: 'rgba(59, 130, 246, 0.06)', c2: 'rgba(6, 182, 212, 0.03)' },
-      { c1: 'rgba(236, 72, 153, 0.05)', c2: 'rgba(244, 114, 182, 0.025)' },
-      { c1: 'rgba(34, 197, 94, 0.04)', c2: 'rgba(20, 184, 166, 0.02)' },
+      { c1: 'rgba(150, 155, 170, 0.04)', c2: 'rgba(140, 145, 160, 0.02)' },
+      { c1: 'rgba(130, 135, 150, 0.03)', c2: 'rgba(140, 145, 160, 0.015)' },
+      { c1: 'rgba(160, 155, 165, 0.025)', c2: 'rgba(150, 145, 155, 0.012)' },
+      { c1: 'rgba(145, 150, 155, 0.02)', c2: 'rgba(135, 140, 145, 0.01)' },
     ]
 
     const orbColors = isDark ? darkOrbColors : lightOrbColors
@@ -213,8 +213,8 @@ function AnimatedBackground() {
         className="fixed inset-0 pointer-events-none transition-opacity duration-500"
         style={{
           background: isDark
-            ? 'radial-gradient(ellipse at 30% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(139, 92, 246, 0.06) 0%, transparent 50%)'
-            : 'radial-gradient(ellipse at 30% 20%, rgba(99, 102, 241, 0.04) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(139, 92, 246, 0.03) 0%, transparent 50%)',
+            ? 'radial-gradient(ellipse at 30% 20%, rgba(60, 65, 80, 0.05) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(70, 75, 90, 0.04) 0%, transparent 50%)'
+            : 'radial-gradient(ellipse at 30% 20%, rgba(140, 145, 160, 0.03) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(130, 135, 150, 0.025) 0%, transparent 50%)',
         }}
       />
       {/* Animated canvas layer */}
@@ -559,7 +559,7 @@ export default function WelcomePage() {
         </WorkspaceGrid>
       </div>
 
-      {/* Footer */}
+      {/* Footer - simplified */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -569,10 +569,6 @@ export default function WelcomePage() {
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-floating-subtle">
           <span className="text-[var(--color-text-muted)] text-sm">
             v0.1.0
-          </span>
-          <span className="w-1 h-1 rounded-full bg-[var(--color-text-muted)] opacity-50" />
-          <span className="text-[var(--color-text-muted)] text-sm">
-            由 Ollama 驱动
           </span>
         </div>
       </motion.div>

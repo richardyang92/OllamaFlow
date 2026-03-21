@@ -121,7 +121,7 @@ export default function BasicInfoStep({
           >
             <p className="text-xs text-[var(--color-text-muted)] mb-2">预览</p>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center text-white font-bold">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center text-white font-bold">
                 {projectName.charAt(0).toUpperCase()}
               </div>
               <div>

@@ -18,19 +18,19 @@ const statusStyles = {
     dot: 'bg-[var(--color-text-muted)]',
   },
   running: {
-    border: 'border-yellow-500/50',
-    shadow: 'shadow-[0_0_12px_rgba(234,179,8,0.3)]',
-    dot: 'bg-yellow-400 animate-pulse-glow',
+    border: 'border-[var(--color-accent-border)]',
+    shadow: '',
+    dot: 'bg-[var(--color-accent)]',
   },
   success: {
-    border: 'border-green-500/50',
-    shadow: 'shadow-[0_0_12px_rgba(34,197,94,0.3)]',
-    dot: 'bg-green-400',
+    border: 'border-green-500/40',
+    shadow: '',
+    dot: 'bg-green-500/80',
   },
   error: {
-    border: 'border-red-500/50',
-    shadow: 'shadow-[0_0_12px_rgba(239,68,68,0.3)]',
-    dot: 'bg-red-400',
+    border: 'border-red-500/40',
+    shadow: '',
+    dot: 'bg-red-500/80',
   },
 }
 
@@ -107,7 +107,6 @@ function BaseNode({ data, selected, children, icon, className }: BaseNodeProps) 
             '!bg-[var(--color-bg-input)]',
             '!border-2 !border-[var(--color-border)]',
             'hover:!bg-[var(--color-accent)] hover:!border-[var(--color-accent)]',
-            'hover:shadow-[0_0_6px_var(--color-accent-glow)]',
             'transition-all duration-200'
           )}
           style={{
@@ -129,12 +128,11 @@ function BaseNode({ data, selected, children, icon, className }: BaseNodeProps) 
             className={cn(
               '!w-2.5 !h-2.5',
               '!border-2',
-              'hover:shadow-[var(--shadow-handle-hover)]',
               'transition-all duration-200'
             )}
             style={{
-              backgroundColor: handleColor.replace('0.6', '1').replace('0.9', '1'),
-              borderColor: handleHoverColor.replace('0.9', '0.5'),
+              backgroundColor: handleColor.replace('0.5', '0.9').replace('0.85', '1'),
+              borderColor: handleHoverColor.replace('0.85', '0.4'),
               top: outputCount === 1 ? '50%' : `${((index + 1) / (outputCount + 1)) * 100}%`,
             }}
             title={output.label}

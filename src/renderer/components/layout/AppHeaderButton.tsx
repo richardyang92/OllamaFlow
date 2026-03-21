@@ -27,13 +27,13 @@ export function AppHeaderButton({
     ),
     primary: cn(
       'px-2.5 py-1.5',
-      'bg-gradient-to-r from-blue-500/60 to-purple-500/60 text-white',
-      'hover:from-blue-500/80 hover:to-purple-500/80'
+      'bg-[var(--color-accent)] text-white',
+      'hover:bg-[var(--color-accent-hover)]'
     ),
     danger: cn(
       'px-2.5 py-1.5',
-      'bg-red-500/60 text-white',
-      'hover:bg-red-500/80'
+      'bg-red-500/80 text-white',
+      'hover:bg-red-500'
     ),
     active: cn(
       'px-2.5 py-1.5',

@@ -1,9 +1,8 @@
 import { useExecutionStore } from '@/store/execution-store'
 import { useWorkspaceStore } from '@/store/workspace-store'
-import { useTheme } from '@/contexts/ThemeContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect } from 'react'
 import { Trash2, ChevronDown, ClipboardList } from 'lucide-react'
 
 export default function ExecutionPanel({
@@ -14,8 +13,6 @@ export default function ExecutionPanel({
   isDrawer?: boolean
 }) {
   const workspacePath = useWorkspaceStore((state) => state.currentWorkspace?.path)
-  const { resolvedTheme } = useTheme()
-  const [isHovered, setIsHovered] = useState(false)
 
   // Get current workspace's logs and status
   const logs = useExecutionStore((state) => {
@@ -42,13 +39,6 @@ export default function ExecutionPanel({
     }
   }, [logs])
 
-  // Dynamic glow shadow based on theme
-  const isDark = resolvedTheme === 'dark'
-  const glowColor = isDark ? '255,255,255' : '0,0,0'
-  const shadowValue = isHovered
-    ? `0 0 30px rgba(${glowColor},0.08), 0 0 60px rgba(${glowColor},0.04)`
-    : `0 0 15px rgba(${glowColor},0.05)`
-
   // In drawer mode, use simpler layout without card styling
   if (isDrawer) {
     return (
@@ -60,18 +50,18 @@ export default function ExecutionPanel({
               <motion.span
                 animate={{ opacity: [0.5, 1, 0.5], scale: [1, 1.2, 1] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
-                className="w-2 h-2 bg-green-400 rounded-full shadow-lg shadow-green-400/50"
+                className="w-2 h-2 bg-green-400 rounded-full"
               />
             )}
             {status !== 'idle' && status !== 'running' && (
               <span
                 className={cn(
-                  'text-[10px] px-2 py-0.5 rounded-full font-medium',
+                  'text-[10px] px-2 py-0.5 rounded font-medium',
                   'transition-colors duration-200',
                   status === 'completed'
-                    ? 'bg-green-500/15 text-green-400 border border-green-500/30'
+                    ? 'bg-green-500/15 text-green-500 border border-green-500/30'
                     : status === 'failed'
-                      ? 'bg-red-500/15 text-red-400 border border-red-500/30'
+                      ? 'bg-red-500/15 text-red-500 border border-red-500/30'
                       : 'bg-[var(--color-bg-input)] text-[var(--color-text-muted)] border border-[var(--color-border-subtle)]'
                 )}
               >
@@ -115,19 +105,18 @@ export default function ExecutionPanel({
                   transition={{ duration: 0.2 }}
                   className={cn(
                     'px-3 py-1.5 rounded-lg',
-                    'backdrop-blur-sm',
                     'border-l-2',
                     'transition-colors duration-200',
-                    log.level === 'error' && 'bg-red-500/10 border-red-400 text-red-400',
-                    log.level === 'warn' && 'bg-yellow-500/10 border-yellow-400 text-yellow-400',
+                    log.level === 'error' && 'bg-red-500/10 border-red-500 text-red-500',
+                    log.level === 'warn' && 'bg-yellow-500/10 border-yellow-500 text-yellow-600',
                     log.level === 'debug' && 'bg-[var(--color-bg-input)] border-[var(--color-border)] text-[var(--color-text-muted)]',
-                    log.level === 'info' && 'bg-blue-500/10 border-blue-400 text-blue-400'
+                    log.level === 'info' && 'bg-blue-500/10 border-blue-500 text-blue-600'
                   )}
                 >
                   <span className="opacity-50 mr-2 text-[10px]">
                     {new Date(log.timestamp).toLocaleTimeString()}
                   </span>
-                  {log.nodeName && <span className="text-purple-400 mr-1">[{log.nodeName}]</span>}
+                  {log.nodeName && <span className="text-[var(--color-text-muted)] mr-1">[{log.nodeName}]</span>}
                   <span className="leading-relaxed">{log.message}</span>
                 </motion.div>
               ))}
@@ -140,25 +129,13 @@ export default function ExecutionPanel({
 
   return (
     <div
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      style={{ boxShadow: shadowValue }}
       className={cn(
         'h-full flex flex-col overflow-hidden',
-        'bg-[var(--color-bg-elevated)]/80 backdrop-blur-xl',
-        'rounded-2xl border border-[var(--color-border)]',
+        'bg-[var(--color-bg-elevated)]',
+        'rounded-lg border border-[var(--color-border)]',
         'transition-all duration-300'
       )}
     >
-      {/* Gradient accent bar at top - macOS 26 style */}
-      <div className={cn(
-        'h-1 w-full flex-shrink-0',
-        'bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500',
-        'opacity-70 transition-opacity duration-300',
-        isHovered && 'opacity-100',
-        status === 'running' && 'opacity-100'
-      )} />
-
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--color-border-subtle)]">
         <div className="flex items-center gap-2">
@@ -167,18 +144,18 @@ export default function ExecutionPanel({
             <motion.span
               animate={{ opacity: [0.5, 1, 0.5], scale: [1, 1.2, 1] }}
               transition={{ duration: 1.5, repeat: Infinity }}
-              className="w-2 h-2 bg-green-400 rounded-full shadow-lg shadow-green-400/50"
+              className="w-2 h-2 bg-green-400 rounded-full"
             />
           )}
           {status !== 'idle' && status !== 'running' && (
             <span
               className={cn(
-                'text-[10px] px-2 py-0.5 rounded-full font-medium',
+                'text-[10px] px-2 py-0.5 rounded font-medium',
                 'transition-colors duration-200',
                 status === 'completed'
-                  ? 'bg-green-500/15 text-green-400 border border-green-500/30'
+                  ? 'bg-green-500/15 text-green-500 border border-green-500/30'
                   : status === 'failed'
-                    ? 'bg-red-500/15 text-red-400 border border-red-500/30'
+                    ? 'bg-red-500/15 text-red-500 border border-red-500/30'
                     : 'bg-[var(--color-bg-input)] text-[var(--color-text-muted)] border border-[var(--color-border-subtle)]'
               )}
             >
@@ -237,19 +214,18 @@ export default function ExecutionPanel({
                 transition={{ duration: 0.2 }}
                 className={cn(
                   'px-3 py-1.5 rounded-lg',
-                  'backdrop-blur-sm',
                   'border-l-2',
                   'transition-colors duration-200',
-                  log.level === 'error' && 'bg-red-500/10 border-red-400 text-red-400',
-                  log.level === 'warn' && 'bg-yellow-500/10 border-yellow-400 text-yellow-400',
+                  log.level === 'error' && 'bg-red-500/10 border-red-500 text-red-500',
+                  log.level === 'warn' && 'bg-yellow-500/10 border-yellow-500 text-yellow-600',
                   log.level === 'debug' && 'bg-[var(--color-bg-input)] border-[var(--color-border)] text-[var(--color-text-muted)]',
-                  log.level === 'info' && 'bg-blue-500/10 border-blue-400 text-blue-400'
+                  log.level === 'info' && 'bg-blue-500/10 border-blue-500 text-blue-600'
                 )}
               >
                 <span className="opacity-50 mr-2 text-[10px]">
                   {new Date(log.timestamp).toLocaleTimeString()}
                 </span>
-                {log.nodeName && <span className="text-purple-400 mr-1">[{log.nodeName}]</span>}
+                {log.nodeName && <span className="text-[var(--color-text-muted)] mr-1">[{log.nodeName}]</span>}
                 <span className="leading-relaxed">{log.message}</span>
               </motion.div>
             ))}

@@ -52,8 +52,8 @@ export default function ReactAgentProperties({ node, updateNodeData }: Props) {
     <div className="space-y-4">
       {/* 全局配置提示 */}
       {isGlobalAIEnabled && (
-        <div className="px-3 py-2 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-          <p className="text-xs text-purple-400">
+        <div className="px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+          <p className="text-xs text-blue-400">
             使用全局配置: {globalAIConfig?.name || '未命名'}
           </p>
         </div>
@@ -179,7 +179,7 @@ export default function ReactAgentProperties({ node, updateNodeData }: Props) {
                   'flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all',
                   'border',
                   isEnabled
-                    ? 'bg-purple-500/10 border-purple-500/30'
+                    ? 'bg-blue-500/10 border-blue-500/30'
                     : 'bg-[var(--color-bg-input)] border-[var(--color-border-subtle)] hover:bg-[var(--color-bg-hover)]'
                 )}
               >
@@ -194,7 +194,7 @@ export default function ReactAgentProperties({ node, updateNodeData }: Props) {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-[var(--color-text)]">{tool.label}</span>
                     {tool.builtIn && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded">
+                      <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded">
                         内置
                       </span>
                     )}
@@ -252,7 +252,7 @@ export default function ReactAgentProperties({ node, updateNodeData }: Props) {
         <div className="font-medium text-[var(--color-text)] mb-2">输出说明：</div>
         <div className="space-y-1">
           <div>
-            <span className="text-purple-400">最终回答</span>: 智能体的最终答案（唯一输出端口）
+            <span className="text-blue-400">最终回答</span>: 智能体的最终答案（唯一输出端口）
           </div>
           <div className="text-[var(--color-text-muted)] mt-2">
             中间步骤（思考、行动、观察）将在节点中实时展示

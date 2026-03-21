@@ -121,8 +121,8 @@ export default function PlanQuestionsDialog({
         {/* Header */}
         <div className="px-6 py-4 border-b border-[var(--color-border-subtle)]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-              <HelpCircle className="w-5 h-5 text-purple-400" />
+            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+              <HelpCircle className="w-5 h-5 text-blue-400" />
             </div>
             <div>
               <h2 className="text-lg font-medium text-[var(--color-text)]">任务规划</h2>
@@ -226,7 +226,7 @@ export default function PlanQuestionsDialog({
                         type="checkbox"
                         checked={(answers[question.id] || '').split(',').includes(opt)}
                         onChange={(e) => handleMultiSelect(question.id, opt, e.target.checked)}
-                        className="w-4 h-4 rounded border-[var(--color-border-subtle)] bg-[var(--color-bg-input)] text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
+                        className="w-4 h-4 rounded border-[var(--color-border-subtle)] bg-[var(--color-bg-input)] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
                       />
                       <span className="text-sm text-[var(--color-text)]">{opt}</span>
                     </label>
@@ -244,7 +244,7 @@ export default function PlanQuestionsDialog({
                       value="true"
                       checked={answers[question.id] === 'true'}
                       onChange={(e) => updateAnswer(question.id, e.target.value)}
-                      className="w-4 h-4 border-[var(--color-border-subtle)] bg-[var(--color-bg-input)] text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
+                      className="w-4 h-4 border-[var(--color-border-subtle)] bg-[var(--color-bg-input)] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
                     />
                     <span className="text-sm text-[var(--color-text)]">是</span>
                   </label>
@@ -255,7 +255,7 @@ export default function PlanQuestionsDialog({
                       value="false"
                       checked={answers[question.id] === 'false'}
                       onChange={(e) => updateAnswer(question.id, e.target.value)}
-                      className="w-4 h-4 border-[var(--color-border-subtle)] bg-[var(--color-bg-input)] text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
+                      className="w-4 h-4 border-[var(--color-border-subtle)] bg-[var(--color-bg-input)] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
                     />
                     <span className="text-sm text-[var(--color-text)]">否</span>
                   </label>
@@ -293,7 +293,7 @@ export default function PlanQuestionsDialog({
             <button
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
               {isSubmitting ? '正在生成...' : '生成计划'}
