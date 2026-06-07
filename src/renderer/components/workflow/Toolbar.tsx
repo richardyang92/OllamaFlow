@@ -52,7 +52,7 @@ export default function Toolbar({
           whileTap={{ scale: 0.97 }}
           onClick={onClose}
           className="btn-sci-fi btn-ghost btn-sm px-3"
-          title="关闭工作区"
+          title="关闭项目"
         >
           ← 返回
         </motion.button>
@@ -107,7 +107,7 @@ export default function Toolbar({
             whileTap={{ scale: 0.97 }}
             onClick={onImport}
             className="btn-sci-fi btn-ghost btn-sm px-2 py-1.5"
-            title="导入工作流"
+            title="导入 SubAgent"
           >
             <Upload className="w-4 h-4 text-zinc-300" />
           </motion.button>
@@ -118,7 +118,7 @@ export default function Toolbar({
             whileTap={{ scale: 0.97 }}
             onClick={onExport}
             className="btn-sci-fi btn-ghost btn-sm px-2 py-1.5"
-            title="导出工作流"
+            title="导出 SubAgent"
           >
             <Download className="w-4 h-4 text-zinc-300" />
           </motion.button>

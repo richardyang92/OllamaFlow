@@ -88,7 +88,7 @@ export function AddWorkspaceCard({
             'flex items-center gap-2',
             'transition-colors duration-200'
           )}>
-            添加工作区
+            添加项目
             <ArrowRight className={cn(
               'w-4 h-4 opacity-0 -translate-x-2',
               'group-hover:opacity-100 group-hover:translate-x-0',

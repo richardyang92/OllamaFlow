@@ -90,7 +90,7 @@ export default function ConfirmStep({
           <div className="flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
             <p className="text-xs text-[var(--color-text-muted)]">
-              如果所选目录已包含工作区配置，将会被覆盖。
+              如果所选目录已包含项目配置，将会被覆盖。
             </p>
           </div>
         </div>

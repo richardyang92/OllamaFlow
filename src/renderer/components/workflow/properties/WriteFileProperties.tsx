@@ -14,7 +14,7 @@ export default function WriteFileProperties({ node, updateNodeData }: Props) {
       <div>
         <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">
           文件路径
-          <span className="text-[var(--color-text-muted)] ml-1">(相对于工作区)</span>
+          <span className="text-[var(--color-text-muted)] ml-1">(相对于项目)</span>
         </label>
         <input
           type="text"
@@ -81,7 +81,7 @@ export default function WriteFileProperties({ node, updateNodeData }: Props) {
 
       <div className="bg-[var(--color-bg-input)] rounded-lg p-3 text-xs text-[var(--color-text-muted)] border border-[var(--color-border-subtle)]">
         <div className="font-medium text-[var(--color-text)] mb-1">说明：</div>
-        <div>将数据写入到工作区中的文件。可用于保存处理结果、生成报告等。</div>
+        <div>将数据写入到项目中的文件。可用于保存处理结果、生成报告等。</div>
       </div>
     </div>
   )

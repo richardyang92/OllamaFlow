@@ -146,7 +146,7 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
 
   // 清除配置
   const handleClear = async () => {
-    if (confirm('确定要清除全局 AI 配置吗？这将恢复使用各工作区的独立配置。')) {
+    if (confirm('确定要清除全局 AI 配置吗？这将恢复使用各项目的独立配置。')) {
       await clearGlobalAIConfig()
       setEnabled(false)
       setApiEndpoint('')
@@ -246,7 +246,7 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
                   <div>
                     <label className="font-medium">启用全局配置</label>
                     <p className="text-xs text-[var(--color-text-muted)]">
-                      启用后将覆盖所有工作区和节点的 AI 配置
+                      启用后将覆盖所有项目和节点的 AI 配置
                     </p>
                   </div>
                   <button
@@ -400,7 +400,7 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
                     {isGlobalAIEnabled && (
                       <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
                         <p className="text-xs text-blue-400">
-                          全局配置已启用。所有工作区和节点将使用此配置。
+                          全局配置已启用。所有项目和节点将使用此配置。
                         </p>
                       </div>
                     )}

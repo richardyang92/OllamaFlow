@@ -91,7 +91,7 @@ export default function InputProperties({ node, updateNodeData }: Props) {
 
       <div className="bg-[var(--color-bg-input)] rounded-lg p-3 text-xs text-[var(--color-text-muted)] border border-[var(--color-border-subtle)]">
         <div className="font-medium text-[var(--color-text)] mb-1">说明：</div>
-        <div>在执行工作流时提示用户输入。该值随后将传递给连接的节点。</div>
+        <div>在执行 SubAgent 时提示用户输入。该值随后将传递给连接的节点。</div>
       </div>
     </div>
   )

@@ -83,7 +83,7 @@ export function NewWorkspaceCard({ onClick, isLoading = false }: NewWorkspaceCar
             'flex items-center gap-1.5'
           )}>
             <Sparkles className="w-3 h-3 text-[var(--color-text-subtle)]" />
-            创建一个新的工作流
+            创建一个新的 SubAgent
           </span>
         </div>
       </div>

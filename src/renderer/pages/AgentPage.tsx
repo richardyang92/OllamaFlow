@@ -242,7 +242,7 @@ export default function AgentPage() {
   // 获取 analytics store 方法
   const { initExecution, updateMetrics, completeExecution } = useAgentAnalyticsStore()
 
-  // 加载配置、工作流列表和对话历史
+  // 加载配置、SubAgent 列表和对话历史
   useEffect(() => {
     loadConfig()
     loadWorkflows()
@@ -293,12 +293,14 @@ export default function AgentPage() {
 
   const handleBack = useCallback(() => {
     if (isRunning) {
-      const confirm = window.confirm('Agent正在运行中，确定要返回吗？')
+      const confirm = window.confirm('Agent正在运行中，确定要停止吗？')
       if (!confirm) return
     }
     abortControllerRef.current?.abort()
-    setCurrentPage('welcome')
-  }, [isRunning, setCurrentPage])
+    setRunning(false)
+    setFeedback('已停止执行')
+    setTimeout(() => setFeedback(null), 2000)
+  }, [isRunning, setRunning])
 
   // 核心执行函数
   // continueParams 用于继续执行时传递参数
@@ -1070,7 +1072,7 @@ export default function AgentPage() {
       {/* macOS style drag region */}
       {isMac && (
         <div
-          className="fixed top-0 left-0 w-[72px] h-14 pointer-events-none"
+          className="fixed top-0 left-0 w-[72px] h-12 pointer-events-none"
           style={{ WebkitAppRegion: 'drag', zIndex: 9999 } as React.CSSProperties}
         />
       )}
@@ -1084,10 +1086,12 @@ export default function AgentPage() {
         showLogsPanel={showLogsPanel}
         isRunning={isRunning}
         conversationTitle={currentConversationTitle || undefined}
+        onGoToWelcome={() => setCurrentPage('welcome')}
+        onGoToEditor={() => setCurrentPage('editor')}
       />
 
       {/* Main content */}
-      <div className="fixed inset-0 top-14 flex overflow-hidden" style={{ zIndex: 1 }}>
+      <div className="fixed inset-0 top-12 flex overflow-hidden" style={{ zIndex: 1 }}>
         {/* 左侧：聊天历史侧边栏 */}
         <motion.div
           initial={{ width: 240, opacity: 1 }}
@@ -1133,11 +1137,11 @@ export default function AgentPage() {
 
                   <p className="text-sm text-[var(--color-text-muted)] text-center max-w-md mb-6">
                     {availableWorkflows.length > 0
-                      ? `已发现 ${availableWorkflows.length} 个可用工作流，可以直接向我提问`
+                      ? `已发现 ${availableWorkflows.length} 个可用 SubAgent，可以直接向我提问`
                       : '请在设置中配置模型后开始对话'}
                   </p>
 
-                  {/* 可用工作流列表 - 网格布局 */}
+                  {/* 可用 SubAgent 列表 - 网格布局 */}
                   {availableWorkflows.length > 0 && (
                     <div className="grid grid-cols-2 gap-2 max-w-md w-full">
                       {availableWorkflows.slice(0, 4).map((w) => (
@@ -1151,7 +1155,7 @@ export default function AgentPage() {
                       ))}
                       {availableWorkflows.length > 4 && (
                         <div className="px-3 py-2 rounded-lg glass-panel text-xs text-center text-[var(--color-text-muted)] col-span-2">
-                          还有 {availableWorkflows.length - 4} 个工作流可用
+                          还有 {availableWorkflows.length - 4} 个 SubAgent 可用
                         </div>
                       )}
                     </div>
@@ -1233,7 +1237,7 @@ export default function AgentPage() {
                     执行分析
                   </button>
                   {availableWorkflows.length > 0 && (
-                    <span>{availableWorkflows.length} 个工作流可用</span>
+                    <span>{availableWorkflows.length} 个 SubAgent 可用</span>
                   )}
                 </span>
               </div>
@@ -1271,7 +1275,7 @@ export default function AgentPage() {
         onClose={() => setShowExecutionHistory(false)}
       />
 
-      {/* 子工作流用户输入管理 */}
+      {/* SubAgent 用户输入管理 */}
       <AgentQuestionsManager />
 
       {/* 反馈提示 */}

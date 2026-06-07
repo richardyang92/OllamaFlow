@@ -140,14 +140,14 @@ export function WorkflowActions({
         <ActionButton
           icon={Upload}
           onClick={onImport}
-          tooltip="导入工作流"
+          tooltip="导入 SubAgent"
         />
       )}
       {onExport && (
         <ActionButton
           icon={Download}
           onClick={onExport}
-          tooltip="导出工作流"
+          tooltip="导出 SubAgent"
         />
       )}
 

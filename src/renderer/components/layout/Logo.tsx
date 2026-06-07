@@ -19,7 +19,7 @@ export function Logo({ compact = false, onBack }: LogoProps) {
           whileHover={{ x: -2 }}
           whileTap={{ scale: 0.97 }}
           onClick={onBack}
-          title="关闭工作区"
+          title="关闭项目"
           className={cn(
             'flex items-center gap-1.5 px-2.5 py-1.5 rounded-full',
             'text-[var(--color-text-muted)] text-xs font-medium',

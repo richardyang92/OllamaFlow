@@ -27,7 +27,7 @@ export default function ExecuteCommandProperties({ node, updateNodeData }: Props
       <div>
         <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">
           工作目录
-          <span className="text-[var(--color-text-muted)] ml-1">(可选，相对于工作区)</span>
+          <span className="text-[var(--color-text-muted)] ml-1">(可选，相对于项目)</span>
         </label>
         <input
           type="text"

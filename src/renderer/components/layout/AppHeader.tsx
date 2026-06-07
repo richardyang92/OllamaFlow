@@ -1,15 +1,114 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Settings, Loader2, PanelLeft, ArrowLeft, Sparkles } from 'lucide-react'
+import {
+  Settings,
+  Loader2,
+  PanelLeft,
+  ArrowLeft,
+  Sparkles,
+  LayoutGrid,
+  Workflow,
+  Moon,
+  Sun,
+  Monitor,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePanelContext } from '@/contexts/PanelContext'
+import { useTheme, type ThemeMode } from '@/contexts/ThemeContext'
 
 import { Logo } from './Logo'
-import { ThemeToggle } from './ThemeToggle'
 import { OllamaStatus } from './OllamaStatus'
 import { GlobalAIConfigButton } from './GlobalAIConfigButton'
 import { WorkflowActions } from './WorkflowActions'
 import type { AppHeaderProps } from './types'
+
+// 极简图标按钮 — 无背景、无圆角、纯图标 + tooltip
+function IconButton({
+  icon: Icon,
+  onClick,
+  disabled,
+  title,
+  active,
+  className,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  onClick?: () => void
+  disabled?: boolean
+  title?: string
+  active?: boolean
+  className?: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={cn(
+        'w-8 h-8 flex items-center justify-center rounded-md',
+        'text-[var(--color-text-muted)]',
+        'transition-colors duration-150',
+        'disabled:opacity-40 disabled:cursor-not-allowed',
+        active
+          ? 'text-[var(--color-accent)] bg-[var(--color-accent-bg)]'
+          : 'hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]',
+        className
+      )}
+    >
+      <Icon className="w-[18px] h-[18px]" />
+    </button>
+  )
+}
+
+// 导航链接按钮 — 带文字，用于主要导航
+function NavButton({
+  icon: Icon,
+  label,
+  onClick,
+  active,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  onClick?: () => void
+  active?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium',
+        'transition-colors duration-150',
+        active
+          ? 'text-[var(--color-accent)] bg-[var(--color-accent-bg)]'
+          : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]'
+      )}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      <span>{label}</span>
+    </button>
+  )
+}
+
+// 主题切换按钮
+function ThemeToggleButton() {
+  const { themeMode, setThemeMode, resolvedTheme } = useTheme()
+
+  const cycleTheme = () => {
+    const modes: ThemeMode[] = ['light', 'dark', 'system']
+    const currentIndex = modes.indexOf(themeMode)
+    const nextMode = modes[(currentIndex + 1) % modes.length]
+    setThemeMode(nextMode)
+  }
+
+  const ThemeIcon = themeMode === 'system' ? Monitor : resolvedTheme === 'dark' ? Moon : Sun
+
+  return (
+    <IconButton
+      icon={ThemeIcon}
+      onClick={cycleTheme}
+      title={`主题: ${themeMode === 'system' ? '跟随系统' : themeMode === 'dark' ? '深色' : '浅色'}`}
+    />
+  )
+}
 
 export function AppHeader({
   page,
@@ -24,14 +123,15 @@ export function AppHeader({
   onExport,
   onImport,
   onEditInfo,
-  // Agent 页面属性
   onSettings,
   onToggleLogs,
   showLogsPanel = false,
   isRunning = false,
   conversationTitle,
+  onGoToAgent,
+  onGoToEditor,
+  onGoToWelcome,
 }: AppHeaderProps) {
-  // Platform detection
   const isMac = useMemo(() => window.electronAPI.platform.isMac(), [])
 
   const showWorkflowActions = page === 'editor'
@@ -58,11 +158,9 @@ export function AppHeader({
 
   const handleChangeDefaultPath = async () => {
     if (isChangingPath) return
-
     setIsChangingPath(true)
     try {
       const selectedPath = await window.electronAPI.workspace.selectCustomProjectsPath()
-
       if (selectedPath) {
         await window.electronAPI.workspace.setCustomProjectsPath(selectedPath)
         setDefaultProjectsPath(selectedPath)
@@ -75,344 +173,184 @@ export function AppHeader({
     }
   }
 
-  // macOS layout
-  if (isMac) {
-    return (
-      <header
-        className="fixed top-0 left-[72px] right-4 z-20 h-14 flex items-center"
-        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-      >
-        {/* Left section: Logo */}
+  // macOS drag region offset
+  const macOSLeftOffset = isMac ? 'left-[72px]' : 'left-0'
+
+  return (
+    <header
+      className={cn(
+        'fixed top-0 right-0 z-30 h-12 flex items-center',
+        macOSLeftOffset,
+        'bg-[var(--color-bg-elevated)]/80 backdrop-blur-md',
+        'border-b border-[var(--color-border-subtle)]'
+      )}
+      style={isMac ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
+    >
+      {/* Left section */}
+      <div className="flex items-center gap-1 px-3">
         {showAgentActions ? (
-          <div className="flex items-center gap-2">
-            <motion.button
-              whileHover={{ x: -2 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={onClose}
-              className={cn(
-                'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg',
-                'text-[var(--color-text-muted)] text-xs font-medium',
-                'bg-[var(--color-bg-elevated)]',
-                'border border-[var(--color-border)]',
-                'hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]',
-                'transition-all duration-200 cursor-pointer'
+          <>
+            {/* Logo — 更 subtle */}
+            <div className="flex items-center gap-2 mr-4">
+              <Sparkles className="w-4 h-4 text-[var(--color-accent)]" />
+              <span className="text-sm font-semibold text-[var(--color-text)] tracking-tight">
+                OllamaFlow
+              </span>
+              {isRunning && (
+                <Loader2 className="w-3 h-3 text-[var(--color-text-muted)] animate-spin" />
               )}
-              title="关闭智能助手"
+            </div>
+
+            {/* 主导航 */}
+            <div className="flex items-center gap-0.5">
+              <NavButton
+                icon={LayoutGrid}
+                label="项目"
+                onClick={onGoToWelcome}
+                active={false}
+              />
+              <NavButton
+                icon={Workflow}
+                label="工具"
+                onClick={onGoToEditor}
+                active={false}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            {/* 返回主页 */}
+            <button
+              onClick={onGoToAgent}
+              className={cn(
+                'flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium',
+                'text-[var(--color-text-muted)]',
+                'hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]',
+                'transition-colors duration-150'
+              )}
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>返回</span>
-            </motion.button>
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[var(--color-accent)]" />
-              <span className="text-sm font-medium">智能助手</span>
-              {isRunning && (
-                <Loader2 className="w-3.5 h-3.5 text-[var(--color-text-muted)] animate-spin" />
+              <span>主页</span>
+            </button>
+
+            {/* 页面标题 */}
+            <div className="ml-3 flex items-center gap-2">
+              {showWorkflowActions && (
+                <>
+                  <Workflow className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)] truncate max-w-[180px]">
+                    {workspaceName}
+                    {isDirty && (
+                      <span className="text-[var(--color-accent)] ml-1">•</span>
+                    )}
+                  </span>
+                </>
+              )}
+              {showWelcomeActions && (
+                <>
+                  <LayoutGrid className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">项目管理</span>
+                </>
               )}
             </div>
-          </div>
-        ) : (
-          <Logo compact onBack={showWorkflowActions ? onClose : undefined} />
+          </>
+        )}
+      </div>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Center — 对话标题 (Agent only, 更 subtle) */}
+      {showAgentActions && conversationTitle && (
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <span className="text-xs text-[var(--color-text-muted)] truncate max-w-[200px]">
+            {conversationTitle}
+          </span>
+        </div>
+      )}
+
+      {/* Right section */}
+      <div className="flex items-center gap-0.5 px-3">
+        {showWorkflowActions && (
+          <>
+            <WorkflowActions
+              workspaceName={workspaceName}
+              workspaceDescription={workspaceDescription}
+              isDirty={isDirty}
+              executionStatus={executionStatus}
+              saveActive={saveActive}
+              onSave={onSave!}
+              onExecute={onExecute!}
+              onExport={onExport}
+              onImport={onImport}
+              onEditInfo={onEditInfo}
+            />
+            <div className="w-px h-4 bg-[var(--color-border-subtle)] mx-1" />
+          </>
         )}
 
-        {/* Flexible spacer */}
-        <div className="flex-1" />
-
-        {/* Center section: Conversation Title (Agent only) */}
-        {showAgentActions && conversationTitle && (
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-            <h1 className="text-sm font-medium text-[var(--color-text)] truncate max-w-[200px]">
-              {conversationTitle}
-            </h1>
-          </div>
+        {showWelcomeActions && (
+          <>
+            <GlobalAIConfigButton />
+            <button
+              onClick={handleChangeDefaultPath}
+              disabled={isChangingPath}
+              className={cn(
+                'flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium',
+                'text-[var(--color-text-muted)]',
+                'hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]',
+                'transition-colors duration-150',
+                'disabled:opacity-40 disabled:cursor-not-allowed'
+              )}
+              title={`默认保存位置: ${defaultProjectsPath}`}
+            >
+              {isChangingPath ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Settings className="w-3.5 h-3.5" />
+              )}
+              <span>路径</span>
+            </button>
+            <div className="w-px h-4 bg-[var(--color-border-subtle)] mx-1" />
+            <OllamaStatus />
+          </>
         )}
 
-        {/* Flexible spacer */}
-        <div className="flex-1" />
+        {showAgentActions && (
+          <>
+            <IconButton
+              icon={Settings}
+              onClick={onSettings}
+              title="设置"
+            />
+          </>
+        )}
 
-        {/* Right section */}
-        <motion.div
-          initial={{ opacity: 0, x: 10 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-1"
-        >
-          {showWorkflowActions && (
-            <>
-              <WorkflowActions
-                workspaceName={workspaceName}
-                workspaceDescription={workspaceDescription}
-                isDirty={isDirty}
-                executionStatus={executionStatus}
-                saveActive={saveActive}
-                onSave={onSave!}
-                onExecute={onExecute!}
-                onExport={onExport}
-                onImport={onImport}
-                onEditInfo={onEditInfo}
-              />
-              <div className="w-px h-4 bg-[var(--color-border-subtle)] mx-1" />
-            </>
-          )}
+        <ThemeToggleButton />
 
-          {showWelcomeActions && (
-            <>
-              <GlobalAIConfigButton />
-              <motion.button
-                onClick={handleChangeDefaultPath}
-                disabled={isChangingPath}
-                className={cn(
-                  'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium',
-                  'text-[var(--color-text-muted)]',
-                  'hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]',
-                  'transition-all duration-200',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
-                )}
-                whileHover={{ scale: isChangingPath ? 1 : 1.02 }}
-                whileTap={{ scale: isChangingPath ? 1 : 0.98 }}
-                title={`默认保存位置: ${defaultProjectsPath}`}
-              >
-                {isChangingPath ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Settings className="w-3.5 h-3.5" />
-                )}
-                <span className="hidden sm:inline">路径</span>
-              </motion.button>
-              <div className="w-px h-4 bg-[var(--color-border-subtle)] mx-1" />
-              <OllamaStatus />
-            </>
-          )}
+        {showAgentActions && (
+          <>
+            <div className="w-px h-4 bg-[var(--color-border-subtle)] mx-1" />
+            <IconButton
+              icon={PanelLeft}
+              onClick={onToggleLogs}
+              title={showLogsPanel ? '隐藏面板' : '显示面板'}
+              active={showLogsPanel}
+            />
+          </>
+        )}
 
-          {showAgentActions && (
-            <>
-              <div className="w-px h-4 bg-[var(--color-border-subtle)] mx-1" />
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={onSettings}
-                className={cn(
-                  'w-8 h-8 rounded-lg flex items-center justify-center',
-                  'text-[var(--color-text-muted)]',
-                  'hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]',
-                  'transition-all duration-200'
-                )}
-                title="设置"
-              >
-                <Settings className="w-4 h-4" />
-              </motion.button>
-            </>
-          )}
-
-          <ThemeToggle />
-
-          {showAgentActions && (
-            <>
-              <div className="w-px h-4 bg-[var(--color-border-subtle)] mx-1" />
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={onToggleLogs}
-                className={cn(
-                  'w-8 h-8 rounded-lg flex items-center justify-center',
-                  'transition-all duration-200',
-                  showLogsPanel
-                    ? 'bg-[var(--color-accent-bg)] text-[var(--color-accent)]'
-                    : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]'
-                )}
-                title={showLogsPanel ? '隐藏面板' : '显示面板'}
-              >
-                <PanelLeft className="w-4 h-4" />
-              </motion.button>
-            </>
-          )}
-
-          {showWorkflowActions && (
-            <>
-              <div className="w-px h-4 bg-[var(--color-border-subtle)] mx-1" />
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={toggleSidePanel}
-                title="面板 (⌘1)"
-                className={cn(
-                  'w-8 h-8 rounded-lg flex items-center justify-center',
-                  'transition-all duration-200',
-                  sidePanelVisible
-                    ? 'bg-[var(--color-accent-bg)] text-[var(--color-accent)]'
-                    : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]'
-                )}
-              >
-                <PanelLeft className="w-4 h-4" />
-              </motion.button>
-            </>
-          )}
-        </motion.div>
-      </header>
-    )
-  }
-
-  // Windows/Linux: Floating card layout
-  return (
-    <header className="fixed top-4 left-4 right-4 z-20">
-      <div className="max-w-5xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className={cn(
-            'flex items-center justify-between px-4 py-2.5 rounded-2xl',
-            'glass-floating',
-            'transition-all duration-300'
-          )}
-        >
-          {/* Logo section */}
-          {showAgentActions ? (
-            <div className="flex items-center gap-2">
-              <motion.button
-                whileHover={{ x: -2 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={onClose}
-                className={cn(
-                  'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg',
-                  'text-[var(--color-text-muted)] text-xs font-medium',
-                  'bg-[var(--color-bg-elevated)]',
-                  'border border-[var(--color-border)]',
-                  'hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]',
-                  'transition-all duration-200 cursor-pointer'
-                )}
-                title="关闭智能助手"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>返回</span>
-              </motion.button>
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[var(--color-accent)]" />
-                <span className="text-sm font-medium">智能助手</span>
-                {isRunning && (
-                  <Loader2 className="w-3.5 h-3.5 text-[var(--color-text-muted)] animate-spin" />
-                )}
-              </div>
-            </div>
-          ) : (
-            <Logo onBack={showWorkflowActions ? onClose : undefined} />
-          )}
-
-          {/* Right controls */}
-          <motion.div
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-1.5"
-          >
-            {showWorkflowActions && (
-              <>
-                <WorkflowActions
-                  workspaceName={workspaceName}
-                  workspaceDescription={workspaceDescription}
-                  isDirty={isDirty}
-                  executionStatus={executionStatus}
-                  saveActive={saveActive}
-                  onSave={onSave!}
-                  onExecute={onExecute!}
-                  onExport={onExport}
-                  onImport={onImport}
-                  onEditInfo={onEditInfo}
-                />
-                <div className="w-px h-5 bg-[var(--color-border-subtle)] mx-1" />
-              </>
-            )}
-
-            {showWelcomeActions && (
-              <>
-                <GlobalAIConfigButton />
-                <motion.button
-                  onClick={handleChangeDefaultPath}
-                  disabled={isChangingPath}
-                  className={cn(
-                    'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium',
-                    'text-[var(--color-text-muted)]',
-                    'hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]',
-                    'transition-all duration-200',
-                    'disabled:opacity-50 disabled:cursor-not-allowed'
-                  )}
-                  whileHover={{ scale: isChangingPath ? 1 : 1.02 }}
-                  whileTap={{ scale: isChangingPath ? 1 : 0.98 }}
-                  title={`默认保存位置: ${defaultProjectsPath}`}
-                >
-                  {isChangingPath ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Settings className="w-3.5 h-3.5" />
-                  )}
-                  <span className="hidden sm:inline">路径</span>
-                </motion.button>
-                <div className="w-px h-5 bg-[var(--color-border-subtle)] mx-1" />
-                <OllamaStatus />
-              </>
-            )}
-
-            {showAgentActions && (
-              <>
-                <div className="w-px h-5 bg-[var(--color-border-subtle)] mx-1" />
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={onSettings}
-                  className={cn(
-                    'w-8 h-8 rounded-lg flex items-center justify-center',
-                    'text-[var(--color-text-muted)]',
-                    'hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]',
-                    'transition-all duration-200'
-                  )}
-                  title="设置"
-                >
-                  <Settings className="w-4 h-4" />
-                </motion.button>
-              </>
-            )}
-
-            <ThemeToggle />
-
-            {showAgentActions && (
-              <>
-                <div className="w-px h-5 bg-[var(--color-border-subtle)] mx-1" />
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={onToggleLogs}
-                  className={cn(
-                    'w-8 h-8 rounded-lg flex items-center justify-center',
-                    'transition-all duration-200',
-                    showLogsPanel
-                      ? 'bg-[var(--color-accent-bg)] text-[var(--color-accent)]'
-                      : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]'
-                  )}
-                  title={showLogsPanel ? '隐藏面板' : '显示面板'}
-                >
-                  <PanelLeft className="w-4 h-4" />
-                </motion.button>
-              </>
-            )}
-
-            {showWorkflowActions && (
-              <>
-                <div className="w-px h-5 bg-[var(--color-border-subtle)] mx-1" />
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={toggleSidePanel}
-                  title="面板 (⌘1)"
-                  className={cn(
-                    'w-8 h-8 rounded-lg flex items-center justify-center',
-                    'transition-all duration-200',
-                    sidePanelVisible
-                      ? 'bg-[var(--color-accent-bg)] text-[var(--color-accent)]'
-                      : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text)]'
-                  )}
-                >
-                  <PanelLeft className="w-4 h-4" />
-                </motion.button>
-              </>
-            )}
-          </motion.div>
-        </motion.div>
+        {showWorkflowActions && (
+          <>
+            <div className="w-px h-4 bg-[var(--color-border-subtle)] mx-1" />
+            <IconButton
+              icon={PanelLeft}
+              onClick={toggleSidePanel}
+              title="面板 (⌘1)"
+              active={sidePanelVisible}
+            />
+          </>
+        )}
       </div>
     </header>
   )

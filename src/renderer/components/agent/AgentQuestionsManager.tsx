@@ -1,6 +1,6 @@
 /**
- * Agent 子工作流用户输入管理器
- * 处理 Agent 调用的子工作流中的用户输入请求
+ * Agent SubAgent 用户输入管理器
+ * 处理 Agent 调用的 SubAgent 中的用户输入请求
  */
 import { useState, useCallback } from 'react'
 import { AnimatePresence } from 'framer-motion'
@@ -50,7 +50,7 @@ export default function AgentQuestionsManager() {
     setIsSubmitting(true)
 
     try {
-      // 获取工作区配置
+      // 获取项目配置
       const config = await window.electronAPI.workspace.readConfig(workspacePath)
 
       // 获取节点数据
@@ -130,7 +130,7 @@ export default function AgentQuestionsManager() {
         throw new Error('执行上下文不存在')
       }
 
-      // 获取工作区配置
+      // 获取项目配置
       const config = await window.electronAPI.workspace.readConfig(workspacePath)
 
       // 获取节点数据
@@ -205,7 +205,7 @@ export default function AgentQuestionsManager() {
   }, [pendingQuestion])
 
   // 如果没有待处理的问题，不渲染任何内容
-  // 注意：不再检查 isRunning，因为子工作流可能等待用户输入而主 Agent 已经完成
+  // 注意：不再检查 isRunning，因为 SubAgent 可能等待用户输入而主 Agent 已经完成
   if (!pendingQuestion) {
     return null
   }

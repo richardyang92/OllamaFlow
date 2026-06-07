@@ -154,7 +154,7 @@ function SubAgentProgressPanel({ progress }: { progress: SubAgentProgress }) {
 
   return (
     <div className="border-t border-[var(--color-border-subtle)]">
-      {/* 紧凑的单行进度栏：工作流名 + 状态 + 进度 + 当前节点 */}
+      {/* 紧凑的单行进度栏：SubAgent 名 + 状态 + 进度 + 当前节点 */}
       <div className="px-3 py-2 bg-[var(--color-bg-hover)] flex items-center gap-2">
         <Workflow className="w-3.5 h-3.5 text-[var(--color-text-muted)] flex-shrink-0" />
         <span className="text-xs text-[var(--color-text-muted)] font-medium truncate">
@@ -298,7 +298,7 @@ export const ToolCallBlock = memo(function ToolCallBlock({
             subAgentProgress.status === 'error' && 'bg-red-500/10 text-red-600',
           )}>
             <Workflow className="w-3 h-3 flex-shrink-0" />
-            {/* 工作流名称 + 进度 */}
+            {/* SubAgent 名称 + 进度 */}
             <span className="truncate max-w-[200px]">
               {subAgentProgress.workflowName}
               {subAgentProgress.totalNodes && subAgentProgress.totalNodes > 0 && (
@@ -352,7 +352,7 @@ export const ToolCallBlock = memo(function ToolCallBlock({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            {/* SubAgent 进度 - 展示工作流执行进度 */}
+            {/* SubAgent 进度 - 展示 SubAgent 执行进度 */}
             {toolCall.subAgentProgress && (
               <SubAgentProgressPanel progress={toolCall.subAgentProgress} />
             )}

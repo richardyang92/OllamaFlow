@@ -16,6 +16,8 @@ interface WorkspaceState {
   isLoading: boolean
   error: string | null
   currentPage: AppPage
+  // 导航状态：是否显示侧边导航栏
+  showNavigation: boolean
 
   // Actions
   setCurrentWorkspace: (path: string, config: WorkspaceConfig) => void
@@ -26,6 +28,12 @@ interface WorkspaceState {
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   setCurrentPage: (page: AppPage) => void
+  setShowNavigation: (show: boolean) => void
+  // 便捷导航方法
+  goToAgent: () => void
+  goToEditor: () => void
+  goToWelcome: () => void
+  goToWizard: () => void
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
@@ -33,7 +41,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   recentWorkspaces: [],
   isLoading: false,
   error: null,
-  currentPage: 'welcome',
+  currentPage: 'agent',
+  showNavigation: true,
 
   setCurrentWorkspace: (path, config) => {
     log('setCurrentWorkspace', { path, name: config.name })
@@ -81,4 +90,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setError: (error) => set({ error }),
 
   setCurrentPage: (page) => set({ currentPage: page }),
+
+  setShowNavigation: (show) => set({ showNavigation: show }),
+
+  goToAgent: () => set({ currentPage: 'agent' }),
+
+  goToEditor: () => set({ currentPage: 'editor' }),
+
+  goToWelcome: () => set({ currentPage: 'welcome' }),
+
+  goToWizard: () => set({ currentPage: 'wizard' }),
 }))

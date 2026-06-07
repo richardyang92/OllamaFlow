@@ -188,7 +188,7 @@ export function WorkspaceCard({
                     'hover:bg-red-500/10 hover:text-red-400',
                     'transition-all duration-150'
                   )}
-                  title="删除工作区"
+                  title="删除项目"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </motion.button>

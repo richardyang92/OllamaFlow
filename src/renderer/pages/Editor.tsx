@@ -149,10 +149,10 @@ function EditorContent() {
         if (executionId) {
           useExecutionStore.getState().addLog(executionId, {
             level: 'info',
-            message: '工作流保存成功',
+            message: 'SubAgent 保存成功',
           })
         }
-        setSaveFeedback('工作流保存成功')
+        setSaveFeedback('SubAgent 保存成功')
         setTimeout(() => setSaveFeedback(null), 2000)
         markClean()
         const elapsed = Date.now() - startTime
@@ -166,12 +166,12 @@ function EditorContent() {
         throw new Error('保存返回失败')
       }
     } catch (error) {
-      console.error('保存工作流失败:', error)
+      console.error('保存 SubAgent 失败:', error)
       const executionId = useExecutionStore.getState().getActiveExecution(currentWorkspace.path)
       if (executionId) {
         useExecutionStore.getState().addLog(executionId, {
           level: 'error',
-          message: `保存工作流失败: ${error instanceof Error ? error.message : String(error)}`,
+          message: `保存 SubAgent 失败: ${error instanceof Error ? error.message : String(error)}`,
         })
       }
       setSaveActive(false)
@@ -190,7 +190,7 @@ function EditorContent() {
     }
     clearCurrentWorkspace()
     useWorkflowStore.getState().clearWorkflow()
-    setCurrentPage('welcome')
+    setCurrentPage('agent')
   }, [isDirty, clearCurrentWorkspace, executionStatus, setCurrentPage, currentWorkspace])
 
   const handleExecute = useCallback(async () => {
@@ -211,7 +211,7 @@ function EditorContent() {
         if (executionId) {
           useExecutionStore.getState().addLog(executionId, {
             level: 'warn',
-            message: '没有可执行的节点。请先添加节点到工作流。',
+            message: '没有可执行的节点。请先添加节点到 SubAgent。',
           })
         }
         return
@@ -308,7 +308,7 @@ function EditorContent() {
 
     const filePath = await window.electronAPI.workflow.export(JSON.stringify(exportData, null, 2))
     if (filePath) {
-      setSaveFeedback('工作流导出成功')
+      setSaveFeedback('SubAgent 导出成功')
       setTimeout(() => setSaveFeedback(null), 2000)
     }
   }, [workflow])
@@ -335,12 +335,12 @@ function EditorContent() {
           edges,
         }
         useWorkflowStore.getState().setWorkflow(updatedWorkflow)
-        setSaveFeedback('工作流导入成功')
+        setSaveFeedback('SubAgent 导入成功')
         setTimeout(() => setSaveFeedback(null), 2000)
       }
     } catch (error) {
-      console.error('导入工作流失败:', error)
-      setSaveFeedback('导入失败：无效的工作流文件')
+      console.error('导入 SubAgent 失败:', error)
+      setSaveFeedback('导入失败：无效的 SubAgent 文件')
       setTimeout(() => setSaveFeedback(null), 2000)
     }
   }, [currentWorkspace, workflow])
@@ -399,10 +399,10 @@ function EditorContent() {
         }
       }
 
-      setSaveFeedback('工作流信息已更新')
+      setSaveFeedback('SubAgent 信息已更新')
       setTimeout(() => setSaveFeedback(null), 2000)
     } catch (error) {
-      console.error('更新工作流信息失败:', error)
+      console.error('更新 SubAgent 信息失败:', error)
       setSaveFeedback('更新失败')
       setTimeout(() => setSaveFeedback(null), 2000)
     }
@@ -423,10 +423,11 @@ function EditorContent() {
         onExport={handleExport}
         onImport={handleImport}
         onEditInfo={handleEditInfo}
+        onGoToAgent={() => setCurrentPage('agent')}
       />
 
       {/* Main content area - fixed positioning below header */}
-      <div className="fixed inset-0 top-14 flex overflow-hidden">
+      <div className="fixed inset-0 top-12 flex overflow-hidden">
         {/* Canvas container - shrinks when panel is open */}
         <motion.div
           className="h-full overflow-hidden relative"

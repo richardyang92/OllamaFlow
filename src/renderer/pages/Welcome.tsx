@@ -318,14 +318,16 @@ export default function WelcomePage() {
           setWorkflow(createEmptyWorkflow(config.name))
         }
 
+        setCurrentPage('editor')
+
         const updatedRecentWorkspaces = await window.electronAPI.recent.get()
         setRecentWorkspaces(updatedRecentWorkspaces)
       } else {
-        alert('该目录不是有效的 OllamaFlow 工作区\n\n请选择包含 .ollamaflow/config.json 的目录，或创建新项目')
+        alert('该目录不是有效的 OllamaFlow 项目\n\n请选择包含 .ollamaflow/config.json 的目录，或创建新项目')
       }
     } catch (error) {
-      console.error('打开工作区失败:', error)
-      alert('打开工作区失败')
+      console.error('打开项目失败:', error)
+      alert('打开项目失败')
     } finally {
       setIsLoading(false)
     }
@@ -373,7 +375,7 @@ export default function WelcomePage() {
       })
 
       if (!result) {
-        alert('创建工作区失败')
+        alert('创建项目失败')
         return
       }
 
@@ -387,7 +389,7 @@ export default function WelcomePage() {
 
     } catch (error) {
       console.error('从文件导入失败:', error)
-      alert('导入失败：无效的工作流文件')
+      alert('导入失败：无效的 SubAgent 文件')
     } finally {
       setIsImporting(false)
     }
@@ -426,20 +428,22 @@ export default function WelcomePage() {
           setWorkflow(createEmptyWorkflow(config.name))
         }
 
+        setCurrentPage('editor')
+
         const updatedRecentWorkspaces = await window.electronAPI.recent.get()
         setRecentWorkspaces(updatedRecentWorkspaces)
       } else {
         await window.electronAPI.recent.remove(path)
         const updatedRecentWorkspaces = await window.electronAPI.recent.get()
         setRecentWorkspaces(updatedRecentWorkspaces)
-        alert('工作区不存在或已被删除')
+        alert('项目不存在或已被删除')
       }
     } catch (error) {
-      console.error('打开最近工作区失败:', error)
+      console.error('打开最近项目失败:', error)
       await window.electronAPI.recent.remove(path)
       const updatedRecentWorkspaces = await window.electronAPI.recent.get()
       setRecentWorkspaces(updatedRecentWorkspaces)
-      alert('工作区不存在或已被删除')
+      alert('项目不存在或已被删除')
     } finally {
       setIsLoading(false)
     }
@@ -463,11 +467,11 @@ export default function WelcomePage() {
         const updatedRecentWorkspaces = await window.electronAPI.recent.get()
         setRecentWorkspaces(updatedRecentWorkspaces)
       } else {
-        alert(`删除工作区失败: ${result.error || '未知错误'}`)
+        alert(`删除项目失败: ${result.error || '未知错误'}`)
       }
     } catch (error) {
-      console.error('删除工作区失败:', error)
-      alert('删除工作区失败')
+      console.error('删除项目失败:', error)
+      alert('删除项目失败')
     } finally {
       setIsDeleting(false)
       setDeleteConfirmWorkspace(null)
@@ -484,9 +488,8 @@ export default function WelcomePage() {
            window.electronAPI?.platform?.isMac?.()
   }, [])
 
-  // macOS: content starts lower (pt-20) since toolbar is at top-0
-  // Windows/Linux: content needs more space (pt-28) for floating toolbar
-  const welcomePaddingTop = isMac ? 'pt-20' : 'pt-28'
+  // Content padding — 顶栏高度 48px + 间距
+  const welcomePaddingTop = 'pt-16'
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] overflow-hidden">
@@ -495,13 +498,13 @@ export default function WelcomePage() {
       {/* macOS style drag region - only on macOS, positioned to not overlap with toolbar buttons */}
       {isMac && (
         <div
-          className="fixed top-0 left-0 w-[72px] h-14 z-30"
+          className="fixed top-0 left-0 w-[72px] h-12 z-30"
           style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
         />
       )}
 
       {/* Platform-aware toolbar */}
-      <AppHeader page="welcome" />
+      <AppHeader page="welcome" onGoToAgent={() => setCurrentPage('agent')} />
 
       {/* Main content area */}
       <div className="relative z-10">
@@ -513,10 +516,10 @@ export default function WelcomePage() {
           className={`max-w-5xl mx-auto px-6 ${welcomePaddingTop} pb-8`}
         >
           <h1 className="text-3xl font-bold text-[var(--color-text)] mb-2">
-            欢迎
+            项目管理
           </h1>
           <p className="text-[var(--color-text-muted)] text-lg">
-            选择一个项目开始，或创建新的工作流
+            管理您的项目和 SubAgent，或创建新的 SubAgent
           </p>
         </motion.div>
 
@@ -573,12 +576,10 @@ export default function WelcomePage() {
         </div>
       </motion.div>
 
-      <AgentFloatingButton onClick={() => setCurrentPage('agent')} />
-
       <ConfirmDialog
         isOpen={deleteConfirmWorkspace !== null}
-        title="删除工作区"
-        message={`确定要删除工作区「${deleteConfirmWorkspace?.name || ''}」吗？\n\n此操作将彻底删除文件夹及其所有内容，且无法恢复。`}
+        title="删除项目"
+        message={`确定要删除项目「${deleteConfirmWorkspace?.name || ''}」吗？\n\n此操作将彻底删除文件夹及其所有内容，且无法恢复。`}
         confirmText={isDeleting ? '删除中...' : '删除'}
         cancelText="取消"
         variant="danger"

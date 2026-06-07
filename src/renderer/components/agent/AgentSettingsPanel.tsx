@@ -331,7 +331,7 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                 {/* Workflows */}
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium">可用工作流</label>
+                    <label className="text-sm font-medium">可用 SubAgent</label>
                     <button
                       onClick={handleRefreshWorkflows}
                       className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
@@ -343,7 +343,7 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                   <div className="space-y-2 max-h-32 overflow-y-auto">
                     {availableWorkflows.length === 0 ? (
                       <p className="text-xs text-[var(--color-text-muted)]">
-                        暂无可用工作流，请先打开一些工作区
+                        暂无可用 SubAgent，请先打开一些项目
                       </p>
                     ) : (
                       availableWorkflows.map((w) => (

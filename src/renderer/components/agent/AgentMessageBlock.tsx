@@ -202,7 +202,7 @@ function ToolCallCard({ toolCall }: { toolCall: ToolCallRecord }) {
   const isWorkflow = toolCall.toolName.startsWith('workflow_')
   const [expanded, setExpanded] = useState(isWorkflow)
 
-  // 获取工作流名称
+  // 获取 SubAgent 名称
   const workflowName = isWorkflow
     ? (toolCall.subAgentProgress?.workflowName || toolCall.metadata?.workflowPath?.split('/').pop() || toolCall.toolName)
     : null

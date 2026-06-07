@@ -63,7 +63,7 @@ export default function ImageProperties({ node, updateNodeData }: Props) {
           <div>显示指定变量的值作为图片URL，变量由"设置变量"节点设置</div>
         )}
         <div className="mt-2 pt-2 border-t border-[var(--color-border-subtle)]">
-          <div>支持 HTTP/HTTPS URL 或工作区内的本地文件路径</div>
+          <div>支持 HTTP/HTTPS URL 或项目内的本地文件路径</div>
         </div>
       </div>
     </div>

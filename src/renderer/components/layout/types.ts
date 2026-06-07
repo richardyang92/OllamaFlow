@@ -22,6 +22,10 @@ export interface AppHeaderProps {
   showLogsPanel?: boolean
   isRunning?: boolean
   conversationTitle?: string
+  // 导航回调
+  onGoToAgent?: () => void
+  onGoToEditor?: () => void
+  onGoToWelcome?: () => void
 }
 
 export interface AppHeaderButtonProps {

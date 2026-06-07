@@ -77,7 +77,7 @@ export default function NewProjectWizard() {
   }
 
   const handleCancel = () => {
-    setCurrentPage('welcome')
+    setCurrentPage('agent')
   }
 
   const handleCreate = async () => {
@@ -183,9 +183,9 @@ export default function NewProjectWizard() {
       <div className="w-full max-w-2xl relative z-10">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-[var(--color-text)] mb-2">
-            新建项目
+            新建 SubAgent
           </h1>
-          <p className="text-[var(--color-text-muted)]">创建一个新的工作区</p>
+          <p className="text-[var(--color-text-muted)]">创建一个新的 SubAgent 项目</p>
         </div>
 
         <div className="flex items-center justify-center gap-2 mb-8">

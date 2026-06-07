@@ -115,7 +115,7 @@ function EmptyCanvasState() {
             <Target className="w-8 h-8 text-[var(--color-text-muted)]" />
           </div>
 
-          <h2 className="text-xl font-bold text-[var(--color-text)] mb-3">开始构建工作流</h2>
+          <h2 className="text-xl font-bold text-[var(--color-text)] mb-3">开始构建 SubAgent</h2>
           <div className="text-[var(--color-text-muted)] mb-6 space-y-1">
             <p>点击工具栏的<span className="text-[var(--color-text)] inline-flex items-center gap-1"><Blocks className="w-[16px] h-[16px] mx-[4px]" /></span>按钮打开节点面板</p>
             <p>拖拽节点到画布，连接它们创建自动化流程</p>
@@ -135,7 +135,7 @@ function EmptyCanvasState() {
                 <ArrowDownToLine className="w-4 h-4 text-[var(--color-accent)]" />
               </div>
               <div className="text-sm font-semibold text-[var(--color-text)] mb-0.5">添加输入</div>
-              <div className="text-xs text-[var(--color-text-muted)]">开始工作流的数据</div>
+              <div className="text-xs text-[var(--color-text-muted)]">开始 SubAgent 的数据</div>
             </div>
             <div className={cn(
               'p-3 rounded-xl transition-all duration-300',
@@ -188,7 +188,7 @@ function EmptyCanvasState() {
                 { num: '1', label: '打开面板' },
                 { num: '2', label: '拖拽节点' },
                 { num: '3', label: '连接端口' },
-                { num: '4', label: '执行工作流' },
+                { num: '4', label: '执行 SubAgent' },
               ].map((step, i) => (
                 <span key={step.num} className="flex items-center gap-1.5">
                   <span className={cn(

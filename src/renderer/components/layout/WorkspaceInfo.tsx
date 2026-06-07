@@ -96,7 +96,7 @@ export function WorkspaceInfo({
             )}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            title="编辑工作流信息"
+            title="编辑 SubAgent 信息"
           >
             <Pencil className="w-3 h-3" />
           </motion.button>

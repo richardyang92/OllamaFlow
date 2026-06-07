@@ -121,10 +121,10 @@ export default function InputDialog({ nodes, onSubmit, onCancel }: Props) {
         <div className="px-5 py-4 border-b border-[var(--color-border-subtle)]">
           <div className="flex items-center gap-2">
             <ArrowDownToLine className="w-5 h-5 text-cyan-400" />
-            <h2 className="text-lg font-medium text-[var(--color-text)]">工作流输入</h2>
+            <h2 className="text-lg font-medium text-[var(--color-text)]">SubAgent 输入</h2>
           </div>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            请提供以下输入以执行工作流
+            请提供以下输入以执行 SubAgent
           </p>
         </div>
 
@@ -192,7 +192,7 @@ export default function InputDialog({ nodes, onSubmit, onCancel }: Props) {
               onClick={handleSubmit}
               className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all font-medium"
             >
-              执行工作流
+              执行 SubAgent
             </button>
           </div>
         </div>

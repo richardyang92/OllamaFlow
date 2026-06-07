@@ -92,7 +92,7 @@ export default function ExecutionPanel({
               )}>
                 <ClipboardList className="w-5 h-5 opacity-50" />
               </div>
-              <p className="text-xs">点击「执行」按钮运行工作流</p>
+              <p className="text-xs">点击「执行」按钮运行 SubAgent</p>
             </div>
           ) : (
             <AnimatePresence>
@@ -201,7 +201,7 @@ export default function ExecutionPanel({
             )}>
               <ClipboardList className="w-5 h-5 opacity-50" />
             </div>
-            <p className="text-xs">点击「执行」按钮运行工作流</p>
+            <p className="text-xs">点击「执行」按钮运行 SubAgent</p>
           </div>
         ) : (
           <AnimatePresence>

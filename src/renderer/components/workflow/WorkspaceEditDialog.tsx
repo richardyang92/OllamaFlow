@@ -35,7 +35,7 @@ export function WorkspaceEditDialog({
 
   const handleSubmit = () => {
     if (!name.trim()) {
-      setError('工作流名称不能为空')
+      setError('SubAgent 名称不能为空')
       return
     }
     onSubmit(name.trim(), description.trim())
@@ -74,10 +74,10 @@ export function WorkspaceEditDialog({
         <div className="px-5 py-4 border-b border-[var(--color-border-subtle)]">
           <div className="flex items-center gap-2">
             <Pencil className="w-5 h-5 text-cyan-400" />
-            <h2 className="text-lg font-medium text-[var(--color-text)]">编辑工作流信息</h2>
+            <h2 className="text-lg font-medium text-[var(--color-text)]">编辑 SubAgent 信息</h2>
           </div>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            修改工作流的名称和简介
+            修改 SubAgent 的名称和简介
           </p>
         </div>
 
@@ -95,7 +95,7 @@ export function WorkspaceEditDialog({
                 setName(e.target.value)
                 setError('')
               }}
-              placeholder="输入工作流名称..."
+              placeholder="输入 SubAgent 名称..."
               className={`w-full px-3 py-2 bg-[var(--color-bg-input)] border rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:bg-[var(--color-bg-hover)] transition-all ${
                 error
                   ? 'border-red-500/50 focus:border-red-500/50'
@@ -112,7 +112,7 @@ export function WorkspaceEditDialog({
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="输入工作流简介..."
+              placeholder="输入 SubAgent 简介..."
               rows={3}
               className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all resize-none"
             />
