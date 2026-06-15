@@ -6,6 +6,15 @@
 
 import type { OpenAIMessage } from '../openai-client'
 import { LLMCompressor, type LLMCompressionOptions } from './llm-compressor'
+// ContextConfig / MODEL_CONTEXT_LIMITS / getContextConfig 统一从 @/config/model-config 引入
+// （一处配置，处处生效），此处仅作重导出，保持历史 import 路径不破坏。
+export type {
+  ContextConfig,
+} from '@/config/model-config'
+export {
+  MODEL_CONTEXT_LIMITS as DEFAULT_CONTEXT_CONFIGS,
+  getContextConfig,
+} from '@/config/model-config'
 
 export type GenericMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
@@ -90,19 +99,6 @@ export interface CompressionResult<T = GenericMessage> {
   newTokens: number
   compressionRatio: number
   summary?: string
-}
-
-export interface ContextConfig {
-  maxContextTokens: number
-  reserveTokens: number
-  keepRecentIterations: number
-  maxObservationLength: number
-  enableSummarization: boolean
-  preserveErrors?: boolean
-  preserveMilestones?: boolean
-  maxErrorLength?: number
-  // LLM compression options
-  enableLLMCompression?: boolean
 }
 
 // Extended compression options including LLM config
@@ -353,81 +349,6 @@ export function truncateObservations(
     }
     return msg
   })
-}
-
-export const DEFAULT_CONTEXT_CONFIGS: Record<string, ContextConfig> = {
-  'gpt-4': {
-    maxContextTokens: 8000,
-    reserveTokens: 1000,
-    keepRecentIterations: 3,
-    maxObservationLength: 1500,
-    enableSummarization: true,
-    preserveErrors: true,
-  },
-  'gpt-4-turbo': {
-    maxContextTokens: 120000,
-    reserveTokens: 4000,
-    keepRecentIterations: 5,
-    maxObservationLength: 2000,
-    enableSummarization: true,
-    preserveErrors: true,
-  },
-  'gpt-4o': {
-    maxContextTokens: 120000,
-    reserveTokens: 4000,
-    keepRecentIterations: 5,
-    maxObservationLength: 2000,
-    enableSummarization: true,
-    preserveErrors: true,
-  },
-  'gpt-3.5-turbo': {
-    maxContextTokens: 4000,
-    reserveTokens: 500,
-    keepRecentIterations: 2,
-    maxObservationLength: 1000,
-    enableSummarization: true,
-    preserveErrors: true,
-  },
-  'deepseek-chat': {
-    maxContextTokens: 60000,
-    reserveTokens: 4000,
-    keepRecentIterations: 5,
-    maxObservationLength: 2000,
-    enableSummarization: true,
-    preserveErrors: true,
-  },
-  'deepseek-reasoner': {
-    maxContextTokens: 60000,
-    reserveTokens: 4000,
-    keepRecentIterations: 4,
-    maxObservationLength: 1500,
-    enableSummarization: true,
-    preserveErrors: true,
-  },
-  'default': {
-    maxContextTokens: 100000,
-    reserveTokens: 4000,
-    keepRecentIterations: 4,
-    maxObservationLength: 1500,
-    enableSummarization: true,
-    preserveErrors: true,
-  }
-}
-
-export function getContextConfig(model: string): ContextConfig {
-  const normalizedModel = model.toLowerCase()
-
-  if (DEFAULT_CONTEXT_CONFIGS[normalizedModel]) {
-    return DEFAULT_CONTEXT_CONFIGS[normalizedModel]
-  }
-
-  for (const [key, config] of Object.entries(DEFAULT_CONTEXT_CONFIGS)) {
-    if (normalizedModel.includes(key) || key.includes(normalizedModel.split('-')[0])) {
-      return config
-    }
-  }
-
-  return DEFAULT_CONTEXT_CONFIGS.default
 }
 
 /**

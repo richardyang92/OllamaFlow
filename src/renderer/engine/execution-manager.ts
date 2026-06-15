@@ -2,6 +2,7 @@ import type { Node, Edge } from '@xyflow/react'
 import type { WorkflowNodeData } from '@/types/node'
 import { WorkflowExecutor } from './executor'
 import { useExecutionStore } from '@/store/execution-store'
+import { DEFAULT_ENDPOINTS } from '@/config/model-config'
 
 interface ExecutionInstance {
   executionId: string
@@ -19,7 +20,7 @@ class ExecutionManager {
     workspacePath: string,
     nodes: Node<WorkflowNodeData>[],
     edges: Edge[],
-    apiEndpoint: string = 'http://127.0.0.1:11434',
+    apiEndpoint: string = DEFAULT_ENDPOINTS.ollama,
     userInputValues?: Record<string, string>,
     apiKey?: string
   ): Promise<boolean> {

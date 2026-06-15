@@ -14,7 +14,8 @@ import {
   getContextConfig,
   type HybridCompressionOptions
 } from '../react-agent/context-compressor'
-import { resolveAIConfig } from '../config-resolver'
+import { resolveAIConfig, resolveModel } from '../config-resolver'
+import { INTERNAL_LLM_PARAMS } from '@/config/model-config'
 import {
   validateToolParams,
   formatValidationErrors,
@@ -843,8 +844,7 @@ ${keyObservations || '（无关键结果）'}
     const response = await client.chat({
       model,
       messages: summaryMessages,
-      temperature: 0.3,
-      max_tokens: 4000, // 大幅增加 token 限制以保留完整信息
+      ...INTERNAL_LLM_PARAMS.summarization,
     })
     return response.content || `任务已完成 ${todosStatus.completed} 个步骤。`
   } catch (error) {
@@ -888,6 +888,12 @@ async function executeReAct(
   const apiKey = aiConfig.apiKey || 'ollama' // Ollama doesn't require API key, use placeholder
   const apiEndpoint = aiConfig.apiEndpoint
 
+  // 解析最终使用的模型：节点未配置时回退到全局默认模型
+  const model = resolveModel(data.model)
+  if (!model) {
+    throw new Error('未配置模型：请在节点中设置模型，或在全局配置中设置默认模型')
+  }
+
   const client = new OpenAIClient(apiKey, apiEndpoint)
 
   // Initialize TodosManager
@@ -930,7 +936,7 @@ async function executeReAct(
     nodeId: node.id,
     nodeName: data.label,
     level: 'info',
-    message: `开始 ReAct 智能体执行，最大迭代: ${maxIterations}，模型: ${data.model}`,
+    message: `开始 ReAct 智能体执行，最大迭代: ${maxIterations}，模型: ${model}`,
   })
 
   // Build system prompt with rules
@@ -943,7 +949,7 @@ async function executeReAct(
   ]
 
   // Get context configuration for the model
-  const contextConfig = getContextConfig(data.model)
+  const contextConfig = getContextConfig(model)
   const maxContextTokens = contextConfig.maxContextTokens - contextConfig.reserveTokens
 
   while (iteration < maxIterations && !finalAnswer) {
@@ -977,7 +983,7 @@ async function executeReAct(
         enableSummarization: contextConfig.enableSummarization,
         enableLLMCompression: contextConfig.enableLLMCompression ?? true,
         llmOptions: {
-          model: data.model,
+          model: model,
           apiEndpoint: apiEndpoint,
           apiKey: apiKey,
           // 根据 apiEndpoint 判断 provider
@@ -1084,7 +1090,7 @@ async function executeReAct(
         // Streaming call with real-time content display
         response = await client.chatStreamWithTools(
           {
-            model: data.model,
+            model: model,
             messages,
             temperature: data.temperature,
             max_tokens: data.maxTokens,
@@ -1133,7 +1139,7 @@ async function executeReAct(
       } else {
         // Non-streaming call
         response = await client.chat({
-          model: data.model,
+          model: model,
           messages,
           temperature: data.temperature,
           max_tokens: data.maxTokens,
@@ -1219,7 +1225,7 @@ async function executeReAct(
           const reactState = executionStore.getReActState(context.executionId, node.id)
           finalAnswer = await generateTaskSummary(
             client,
-            data.model,
+            model,
             messages,
             todosManager.getStatus(),
             reactState?.steps || []
@@ -1585,7 +1591,7 @@ async function executeReAct(
           // Use LLM to generate intelligent summary
           finalAnswer = await generateTaskSummary(
             client,
-            data.model,
+            model,
             messages,
             todosStatus,
             reactState?.steps || []
@@ -1711,6 +1717,12 @@ export async function continueReactAgentWithUserInput(
   const apiKey = aiConfig.apiKey || 'ollama' // Ollama doesn't require API key, use placeholder
   const apiEndpoint = aiConfig.apiEndpoint
 
+  // 解析最终使用的模型：节点未配置时回退到全局默认模型
+  const model = resolveModel(nodeData.model)
+  if (!model) {
+    throw new Error('未配置模型：请在节点中设置模型，或在全局配置中设置默认模型')
+  }
+
   const client = new OpenAIClient(apiKey, apiEndpoint)
 
   const vars = { ...context.variables }
@@ -1789,7 +1801,7 @@ export async function continueReactAgentWithUserInput(
     executionStore.updateReActStep(context.executionId, nodeId, newStep)
 
     const response = await client.chat({
-      model: nodeData.model,
+      model: model,
       messages,
       temperature: nodeData.temperature,
       max_tokens: nodeData.maxTokens,

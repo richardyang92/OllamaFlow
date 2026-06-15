@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Wifi, WifiOff, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { DEFAULT_ENDPOINTS } from '@/config/model-config'
 
 async function checkOllamaStatus(apiEndpoint: string): Promise<'online' | 'offline'> {
   try {
@@ -20,7 +21,7 @@ export function OllamaStatus() {
 
   const checkStatus = useCallback(() => {
     setStatus('checking')
-    checkOllamaStatus('http://localhost:11434').then(setStatus)
+    checkOllamaStatus(DEFAULT_ENDPOINTS.ollama).then(setStatus)
   }, [])
 
   useEffect(() => {

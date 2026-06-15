@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { X, Loader2, Check, AlertCircle, RefreshCw, Globe, Search } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings-store'
 import { AI_PROVIDER_PRESETS, type AIProvider } from '@/types/global-config'
+import { DEFAULT_ENDPOINTS } from '@/config/model-config'
 import { cn } from '@/lib/utils'
 
 interface GlobalAIConfigPanelProps {
@@ -299,7 +300,7 @@ export default function GlobalAIConfigPanel({ isOpen, onClose }: GlobalAIConfigP
                             setApiEndpoint(e.target.value)
                             setTestResult(null)
                           }}
-                          placeholder="https://api.openai.com/v1"
+                          placeholder={DEFAULT_ENDPOINTS.openai}
                           className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                         />
                         <button

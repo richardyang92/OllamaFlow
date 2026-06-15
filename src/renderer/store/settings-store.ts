@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { GlobalAIConfig, ModelInfo, ResolvedAIConfig } from '@/types/global-config'
 import { useWorkflowStore } from './workflow-store'
+import { DEFAULT_ENDPOINTS } from '@/config/model-config'
 
 interface OllamaConnection {
   id: string
@@ -48,7 +49,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     {
       id: 'default',
       name: 'Local Ollama',
-      host: 'http://127.0.0.1:11434',
+      host: DEFAULT_ENDPOINTS.ollama,
       isDefault: true,
     },
   ],

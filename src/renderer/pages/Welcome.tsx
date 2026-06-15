@@ -14,6 +14,7 @@ import {
 } from '@/components/dashboard'
 import { ConfirmDialog } from '@/components/common'
 import { AppHeader } from '@/components/layout'
+import { DEFAULT_ENDPOINTS } from '@/config/model-config'
 
 /**
  * macOS 26 Liquid Glass Animated Background
@@ -358,7 +359,7 @@ export default function WelcomePage() {
       const result = await window.electronAPI.workspace.init(workspacePath, {
         name: workspaceName,
         description: metadata?.description || '',
-        apiEndpoint: 'http://localhost:11434',
+        apiEndpoint: DEFAULT_ENDPOINTS.ollama,
         defaultModel: '',
         initialWorkflow: {
           metadata: {

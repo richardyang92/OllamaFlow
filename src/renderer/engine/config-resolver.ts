@@ -54,3 +54,20 @@ export function getGlobalDefaultModel(): string | undefined {
   }
   return undefined
 }
+
+/**
+ * 解析节点要使用的模型名（模型名集中解析的单一入口）。
+ *
+ * 优先级：节点自身配置的 model > 全局默认模型。
+ * 此前各 executor 直接使用 data.model，节点未设模型时会向 API 发送空串导致报错；
+ * 此函数统一兜底到全局默认模型，使"一处配置（全局默认模型），处处生效"在执行链落地。
+ *
+ * @param nodeModel 节点自身配置的模型名（可能为空串 / undefined）
+ * @returns 最终使用的模型名；若全局默认也缺省则返回 undefined
+ */
+export function resolveModel(nodeModel?: string): string | undefined {
+  if (nodeModel && nodeModel.trim()) {
+    return nodeModel
+  }
+  return getGlobalDefaultModel()
+}

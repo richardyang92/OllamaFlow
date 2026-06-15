@@ -11,6 +11,7 @@ import { generatePlanFromAnswers } from '@/engine/nodes/plan'
 import { continueReactAgentWithUserInput } from '@/engine/nodes/react-agent'
 import type { PlanQuestion, ReactAgentNodeData, PlanNodeData } from '@/types/node'
 import type { ExecutionContext } from '@/engine/executor'
+import { DEFAULT_ENDPOINTS } from '@/config/model-config'
 
 export default function AgentQuestionsManager() {
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -70,7 +71,7 @@ export default function AgentQuestionsManager() {
       const context: ExecutionContext = {
         executionId,
         workspacePath,
-        apiEndpoint: config?.apiEndpoint || 'http://127.0.0.1:11434',
+        apiEndpoint: config?.apiEndpoint || DEFAULT_ENDPOINTS.ollama,
         apiKey: apiKey || undefined,
         variables: {},
         userInputValues: new Map(),
@@ -153,7 +154,7 @@ export default function AgentQuestionsManager() {
         {
           ...execution.context,
           workspacePath,
-          apiEndpoint: config?.apiEndpoint || 'http://127.0.0.1:11434',
+          apiEndpoint: config?.apiEndpoint || DEFAULT_ENDPOINTS.ollama,
           apiKey: apiKey || undefined,
           variables: execution.context.variables || {},
           userInputValues: new Map(),

@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { useAgentStore } from '@/store/agent-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { cn } from '@/lib/utils'
+import { DEFAULT_ENDPOINTS } from '@/config/model-config'
 
 interface AgentSettingsPanelProps {
   isOpen: boolean
@@ -80,7 +81,7 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
     setIsLoadingOllamaModels(true)
     try {
       const result = await window.electronAPI.globalAI.testConnection({
-        apiEndpoint: localApiEndpoint || 'http://127.0.0.1:11434',
+        apiEndpoint: localApiEndpoint || DEFAULT_ENDPOINTS.ollama,
       })
       if (result.success && result.models) {
         setOllamaModels(result.models.map(m => m.id))
@@ -274,7 +275,7 @@ export default function AgentSettingsPanel({ isOpen, onClose }: AgentSettingsPan
                       type="text"
                       value={localApiEndpoint}
                       onChange={(e) => setLocalApiEndpoint(e.target.value)}
-                      placeholder={localProvider === 'ollama' ? 'http://127.0.0.1:11434' : 'https://api.openai.com/v1'}
+                      placeholder={localProvider === 'ollama' ? DEFAULT_ENDPOINTS.ollama : DEFAULT_ENDPOINTS.openai}
                       className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                     />
                     </div>

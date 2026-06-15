@@ -4,6 +4,7 @@ import type { NodeExecutionResult, ExecutionLog } from '@/types/execution'
 import { useExecutionStore } from '@/store/execution-store'
 import { useWorkspaceStore } from '@/store/workspace-store'
 import { useWorkflowStore } from '@/store/workflow-store'
+import { DEFAULT_ENDPOINTS } from '@/config/model-config'
 
 interface ParallelBranch {
   branchId: string
@@ -266,7 +267,7 @@ export class WorkflowExecutor {
     edges: Edge[],
     workspacePath: string,
     executionId: string,
-    apiEndpoint: string = 'http://127.0.0.1:11434',
+    apiEndpoint: string = DEFAULT_ENDPOINTS.ollama,
     userInputValues?: Record<string, string>,
     isolatedMode: boolean = false,
     apiKey?: string
@@ -1022,7 +1023,7 @@ export async function executeWorkflow(): Promise<boolean> {
     workflowStore.edges,
     workspace.path,
     executionId,
-    workspace.config.apiEndpoint || 'http://127.0.0.1:11434',
+    workspace.config.apiEndpoint || DEFAULT_ENDPOINTS.ollama,
     undefined,
     false,
     apiKey || undefined

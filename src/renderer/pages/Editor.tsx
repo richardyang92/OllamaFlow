@@ -16,6 +16,7 @@ import { AppHeader } from '@/components/layout'
 import { initializeExecutors } from '@/engine/executor'
 import { executionManager } from '@/engine/execution-manager'
 import type { RecentWorkspace } from '@/types/workspace'
+import { DEFAULT_ENDPOINTS } from '@/config/model-config'
 
 function EditFeedback({ message }: { message: string }) {
   return (
@@ -244,7 +245,7 @@ function EditorContent() {
       currentWorkspace.path,
       nodes,
       edges,
-      'http://127.0.0.1:11434', // API endpoint is now managed via global AI config
+      DEFAULT_ENDPOINTS.ollama, // API endpoint is now managed via global AI config
       inputValues || undefined
     ).catch((error: Error) => {
       const executionId = useExecutionStore.getState().getActiveExecution(currentWorkspace.path)

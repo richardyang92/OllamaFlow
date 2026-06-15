@@ -5,6 +5,7 @@
  */
 
 import { withRetry, RetryableError, type RetryConfig } from './react-agent/retry-handler'
+import { DEFAULT_ENDPOINTS } from '@/config/model-config'
 
 // OpenAI API Types
 export interface OpenAIMessage {
@@ -70,11 +71,13 @@ export class OpenAIClient {
   private baseUrl: string
   private skipAuth: boolean
 
-  constructor(apiKey: string, baseUrl: string = 'https://api.openai.com/v1') {
+  constructor(apiKey: string, baseUrl: string = DEFAULT_ENDPOINTS.openai) {
     this.apiKey = apiKey
     this.baseUrl = baseUrl.replace(/\/$/, '') // Remove trailing slash
     // Skip auth header for Ollama or when using placeholder
-    this.skipAuth = apiKey === 'ollama' || baseUrl.includes('127.0.0.1:11434') || baseUrl.includes('localhost:11434')
+    // 通过端口识别 Ollama 端点（兼容 127.0.0.1 / localhost 两种写法）
+    const ollamaPort = DEFAULT_ENDPOINTS.ollama.split(':').pop() // '11434'
+    this.skipAuth = apiKey === 'ollama' || baseUrl.includes(`:${ollamaPort}`)
   }
 
   /**

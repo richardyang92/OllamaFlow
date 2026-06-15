@@ -4,7 +4,7 @@ import type { NodeExecutor, ExecutionContext } from '../executor'
 import { interpolateVariables } from '../executor'
 import { OpenAIClient } from '../openai-client'
 import { useExecutionStore } from '@/store/execution-store'
-import { resolveAIConfig } from '../config-resolver'
+import { resolveAIConfig, resolveModel } from '../config-resolver'
 
 /**
  * Get API configuration from global config
@@ -86,6 +86,12 @@ export const planExecutor: NodeExecutor = {
     try {
       const systemPrompt = interpolateVariables(data.systemPrompt, { ...context.variables, ...input })
 
+      // 解析最终使用的模型：节点未配置时回退到全局默认模型
+      const model = resolveModel(data.model)
+      if (!model) {
+        throw new Error('未配置模型：请在节点中设置模型，或在全局配置中设置默认模型')
+      }
+
       const analysisPrompt = `${systemPrompt}
 
 用户任务：${userTask}
@@ -124,7 +130,7 @@ export const planExecutor: NodeExecutor = {
 
       const analysisResponse = await callAI(
         analysisPrompt,
-        data.model,
+        model,
         data.temperature,
         data.maxTokens
       )
@@ -191,7 +197,7 @@ export const planExecutor: NodeExecutor = {
 
       const plan = await callAI(
         planPrompt,
-        data.model,
+        model,
         data.temperature,
         data.maxTokens
       )

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { WorkflowNode, PlanNodeData } from '@/types/node'
 import { useSettingsStore } from '@/store/settings-store'
+import { DEFAULT_NODE_PARAMS } from '@/config/model-config'
 
 interface Props {
   node: WorkflowNode
@@ -123,7 +124,7 @@ export default function PlanProperties({ node, updateNodeData }: Props) {
         <input
           type="number"
           value={data.maxTokens}
-          onChange={(e) => updateNodeData(node.id, { maxTokens: parseInt(e.target.value) || 4096 })}
+          onChange={(e) => updateNodeData(node.id, { maxTokens: parseInt(e.target.value) || DEFAULT_NODE_PARAMS.plan.maxTokens })}
           className="w-full px-3 py-2 bg-[var(--color-bg-input)] border border-[var(--color-border-subtle)] rounded-lg text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-bg-hover)] transition-all"
         />
         <p className="text-xs text-[var(--color-text-muted)] mt-1">

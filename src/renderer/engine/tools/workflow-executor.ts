@@ -9,6 +9,7 @@ import type { GeneratedFileInfo, ReActStepSummary } from '@/store/agent-store'
 import type { NodeExecutionResult } from '@/types/execution'
 import { useExecutionStore } from '@/store/execution-store'
 import { takeFileSnapshot, compareSnapshots } from './file-snapshot'
+import { DEFAULT_ENDPOINTS } from '@/config/model-config'
 
 const DEBUG = false
 const log = (...args: unknown[]) => DEBUG && console.log('[WorkflowExecutor]', ...args)
@@ -172,7 +173,7 @@ export async function executeWorkflowAsSubAgent(
       edges,
       workspacePath,
       executionId,
-      options?.apiEndpoint || 'http://127.0.0.1:11434',
+      options?.apiEndpoint || DEFAULT_ENDPOINTS.ollama,
       nodeInputValues,
       true, // isolatedMode = true
       options?.apiKey

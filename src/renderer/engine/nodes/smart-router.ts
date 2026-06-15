@@ -3,7 +3,8 @@ import type { WorkflowNodeData, SmartRouterNodeData, SmartRouterBranch } from '@
 import type { NodeExecutor, ExecutionContext } from '../executor'
 import { interpolateVariables } from '../executor'
 import { OpenAIClient } from '../openai-client'
-import { resolveAIConfig } from '../config-resolver'
+import { resolveAIConfig, resolveModel } from '../config-resolver'
+import { INTERNAL_LLM_PARAMS } from '@/config/model-config'
 
 /**
  * 提取输入的实际值
@@ -37,8 +38,13 @@ async function callAI(
   const { apiKey, apiEndpoint } = await getAPIConfig(context)
   const client = new OpenAIClient(apiKey, apiEndpoint)
 
+  const model = resolveModel(data.model)
+  if (!model) {
+    throw new Error('未配置模型：请在节点中设置模型，或在全局配置中设置默认模型')
+  }
+
   const response = await client.chat({
-    model: data.model,
+    model,
     messages: [
       {
         role: 'system',
@@ -47,7 +53,7 @@ async function callAI(
       { role: 'user', content: prompt },
     ],
     temperature: data.temperature,
-    max_tokens: 50,
+    max_tokens: INTERNAL_LLM_PARAMS.routing.maxTokens,
   })
 
   const content = response.content || ''

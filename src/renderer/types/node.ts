@@ -1,5 +1,6 @@
 import { Node } from '@xyflow/react'
 import type { NodeIconType } from '@/components/icons'
+import { DEFAULT_NODE_PARAMS } from '@/config/model-config'
 
 // Port types
 export type PortDataType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'any'
@@ -641,10 +642,7 @@ export const nodeTemplates: NodeTemplate[] = [
       model: '',
       systemPrompt: '你是一个有用的助手。',
       userMessage: '{{input}}',
-      temperature: 0.7,
-      topP: 0.9,
-      maxTokens: 8192,
-      stream: true,
+      ...DEFAULT_NODE_PARAMS.ollamaChat,
       inputs: [{ id: 'input', name: 'input', label: '输入', dataType: 'string' }],
       outputs: [{ id: 'response', name: 'response', label: '响应', dataType: 'string' }],
     },
@@ -751,7 +749,7 @@ export const nodeTemplates: NodeTemplate[] = [
       ],
       model: '',
       routingPrompt: '根据输入内容，选择最合适的分支。',
-      temperature: 0.3,
+      ...DEFAULT_NODE_PARAMS.smartRouter,
       inputs: [{ id: 'input', name: 'input', label: '输入', dataType: 'any' }],
       outputs: [
         { id: 'branch-1', name: 'branch-1', label: '技术问题', dataType: 'any' },
@@ -873,11 +871,8 @@ export const nodeTemplates: NodeTemplate[] = [
       model: '',
       systemPrompt: '你是一个善于分析和执行任务的智能助手。',
       userMessage: '{{input}}',
-      temperature: 0.7,
-      maxTokens: 4096,
-      maxIterations: 10,
+      ...DEFAULT_NODE_PARAMS.reactAgent,
       enabledTools: ['executeCommand', 'readFile'],
-      stream: true,
       inputs: [{ id: 'input', name: 'input', label: '输入', dataType: 'string' }],
       outputs: [{ id: 'response', name: 'response', label: '最终回答', dataType: 'string' }],
     },
@@ -895,8 +890,7 @@ export const nodeTemplates: NodeTemplate[] = [
       category: 'AI',
       model: '',
       systemPrompt: '你是一个专业的任务规划助手。根据用户的任务描述，分析任务需求，如果信息不足则提出相关问题，最后生成详细的执行计划。',
-      temperature: 0.7,
-      maxTokens: 4096,
+      ...DEFAULT_NODE_PARAMS.plan,
       inputs: [{ id: 'task', name: 'task', label: '任务描述', dataType: 'string' }],
       outputs: [
         { id: 'plan', name: 'plan', label: '执行计划', dataType: 'string' },

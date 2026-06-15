@@ -52,11 +52,8 @@ export interface ResolvedAIConfig {
 
 /**
  * 提供商预设配置
+ *
+ * 数据实现统一从 @/config/model-config 集中管理（一处修改，处处生效）；
+ * 此处仅作重导出，保持历史 import 路径（@/types/global-config）不破坏。
  */
-export const AI_PROVIDER_PRESETS: Record<AIProvider, { endpoint: string; name: string }> = {
-  ollama: { endpoint: 'http://127.0.0.1:11434/v1', name: 'Ollama (本地)' },
-  openai: { endpoint: 'https://api.openai.com/v1', name: 'OpenAI' },
-  deepseek: { endpoint: 'https://api.deepseek.com/v1', name: 'DeepSeek' },
-  vllm: { endpoint: 'http://localhost:8000/v1', name: 'vLLM' },
-  custom: { endpoint: '', name: '自定义' },
-}
+export { AI_PROVIDER_PRESETS } from '@/config/model-config'

@@ -27,6 +27,7 @@ import {
   type HybridCompressionOptions,
 } from './react-agent/context-compressor'
 import { analyzeToolDependencies } from './utils/tool-dependencies'
+import { DEFAULT_ENDPOINTS, INTERNAL_LLM_PARAMS } from '@/config/model-config'
 
 const DEBUG = false
 const log = (...args: unknown[]) => DEBUG && console.log('[AgentExecutor]', ...args)
@@ -382,7 +383,7 @@ export class IntelligentAgentExecutor {
     // 统一使用 OpenAI 兼容 API
     this.openaiClient = new OpenAIClient(
       this.config.apiKey || '',
-      this.config.apiEndpoint || 'https://api.openai.com/v1'
+      this.config.apiEndpoint || DEFAULT_ENDPOINTS.openai
     )
   }
 
@@ -832,13 +833,36 @@ tool_calls: [{ name: "workflow_weather", arguments: '{"input": "广州"}' }]
       if (name.startsWith('workflow_')) {
         const workflowResult = await this.executeWorkflow(name, args, record.id)
 
+        // 提取 SubAgent 真实输出用于 UI 展示与存储
         const outputForStorage = typeof workflowResult === 'object' && workflowResult !== null
           ? (workflowResult as { output?: unknown }).output ?? workflowResult
           : workflowResult
 
-        const outputForLLM = typeof workflowResult === 'object' && workflowResult !== null
-          ? `工作流 "${(workflowResult as { workflowName?: string }).workflowName || name}" 执行成功`
-          : String(workflowResult)
+        // 【关键】返回给 LLM 的 tool result 必须包含 SubAgent 的真实输出。
+        // 此前这里只返回 "工作流 xxx 执行成功" 字样，导致 LLM 拿不到结果而凭空编造答案。
+        let outputForLLM: string
+        if (typeof workflowResult === 'object' && workflowResult !== null) {
+          const wfResult = workflowResult as {
+            workflowName?: string
+            success?: boolean
+            output?: unknown
+            error?: string
+          }
+          const wfLabel = wfResult.workflowName || name
+          if (wfResult.success === false) {
+            // 执行失败：明确告知失败原因，避免 LLM 凭空臆测
+            outputForLLM = `工作流 "${wfLabel}" 执行失败：${wfResult.error || '未知错误'}`
+          } else {
+            // 执行成功：序列化真实输出，让 LLM 基于实际结果回答
+            const realOutput = wfResult.output !== undefined ? wfResult.output : wfResult
+            const outputStr = typeof realOutput === 'object' && realOutput !== null
+              ? JSON.stringify(realOutput, null, 2)
+              : String(realOutput)
+            outputForLLM = `工作流 "${wfLabel}" 执行成功，返回结果如下：\n\n${outputStr}`
+          }
+        } else {
+          outputForLLM = String(workflowResult)
+        }
 
         this.callbacks.onToolCallUpdate?.(record.id, {
           status: 'completed',
@@ -1004,8 +1028,7 @@ ${truncatedSource}
           { role: 'system', content: TRANSFORM_SYSTEM_PROMPT },
           { role: 'user', content: transformPrompt }
         ],
-        temperature: 0.1,
-        max_tokens: 4096,
+        ...INTERNAL_LLM_PARAMS.transform,
         stream: false
       })
 

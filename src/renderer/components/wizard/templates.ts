@@ -1,6 +1,7 @@
 import type { Workflow } from '@/types/workflow'
 import type { WorkflowNode } from '@/types/node'
 import type { Edge } from '@xyflow/react'
+import { DEFAULT_NODE_PARAMS } from '@/config/model-config'
 
 /**
  * Project template definition
@@ -109,10 +110,7 @@ function createBasicChatTemplate(
         model: defaultModel,
         systemPrompt: '你是一个有用的助手。请简洁地回答用户的问题。',
         userMessage: '{{value}}',
-        temperature: 0.7,
-        topP: 0.9,
-        maxTokens: 4096,
-        stream: true,
+        ...DEFAULT_NODE_PARAMS.ollamaChat,
         inputs: [{ id: 'input', name: 'input', label: '输入', dataType: 'string' }],
         outputs: [{ id: 'response', name: 'response', label: '响应', dataType: 'string' }],
       },
@@ -201,9 +199,7 @@ function createAgentTemplate(
         model: defaultModel,
         systemPrompt: '你是一个善于分析和执行任务的智能助手。你可以使用各种工具来完成任务。请逐步思考并执行操作。',
         userMessage: '{{value}}',
-        temperature: 0.7,
-        maxTokens: 4096,
-        maxIterations: 10,
+        ...DEFAULT_NODE_PARAMS.reactAgent,
         enabledTools: ['todos', 'readFile', 'writeFile', 'executeCommand', 'httpRequest', 'getCurrentDate'],
         stream: true,
         inputs: [{ id: 'input', name: 'input', label: '输入', dataType: 'string' }],

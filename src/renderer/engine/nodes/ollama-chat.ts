@@ -3,7 +3,7 @@ import type { WorkflowNodeData, OllamaChatNodeData } from '@/types/node'
 import type { NodeExecutor, ExecutionContext } from '../executor'
 import { interpolateVariables } from '../executor'
 import { OpenAIClient, OpenAIMessage } from '../openai-client'
-import { resolveAIConfig } from '../config-resolver'
+import { resolveAIConfig, resolveModel } from '../config-resolver'
 
 /**
  * Get API configuration from global config
@@ -29,6 +29,12 @@ export function createOllamaChatExecutor(): NodeExecutor {
       const systemPrompt = interpolateVariables(data.systemPrompt, { ...context.variables, ...input })
       const userMessage = interpolateVariables(data.userMessage, { ...context.variables, ...input })
 
+      // 解析最终使用的模型：节点未配置时回退到全局默认模型
+      const model = resolveModel(data.model)
+      if (!model) {
+        throw new Error('未配置模型：请在节点中设置模型，或在全局配置中设置默认模型')
+      }
+
       // Get API configuration (respects global config priority)
       const { apiKey, apiEndpoint } = await getAPIConfig(context)
 
@@ -44,7 +50,7 @@ export function createOllamaChatExecutor(): NodeExecutor {
         nodeId: node.id,
         nodeName: data.label,
         level: 'info',
-        message: `调用 AI API: ${data.model}`,
+        message: `调用 AI API: ${model}`,
       })
 
       try {
@@ -54,7 +60,7 @@ export function createOllamaChatExecutor(): NodeExecutor {
 
           const result = await client.chatStreamWithTools(
             {
-              model: data.model,
+              model: model,
               messages,
               temperature: data.temperature,
               max_tokens: data.maxTokens,
@@ -98,13 +104,13 @@ export function createOllamaChatExecutor(): NodeExecutor {
 
           return {
             response: content,
-            model: data.model,
+            model: model,
             reasoning_content: reasoningContent,
           }
         } else {
           // Handle non-streaming response
           const result = await client.chat({
-            model: data.model,
+            model: model,
             messages,
             temperature: data.temperature,
             max_tokens: data.maxTokens,
@@ -136,7 +142,7 @@ export function createOllamaChatExecutor(): NodeExecutor {
 
           return {
             response: content,
-            model: data.model,
+            model: model,
             reasoning_content: reasoningContent,
           }
         }
