@@ -202,6 +202,13 @@ function ToolCallCard({ toolCall }: { toolCall: ToolCallRecord }) {
   const isWorkflow = toolCall.toolName.startsWith('workflow_')
   const [expanded, setExpanded] = useState(isWorkflow)
 
+  // SubAgent 执行完成后自动收起,保持聊天界面清爽
+  useEffect(() => {
+    if (isWorkflow && (toolCall.status === 'completed' || toolCall.status === 'error')) {
+      setExpanded(false)
+    }
+  }, [isWorkflow, toolCall.status])
+
   // 获取 SubAgent 名称
   const workflowName = isWorkflow
     ? (toolCall.subAgentProgress?.workflowName || toolCall.metadata?.workflowPath?.split('/').pop() || toolCall.toolName)
